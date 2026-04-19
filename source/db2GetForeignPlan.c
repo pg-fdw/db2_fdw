@@ -68,9 +68,15 @@ ForeignScan* db2GetForeignPlan(PlannerInfo* root, RelOptInfo* foreignrel, Oid fo
 
   db2Debug2("length of tlist: %d", list_length(tlist));
 
-//  ptlist     = build_tlist_to_deparse(foreignrel);
-  ptlist     = make_tlist_from_pathtarget(foreignrel->reltarget);
-  apply_pathtarget_labeling_to_tlist(ptlist, foreignrel->reltarget);
+  /*
+   * fdw_scan_tlist must contain all base Vars required to evaluate local
+   * quals and to compute any non-pushed-down target expressions.
+   *
+   * Using a non-flattened PathTarget tlist here can leave out Vars that are
+   * only referenced inside expressions (e.g. salary + bonus + comm), which can
+   * lead to setrefs.c errors like "variable not found in subplan target list".
+   */
+  ptlist     = build_tlist_to_deparse(foreignrel);
   ptlist_len = list_length(ptlist);
 
   if (IS_SIMPLE_REL(foreignrel)) {
