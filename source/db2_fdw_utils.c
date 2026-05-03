@@ -35,7 +35,7 @@ typedef struct {
 
 
 /** external prototypes */
-extern void         db2GetLob                  (DB2Session* session, DB2ResultColumn* column, char** value, long* value_len, unsigned long trunc);
+extern void         db2GetLob                  (DB2Session* session, DB2ResultColumn* column, char** value, long* value_len);
 extern void         db2Shutdown                (void);
 extern short        c2dbType                   (short fcType);
 
@@ -43,7 +43,7 @@ extern short        c2dbType                   (short fcType);
 bool                optionIsTrue               (const char *value);
 char*               guessNlsLang               (char* nls_lang);
 void                exitHook                   (int code, Datum arg);
-void                convertTuple               (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls, bool trunc_lob);
+void                convertTuple               (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls);
 void                reset_transmission_modes   (int nestlevel);
 int                 set_transmission_modes     (void);
 bool                is_builtin                 (Oid objectId);
@@ -192,9 +192,8 @@ void exitHook (int code, Datum arg) {
 
 /* convertTuple
  * Convert a result row from DB2 stored in db2Table into arrays of values and null indicators.
- * If trunc_lob it true, truncate LOBs to WIDTH_THRESHOLD+1 bytes.
  */
-void convertTuple (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls, bool trunc_lob) {
+void convertTuple (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls) {
   char*                value          = NULL;
   long                 value_len      = 0;
   int                  j              = 0;
@@ -203,7 +202,6 @@ void convertTuple (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* res
 
   db2Entry4();
   db2Debug5("natts: %d", natts);
-  db2Debug5("truncate lob: %s", trunc_lob ? "true": "false");
 
   /* assign result values */
   isSimpleSelect = (db2Table && natts == db2Table->npgcols);
@@ -237,8 +235,7 @@ void convertTuple (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* res
         case DB2_CLOB: {
           db2Debug5("DB2_BLOB or DB2CLOB");
           /* for LOBs, get the actual LOB contents (allocated), truncated if desired */
-          /* the column index is 1 based, whereas index id 0 based, so always add 1 to index when calling db2GetLob, since it does a column based access*/
-          db2GetLob (session, res, &value, &value_len, trunc_lob ? (WIDTH_THRESHOLD + 1) : 0);
+          db2GetLob (session, res, &value, &value_len);
         }
         break;
         case DB2_LONGVARBINARY: {

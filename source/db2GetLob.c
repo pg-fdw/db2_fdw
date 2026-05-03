@@ -12,16 +12,16 @@ extern SQLRETURN    db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQ
 extern void         db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 
 /** internal prototypes */
-void                db2GetLob            (DB2Session* session, DB2ResultColumn* column, char** value, long* value_len, unsigned long trunc);
+void                db2GetLob            (DB2Session* session, DB2ResultColumn* column, char** value, long* value_len);
 
 /* db2GetLob
  * Get the LOB contents and store them in *value and *value_len.
- * If "trunc" is nonzero, it contains the number of bytes or characters to get.
  */
-void db2GetLob (DB2Session* session, DB2ResultColumn* column, char** value, long* value_len, unsigned long trunc) {
+void db2GetLob (DB2Session* session, DB2ResultColumn* column, char** value, long* value_len) {
   SQLRETURN      rc  = SQL_SUCCESS;
   SQLLEN         ind = 0;
   SQLCHAR        buf[LOB_CHUNK_SIZE+1];
+  SQLSMALLINT    fcType = (column->colType == DB2_CLOB) ? SQL_C_CHAR : SQL_C_BINARY;
   int            extend = 0;
   db2Entry1();
   db2Debug2("column->colName: '%s'",column->colName);
@@ -32,7 +32,7 @@ void db2GetLob (DB2Session* session, DB2ResultColumn* column, char** value, long
   do {
     db2Debug2("value_len: %ld",*value_len);
     db2Debug2("reading %d byte chunck of data",sizeof(buf));
-    rc = SQLGetData(session->stmtp->hsql, column->resnum, SQL_C_CHAR, buf, sizeof(buf), &ind);
+    rc = SQLGetData(session->stmtp->hsql, column->resnum, fcType, buf, sizeof(buf), &ind);
     rc = db2CheckErr(rc,session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
     if (rc == SQL_ERROR) {
       db2Error_d ( FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: SQLGetData failed to read LOB chunk", db2Message);

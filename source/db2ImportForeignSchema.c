@@ -99,15 +99,36 @@ List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
 
     if (stmt->list_type != FDW_IMPORT_SCHEMA_ALL) {
       foreach (cell, stmt->table_list) {
-        RangeVar* rVar = lfirst(cell);
+        RangeVar* rVar      = lfirst(cell);
+        char*     uppername = NULL;
+        char*     folded    = NULL;
         db2Debug2("rVar             :  %x ", rVar);
-        if (rVar != NULL) {
-          db2Debug2("rVar->type       :  %d ", rVar->type);
-          db2Debug2("rVar->catalogname: '%s'", rVar->catalogname);
-          db2Debug2("rVar->schemaname : '%s'", rVar->schemaname);
-          db2Debug2("rVar->relname    : '%s'", rVar->relname);
-          appendStringInfo(&tblist,"%s'%s'",((tblist.len == 0) ? "" : ","),rVar->relname);
+        if (rVar == NULL || rVar->relname == NULL)
+          continue;
+
+        /*
+         * IMPORTANT: the table list in LIMIT TO / EXCEPT is compared against the
+         * names that will be created in PostgreSQL after case folding.
+         *
+         * So we normalize rVar->relname in-place using fold_case() so that
+         * PostgreSQL's LIMIT/EXCEPT filtering and our generated CREATE FOREIGN
+         * TABLE statements agree.
+         *
+         * For the DB2-side query filter we use an uppercased version of the name
+         * and the DB2 query itself compares with UPPER(T.TABNAME), making the
+         * matching case-insensitive.
+         */
+        uppername = str_toupper (rVar->relname, strlen (rVar->relname), DEFAULT_COLLATION_OID);
+        if (tblist.len != 0) {
+          appendStringInfo(&tblist,",'%s'", uppername);
+        } else {
+          appendStringInfo(&tblist,"'%s'", uppername);
         }
+        db2free (uppername,"uppername");
+
+        folded = fold_case (rVar->relname, foldcase);
+        rVar->relname = folded;
+
       }
       db2Debug2("import table_list: %s",tblist.data);
     }

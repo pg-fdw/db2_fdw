@@ -104,21 +104,21 @@ char** getForeignTableList(DB2Session* session, char* schema, int list_type, cha
    db2Entry1("(schema: '%s', list_type: %d, table_list: '%s')", schema, list_type, table_list);
   switch(list_type){
       case 0: {   /* FDW_IMPORT_SCHEMA_ALL      */
-        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T  WHERE T.TABSCHEMA = ? AND T.TYPE IN ('T','V') ORDER BY T.TABNAME";
+        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T  WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('T','V') ORDER BY T.TABNAME";
         int   s_len     = strlen(query_str)+1;
         column_query = db2alloc(s_len, "column_query");
         strncpy(column_query,query_str,s_len);
       }
       break;
       case 1: {   /* FDW_IMPORT_SCHEMA_LIMIT_TO */
-        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T WHERE T.TABSCHEMA = ? AND T.TYPE IN ('T','V') AND T.TABNAME IN (%s) ORDER BY T.TABNAME";
+        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('T','V') AND UPPER(T.TABNAME) IN (%s) ORDER BY T.TABNAME";
         int   s_len     = strlen(query_str) + strlen(table_list) + 1;
         column_query = db2alloc(s_len, "column_query");
         snprintf(column_query,s_len,query_str,table_list);
       }
       break;
       case 2: {   /* FDW_IMPORT_SCHEMA_EXCEPT   */
-        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T WHERE T.TABSCHEMA = ? AND T.TYPE IN ('T','V') AND T.TABNAME NOT IN (%s) ORDER BY T.TABNAME";
+        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('T','V') AND UPPER(T.TABNAME) NOT IN (%s) ORDER BY T.TABNAME";
         int   s_len     = strlen(query_str) + strlen(table_list) + 1;
         column_query = db2alloc(s_len, "column_query");
         snprintf(column_query,s_len,query_str,table_list);
@@ -444,7 +444,7 @@ static void describeForeignColumns(DB2Session* session, char* schema, char* tabn
   SQLLEN       ind_cp;
   SQLLEN       ind_s  = SQL_NTS;
   SQLLEN       ind_t  = SQL_NTS;
-  char*        query  = "SELECT COALESCE(C.KEYSEQ, 0) AS KEY, C.CODEPAGE FROM SYSCAT.COLUMNS C WHERE C.TABSCHEMA = ? AND C.TABNAME = ? AND COALESCE(C.HIDDEN,'') = '' ORDER BY C.COLNO";
+  char*        query  = "SELECT COALESCE(C.KEYSEQ, 0) AS KEY, C.CODEPAGE FROM SYSCAT.COLUMNS C WHERE UPPER(C.TABSCHEMA) = UPPER(?) AND UPPER(C.TABNAME) = UPPER(?) AND COALESCE(C.HIDDEN,'') = '' ORDER BY C.COLNO";
 
   db2Entry1("(schema: %s, tabname: %s)", schema, tabname);
   db2Debug2("query : '%s'", query);

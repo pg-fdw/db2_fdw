@@ -12,7 +12,7 @@ extern regproc* output_funcs;
 /** external prototypes */
 extern int             db2ExecuteQuery           (DB2Session* session, ParamDesc* paramList);
 extern void            db2Debug                  (int level, const char* message, ...);
-extern void            convertTuple              (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls, bool trunc_lob);
+extern void            convertTuple              (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls);
 extern char*           deparseDate               (Datum datum);
 extern char*           deparseTimestamp          (Datum datum, bool hasTimezone);
 
@@ -58,7 +58,7 @@ TupleTableSlot* db2ExecForeignDelete (EState* estate, ResultRelInfo* rinfo, Tupl
   ExecClearTuple (slot);
 
   /* convert result for RETURNING to arrays of values and null indicators */
-  convertTuple (fdw_state->session,fdw_state->db2Table,fdw_state->resultList, slot->tts_tupleDescriptor->natts, slot->tts_values, slot->tts_isnull, false);
+  convertTuple (fdw_state->session,fdw_state->db2Table,fdw_state->resultList, slot->tts_tupleDescriptor->natts, slot->tts_values, slot->tts_isnull);
 
   /* store the virtual tuple */
   ExecStoreVirtualTuple (slot);

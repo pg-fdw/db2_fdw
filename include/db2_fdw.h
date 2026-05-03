@@ -28,11 +28,6 @@
 #error "This extension requires PostgreSQL version 13.0 or higher."
 #endif
 
-/* defined in backend/commands/analyze.c */
-#ifndef WIDTH_THRESHOLD
-#define WIDTH_THRESHOLD 1024
-#endif /* WIDTH_THRESHOLD */
-
 #ifndef PQ_QUERY_PARAM_MAX_LIMIT
 #define PQ_QUERY_PARAM_MAX_LIMIT 65535
 #endif /* PQ_QUERY_PARAM_MAX_LIMIT */
@@ -276,5 +271,9 @@ extern void db2Debug    (int level, const char* message, ...) __attribute__ ((fo
     
 #define db2LogError(fmt, ...) \
     db2Debug(DB2LERROR, "e %s:%d:%s " fmt, __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
 
 #endif
