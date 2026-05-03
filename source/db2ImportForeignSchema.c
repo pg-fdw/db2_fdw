@@ -102,9 +102,9 @@ List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
       continue;
     } else if (strcmp (def->defname, "readonly") == 0) {
       char *s = STRVAL(def->arg);
-      if (pg_strcasecmp (s, "on") != 0 || pg_strcasecmp (s, "yes") != 0 || pg_strcasecmp (s, "true") != 0)
+      if (pg_strcasecmp (s, "on") == 0 || pg_strcasecmp (s, "yes") == 0 || pg_strcasecmp (s, "true") == 0)
         readonly = true;
-      else if (pg_strcasecmp (s, "off") != 0 || pg_strcasecmp (s, "no") != 0 || pg_strcasecmp (s, "false") != 0)
+      else if (pg_strcasecmp (s, "off") == 0 || pg_strcasecmp (s, "no") == 0 || pg_strcasecmp (s, "false") == 0)
         readonly = false;
       else
         ereport (ERROR, (errcode (ERRCODE_FDW_INVALID_ATTRIBUTE_VALUE), errmsg ("invalid value for option \"%s\"", def->defname)));
@@ -131,18 +131,34 @@ List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
   if (stmt->list_type != FDW_IMPORT_SCHEMA_ALL) {
     foreach (cell, stmt->table_list) {
       RangeVar* rVar = lfirst(cell);
+      char* uppername;
+      char* folded;
       db2Debug2("  rVar             :  %x ", rVar);
-      if (rVar != NULL) {
-        db2Debug2("  rVar->type       :  %d ", rVar->type);
-        db2Debug2("  rVar->catalogname: '%s'", rVar->catalogname);
-        db2Debug2("  rVar->schemaname : '%s'", rVar->schemaname);
-        db2Debug2("  rVar->relname    : '%s'", rVar->relname);
-        if (tblist.len != 0) {
-          appendStringInfo(&tblist,",'%s'",rVar->relname);
-        } else {
-          appendStringInfo(&tblist,"'%s'",rVar->relname);
-        }
+      if (rVar == NULL || rVar->relname == NULL)
+        continue;
+
+      /*
+       * IMPORTANT: the table list in LIMIT TO / EXCEPT is compared against the
+       * names that will be created in PostgreSQL after case folding.
+       *
+       * So we normalize rVar->relname in-place using fold_case() so that
+       * PostgreSQL's LIMIT/EXCEPT filtering and our generated CREATE FOREIGN
+       * TABLE statements agree.
+       *
+       * For the DB2-side query filter we use an uppercased version of the name
+       * and the DB2 query itself compares with UPPER(T.TABNAME), making the
+       * matching case-insensitive.
+       */
+      uppername = str_toupper (rVar->relname, strlen (rVar->relname), DEFAULT_COLLATION_OID);
+      if (tblist.len != 0) {
+        appendStringInfo(&tblist,",'%s'", uppername);
+      } else {
+        appendStringInfo(&tblist,"'%s'", uppername);
       }
+      db2free (uppername);
+
+      folded = fold_case (rVar->relname, foldcase);
+      rVar->relname = folded;
     }
   }
   db2Debug2("  import table_list: '%s'",tblist.data);
@@ -169,6 +185,7 @@ List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
       appendStringInfo (&buf, ")");
       db2Debug2 ("  pg fdw table ddl: '%s'",buf.data);
       result = lappend (result, db2strdup (buf.data));
+      db2Debug2("result(%d):%x",list_length(result), result);
     }
 
     if (rc == 1 && (oldtabname[0] == '\0' || strcmp (tabname, oldtabname))) {
@@ -274,7 +291,8 @@ List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
         appendStringInfo (&buf, " NOT NULL");
     }
   } while (rc == 1);
-  db2Debug1("< db2ImportForeignSchema");
+  db2Debug2("result(%d):%x",list_length(result), result);
+  db2Debug1("< db2ImportForeignSchema : result(%d):%x",list_length(result), result);
   return result;
 }
 
