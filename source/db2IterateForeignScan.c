@@ -18,7 +18,7 @@ extern void         db2CloseStatement         (DB2Session* session);
 extern void         db2Debug1                 (const char* message, ...);
 extern void         db2Debug2                 (const char* message, ...);
 extern void         db2Debug3                 (const char* message, ...);
-extern void         convertTuple              (DB2FdwState* fdw_state, Datum* values, bool* nulls, bool trunc_lob) ;
+extern void         convertTuple              (DB2FdwState* fdw_state, Datum* values, bool* nulls) ;
 extern char*        deparseDate               (Datum datum);
 extern char*        deparseTimestamp          (Datum datum, bool hasTimezone);
 
@@ -60,7 +60,7 @@ TupleTableSlot* db2IterateForeignScan (ForeignScanState* node) {
     /* increase row count */
     ++fdw_state->rowcount;
     /* convert result to arrays of values and null indicators */
-    convertTuple (fdw_state, slot->tts_values, slot->tts_isnull, false);
+    convertTuple (fdw_state, slot->tts_values, slot->tts_isnull);
     /* store the virtual tuple */
     ExecStoreVirtualTuple (slot);
   } else {
