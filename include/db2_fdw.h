@@ -23,9 +23,9 @@
 #endif
 
 /* defined in backend/commands/analyze.c */
-#ifndef WIDTH_THRESHOLD
-#define WIDTH_THRESHOLD 1024
-#endif /* WIDTH_THRESHOLD */
+//#ifndef WIDTH_THRESHOLD
+//#define WIDTH_THRESHOLD 1024
+//#endif /* WIDTH_THRESHOLD */
 
 /* array_create_iterator has a new signature from 9.5 on */
 #define array_create_iterator(arr, slice_ndim) array_create_iterator(arr, slice_ndim, NULL)
@@ -62,7 +62,7 @@
 */
 
 /* db2_fdw version */
-#define DB2_FDW_VERSION "18.1.1"
+#define DB2_FDW_VERSION "18.1.2"
 /* number of bytes to read per LOB chunk */
 #define LOB_CHUNK_SIZE    8192
 #define ERRBUFSIZE        2000
@@ -186,5 +186,9 @@ typedef enum { CASE_KEEP, CASE_LOWER, CASE_SMART } fold_t;
 #define ADD_REL_QUALIFIER(buf, varno)  appendStringInfo((buf), "%s%d.", REL_ALIAS_PREFIX, (varno))
 #define serializeInt(x)                makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum((int32)(x)), false, true)
 #define serializeOid(x)                makeConst(OIDOID, -1, InvalidOid, 4, ObjectIdGetDatum(x), false, true)
+
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
 
 #endif

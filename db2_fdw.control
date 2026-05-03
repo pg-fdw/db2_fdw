@@ -1,5 +1,5 @@
 # db2_fdw extension
 comment = 'foreign data wrapper for DB2 access'
-default_version = '18.1.1'
+default_version = '18.1.2'
 module_pathname = '$libdir/db2_fdw'
 relocatable = true
