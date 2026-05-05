@@ -17,7 +17,7 @@
 #include "DB2FdwState.h"
 
 /** external prototypes */
-extern void         db2GetLob                 (DB2Session* session, DB2Column* column, int cidx, char** value, long* value_len, unsigned long trunc);
+extern void         db2GetLob                 (DB2Session* session, DB2Column* column, int cidx, char** value, long* value_len);
 extern void         db2Shutdown               (void);
 extern short        c2dbType                  (short fcType);
 extern void         db2Debug1                 (const char* message, ...);
@@ -49,7 +49,7 @@ char*               deparseDate               (Datum datum);
 char*               deparseTimestamp          (Datum datum, bool hasTimezone);
 char*               deparseInterval           (Datum datum);
 void                exitHook                  (int code, Datum arg);
-void                convertTuple              (DB2FdwState* fdw_state, Datum* values, bool* nulls, bool trunc_lob) ;
+void                convertTuple              (DB2FdwState* fdw_state, Datum* values, bool* nulls) ;
 void                errorContextCallback      (void* arg);
 
 /** appendAsType
@@ -1375,14 +1375,14 @@ char* deparseInterval (Datum datum) {
 /** convertTuple
  *   Convert a result row from DB2 stored in db2Table
  *   into arrays of values and null indicators.
- *   If trunc_lob it true, truncate LOBs to WIDTH_THRESHOLD+1 bytes.
  */
-void convertTuple (DB2FdwState* fdw_state, Datum* values, bool* nulls, bool trunc_lob) {
-  char*                tmp_value = NULL;
-  char*                value     = NULL;
-  long                 value_len = 0;
-  int                  j, 
-                       index     = -1;
+void convertTuple (DB2FdwState* fdw_state, Datum* values, bool* nulls) {
+  char*                tmp_value  = NULL;
+  char*                value      = NULL;
+  long                 value_len  = 0;
+  int                  j          = 0; 
+  int                  index      = -1;
+  int                  result_idx = 0;
 //  ErrorContextCallback errcb;
   Oid                  pgtype;
 
@@ -1420,7 +1420,7 @@ void convertTuple (DB2FdwState* fdw_state, Datum* values, bool* nulls, bool trun
     /* from here on, we can assume columns to be NOT NULL */
     nulls[j] = false;
     pgtype = fdw_state->db2Table->cols[index]->pgtype;
-
+    result_idx += (fdw_state->db2Table->cols[index]->used) ? 1 : 0; 
     /* get the data and its length */
     switch(c2dbType(fdw_state->db2Table->cols[index]->colType)) {
       case DB2_BLOB:
@@ -1428,7 +1428,7 @@ void convertTuple (DB2FdwState* fdw_state, Datum* values, bool* nulls, bool trun
         db2Debug3("  DB2_BLOB or DB2CLOB");
         /* for LOBs, get the actual LOB contents (allocated), truncated if desired */
         /* the column index is 1 based, whereas index id 0 based, so always add 1 to index when calling db2GetLob, since it does a column based access*/
-        db2GetLob (fdw_state->session, fdw_state->db2Table->cols[index], index+1, &value, &value_len, trunc_lob ? (WIDTH_THRESHOLD + 1) : 0);
+        db2GetLob (fdw_state->session, fdw_state->db2Table->cols[index], result_idx, &value, &value_len);
       }
       break;
       case DB2_LONGVARBINARY: {

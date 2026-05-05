@@ -16,7 +16,7 @@ extern int          db2ExecuteQuery           (DB2Session* session, const DB2Tab
 extern int          db2FetchNext              (DB2Session* session);
 extern void         checkDataType             (short db2type, int scale, Oid pgtype, const char* tablename, const char* colname);
 extern short        c2dbType                  (short fcType);
-extern void         convertTuple              (DB2FdwState* fdw_state, Datum* values, bool* nulls, bool trunc_lob) ;
+extern void         convertTuple              (DB2FdwState* fdw_state, Datum* values, bool* nulls) ;
 extern void         db2Debug1                 (const char* message, ...);
 extern void         db2Debug2                 (const char* message, ...);
 extern void         db2Debug3                 (const char* message, ...);
@@ -40,7 +40,6 @@ bool db2AnalyzeForeignTable (Relation relation, AcquireSampleRowsFunc* func, Blo
 
 /** acquireSampleRowsFunc
  *   Perform a sequential scan on the DB2 table and return a sampe of rows.
- *   All LOB values are truncated to WIDTH_THRESHOLD+1 because anything
  *   exceeding this is not used by compute_scalar_stats().
  */
 int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int targrows, double *totalrows, double *totaldeadrows) {
@@ -140,7 +139,7 @@ int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int 
       /* the first "targrows" rows are added as samples */
       /* use a temporary memory context during convertTuple */
       old_cxt = MemoryContextSwitchTo (tmp_cxt);
-      convertTuple (fdw_state, values, nulls, true);
+      convertTuple (fdw_state, values, nulls);
       MemoryContextSwitchTo (old_cxt);
       rows[collected_rows++] = heap_form_tuple (tupDesc, values, nulls);
       MemoryContextReset (tmp_cxt);
@@ -157,7 +156,7 @@ int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int 
         heap_freetuple (rows[k]);
         /* use a temporary memory context during convertTuple */
         old_cxt = MemoryContextSwitchTo (tmp_cxt);
-        convertTuple (fdw_state, values, nulls, true);
+        convertTuple (fdw_state, values, nulls);
         MemoryContextSwitchTo (old_cxt);
         rows[k] = heap_form_tuple (tupDesc, values, nulls);
         MemoryContextReset (tmp_cxt);

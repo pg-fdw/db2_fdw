@@ -130,7 +130,7 @@ int db2GetImportColumn(DB2Session* session, char* schema, char* table_list, int 
       case 0: {   /* FDW_IMPORT_SCHEMA_ALL      */
         char* query_str = "SELECT T.TABNAME, C.COLNAME, C.TYPENAME, C.LENGTH, C.SCALE, C.NULLS, COALESCE(C.KEYSEQ, 0) AS KEY, C.CODEPAGE"
                           " FROM SYSCAT.TABLES T JOIN SYSCAT.COLUMNS C ON T.TABSCHEMA = C.TABSCHEMA AND T.TABNAME   = C.TABNAME"
-                          " WHERE T.TABSCHEMA = ? AND T.TYPE IN ('T','V') ORDER BY T.TABNAME, C.COLNO";
+                          " WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('T','V') AND COALESCE(C.HIDDEN,'') = '' ORDER BY T.TABNAME, C.COLNO";
         int   s_len     = strlen(query_str)+1;
         column_query = db2alloc("column_query",s_len);
         strncpy(column_query,query_str,s_len);
@@ -139,7 +139,7 @@ int db2GetImportColumn(DB2Session* session, char* schema, char* table_list, int 
       case 1: {   /* FDW_IMPORT_SCHEMA_LIMIT_TO */
         char* query_str = "SELECT T.TABNAME, C.COLNAME, C.TYPENAME, C.LENGTH, C.SCALE, C.NULLS, COALESCE(C.KEYSEQ, 0) AS KEY, C.CODEPAGE"
                           " FROM SYSCAT.TABLES T JOIN SYSCAT.COLUMNS C ON T.TABSCHEMA = C.TABSCHEMA AND T.TABNAME   = C.TABNAME"
-                          " WHERE T.TABSCHEMA = ? AND T.TYPE IN ('T','V') AND T.TABNAME IN (%s) ORDER BY T.TABNAME, C.COLNO";
+                          " WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('T','V') AND UPPER(T.TABNAME) IN (%s) AND COALESCE(C.HIDDEN,'') = '' ORDER BY T.TABNAME, C.COLNO";
         int   s_len     = strlen(query_str) + strlen(table_list) + 1;
         column_query = db2alloc("column_query",s_len);
         snprintf(column_query,s_len,query_str,table_list);
@@ -148,7 +148,7 @@ int db2GetImportColumn(DB2Session* session, char* schema, char* table_list, int 
       case 2: {   /* FDW_IMPORT_SCHEMA_EXCEPT   */
         char* query_str = "SELECT T.TABNAME, C.COLNAME, C.TYPENAME, C.LENGTH, C.SCALE, C.NULLS, COALESCE(C.KEYSEQ, 0) AS KEY, C.CODEPAGE"
                           " FROM SYSCAT.TABLES T JOIN SYSCAT.COLUMNS C ON T.TABSCHEMA = C.TABSCHEMA AND T.TABNAME   = C.TABNAME"
-                          " WHERE T.TABSCHEMA = ? AND T.TYPE IN ('T','V') AND T.TABNAME NOT IN (%s) ORDER BY T.TABNAME, C.COLNO";
+                          " WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('T','V') AND UPPER(T.TABNAME) NOT IN (%s) AND COALESCE(C.HIDDEN,'') = '' ORDER BY T.TABNAME, C.COLNO";
         int   s_len     = strlen(query_str) + strlen(table_list) + 1;
         column_query = db2alloc("column_query",s_len);
         snprintf(column_query,s_len,query_str,table_list);
@@ -172,7 +172,7 @@ int db2GetImportColumn(DB2Session* session, char* schema, char* table_list, int 
     }
 
     /* bind the parameter */
-    result = SQLBindParameter(session->stmtp->hsql, SQL_PARAM_INPUT, 1, SQL_C_CHAR, SQL_VARCHAR, 128, 0, schema, sizeof(schema), &ind_s);
+    result = SQLBindParameter(session->stmtp->hsql, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 128, 0, schema, sizeof(schema), &ind_s);
     db2Debug2("  SQLBindParameter table_schema = '%s' rc : %d",schema, result);
     result = db2CheckErr(result, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
     if (result != SQL_SUCCESS) {

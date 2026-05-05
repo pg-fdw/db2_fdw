@@ -15,7 +15,7 @@ extern int             db2ExecuteQuery           (DB2Session* session, const DB2
 extern void            db2Debug1                 (const char* message, ...);
 extern void            db2Debug2                 (const char* message, ...);
 extern void            setModifyParameters       (ParamDesc* paramList, TupleTableSlot* newslot, TupleTableSlot* oldslot, DB2Table* db2Table, DB2Session* session);
-extern void            convertTuple              (DB2FdwState* fdw_state, Datum* values, bool* nulls, bool trunc_lob) ;
+extern void            convertTuple              (DB2FdwState* fdw_state, Datum* values, bool* nulls) ;
 
 /** local prototypes */
 TupleTableSlot* db2ExecForeignUpdate      (EState* estate, ResultRelInfo* rinfo, TupleTableSlot* slot, TupleTableSlot* planSlot);
@@ -58,7 +58,7 @@ TupleTableSlot* db2ExecForeignUpdate (EState* estate, ResultRelInfo* rinfo, Tupl
   ExecClearTuple (slot);
 
   /* convert result for RETURNING to arrays of values and null indicators */
-  convertTuple (fdw_state, slot->tts_values, slot->tts_isnull, false);
+  convertTuple (fdw_state, slot->tts_values, slot->tts_isnull);
 
   /* store the virtual tuple */
   ExecStoreVirtualTuple (slot);

@@ -171,7 +171,7 @@ DB2FdwState* deserializePlanData (List* list) {
     db2Debug2("  state->db2Table->cols[%d]->noencerr: %d",i,state->db2Table->cols[i]->noencerr);
     cell = list_next (list,cell);
     /* allocate memory for the result value only when the column is used in query */
-    state->db2Table->cols[i]->val      = (state->db2Table->cols[i]->used == 1) ? (char*) db2alloc ("state->db2Table->cols[i]->val", state->db2Table->cols[i]->val_size + 1) : NULL;
+    state->db2Table->cols[i]->val      = (state->db2Table->cols[i]->used == 1) ? (char*) db2alloc ("state->db2Table->cols[i]->val", MIN(state->db2Table->cols[i]->val_size, 1073741823)) : NULL;
     db2Debug2("  state->db2Table->cols[%d]->val: %x",i,state->db2Table->cols[i]->val);
     state->db2Table->cols[i]->val_len  = 0;
     db2Debug2("  state->db2Table->cols[%d]->val_len: %d",i,state->db2Table->cols[i]->val_len);
