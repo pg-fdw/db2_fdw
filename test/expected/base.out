@@ -3,7 +3,7 @@ CREATE DATABASE
 GRANT ALL PRIVILEGES ON DATABASE regtest to postgres;
 GRANT
 \c regtest
-Sie sind jetzt verbunden mit der Datenbank »regtest« als Benutzer »postgres«.
+You are now connected to database "regtest" as user "postgres".
 -- Install extension
 CREATE EXTENSION IF NOT EXISTS db2_fdw;
 CREATE EXTENSION
@@ -22,61 +22,95 @@ IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO sample;
 IMPORT FOREIGN SCHEMA
 -- list imported tables
 \detr+ sample.*
-                                      Liste der Fremdtabellen
- Schema |     Tabelle     | Server |                  FDW-Optionen                  | Beschreibung 
---------+-----------------+--------+------------------------------------------------+--------------
- sample | act             | sample | (schema 'DB2INST1', "table" 'ACT')             | 
- sample | bintypes        | sample | (schema 'DB2INST1', "table" 'BINTYPES')        | 
- sample | catalog         | sample | (schema 'DB2INST1', "table" 'CATALOG')         | 
- sample | cl_sched        | sample | (schema 'DB2INST1', "table" 'CL_SCHED')        | 
- sample | customer        | sample | (schema 'DB2INST1', "table" 'CUSTOMER')        | 
- sample | department      | sample | (schema 'DB2INST1', "table" 'DEPARTMENT')      | 
- sample | emp_photo       | sample | (schema 'DB2INST1', "table" 'EMP_PHOTO')       | 
- sample | emp_resume      | sample | (schema 'DB2INST1', "table" 'EMP_RESUME')      | 
- sample | employee        | sample | (schema 'DB2INST1', "table" 'EMPLOYEE')        | 
- sample | empmdc          | sample | (schema 'DB2INST1', "table" 'EMPMDC')          | 
- sample | empprojact      | sample | (schema 'DB2INST1', "table" 'EMPPROJACT')      | 
- sample | in_tray         | sample | (schema 'DB2INST1', "table" 'IN_TRAY')         | 
- sample | inventory       | sample | (schema 'DB2INST1', "table" 'INVENTORY')       | 
- sample | numerictypes    | sample | (schema 'DB2INST1', "table" 'NUMERICTYPES')    | 
- sample | org             | sample | (schema 'DB2INST1', "table" 'ORG')             | 
- sample | product         | sample | (schema 'DB2INST1', "table" 'PRODUCT')         | 
- sample | productsupplier | sample | (schema 'DB2INST1', "table" 'PRODUCTSUPPLIER') | 
- sample | projact         | sample | (schema 'DB2INST1', "table" 'PROJACT')         | 
- sample | project         | sample | (schema 'DB2INST1', "table" 'PROJECT')         | 
- sample | purchaseorder   | sample | (schema 'DB2INST1', "table" 'PURCHASEORDER')   | 
- sample | sales           | sample | (schema 'DB2INST1', "table" 'SALES')           | 
- sample | staff           | sample | (schema 'DB2INST1', "table" 'STAFF')           | 
- sample | staffg          | sample | (schema 'DB2INST1', "table" 'STAFFG')          | 
- sample | suppliers       | sample | (schema 'DB2INST1', "table" 'SUPPLIERS')       | 
- sample | timetypes       | sample | (schema 'DB2INST1', "table" 'TIMETYPES')       | 
- sample | tm2acct         | sample | (schema 'DB2INST1', "table" 'TM2ACCT')         | 
- sample | vact            | sample | (schema 'DB2INST1', "table" 'VACT')            | 
- sample | vastrde1        | sample | (schema 'DB2INST1', "table" 'VASTRDE1')        | 
- sample | vastrde2        | sample | (schema 'DB2INST1', "table" 'VASTRDE2')        | 
- sample | vdepmg1         | sample | (schema 'DB2INST1', "table" 'VDEPMG1')         | 
- sample | vdept           | sample | (schema 'DB2INST1', "table" 'VDEPT')           | 
- sample | vemp            | sample | (schema 'DB2INST1', "table" 'VEMP')            | 
- sample | vempdpt1        | sample | (schema 'DB2INST1', "table" 'VEMPDPT1')        | 
- sample | vemplp          | sample | (schema 'DB2INST1', "table" 'VEMPLP')          | 
- sample | vempprojact     | sample | (schema 'DB2INST1', "table" 'VEMPPROJACT')     | 
- sample | vforpla         | sample | (schema 'DB2INST1', "table" 'VFORPLA')         | 
- sample | vhdept          | sample | (schema 'DB2INST1', "table" 'VHDEPT')          | 
- sample | vm2acct         | sample | (schema 'DB2INST1', "table" 'VM2ACCT')         | 
- sample | vphone          | sample | (schema 'DB2INST1', "table" 'VPHONE')          | 
- sample | vproj           | sample | (schema 'DB2INST1', "table" 'VPROJ')           | 
- sample | vprojact        | sample | (schema 'DB2INST1', "table" 'VPROJACT')        | 
- sample | vprojre1        | sample | (schema 'DB2INST1', "table" 'VPROJRE1')        | 
- sample | vpstrde1        | sample | (schema 'DB2INST1', "table" 'VPSTRDE1')        | 
- sample | vpstrde2        | sample | (schema 'DB2INST1', "table" 'VPSTRDE2')        | 
- sample | vstafac1        | sample | (schema 'DB2INST1', "table" 'VSTAFAC1')        | 
- sample | vstafac2        | sample | (schema 'DB2INST1', "table" 'VSTAFAC2')        | 
-(46 Zeilen)
+                                        List of foreign tables
+ Schema |       Table       | Server |                   FDW options                    | Description 
+--------+-------------------+--------+--------------------------------------------------+-------------
+ sample | act               | sample | (schema 'DB2INST1', "table" 'ACT')               | 
+ sample | bintypes          | sample | (schema 'DB2INST1', "table" 'BINTYPES')          | 
+ sample | catalog           | sample | (schema 'DB2INST1', "table" 'CATALOG')           | 
+ sample | cl_sched          | sample | (schema 'DB2INST1', "table" 'CL_SCHED')          | 
+ sample | customer          | sample | (schema 'DB2INST1', "table" 'CUSTOMER')          | 
+ sample | department        | sample | (schema 'DB2INST1', "table" 'DEPARTMENT')        | 
+ sample | emp_photo         | sample | (schema 'DB2INST1', "table" 'EMP_PHOTO')         | 
+ sample | emp_resume        | sample | (schema 'DB2INST1', "table" 'EMP_RESUME')        | 
+ sample | employee          | sample | (schema 'DB2INST1', "table" 'EMPLOYEE')          | 
+ sample | empmdc            | sample | (schema 'DB2INST1', "table" 'EMPMDC')            | 
+ sample | empprojact        | sample | (schema 'DB2INST1', "table" 'EMPPROJACT')        | 
+ sample | in_tray           | sample | (schema 'DB2INST1', "table" 'IN_TRAY')           | 
+ sample | inventory         | sample | (schema 'DB2INST1', "table" 'INVENTORY')         | 
+ sample | iot_gre_space     | sample | (schema 'DB2INST1', "table" 'IOT_GRE_SPACE')     | 
+ sample | numerictypes      | sample | (schema 'DB2INST1', "table" 'NUMERICTYPES')      | 
+ sample | org               | sample | (schema 'DB2INST1', "table" 'ORG')               | 
+ sample | product           | sample | (schema 'DB2INST1', "table" 'PRODUCT')           | 
+ sample | productsupplier   | sample | (schema 'DB2INST1', "table" 'PRODUCTSUPPLIER')   | 
+ sample | projact           | sample | (schema 'DB2INST1', "table" 'PROJACT')           | 
+ sample | project           | sample | (schema 'DB2INST1', "table" 'PROJECT')           | 
+ sample | purchaseorder     | sample | (schema 'DB2INST1', "table" 'PURCHASEORDER')     | 
+ sample | remotetable       | sample | (schema 'DB2INST1', "table" 'REMOTETABLE')       | 
+ sample | sales             | sample | (schema 'DB2INST1', "table" 'SALES')             | 
+ sample | staff             | sample | (schema 'DB2INST1', "table" 'STAFF')             | 
+ sample | staffg            | sample | (schema 'DB2INST1', "table" 'STAFFG')            | 
+ sample | suppliers         | sample | (schema 'DB2INST1', "table" 'SUPPLIERS')         | 
+ sample | test_hidden       | sample | (schema 'DB2INST1', "table" 'TEST_HIDDEN')       | 
+ sample | testbigint        | sample | (schema 'DB2INST1', "table" 'TESTBIGINT')        | 
+ sample | timetypes         | sample | (schema 'DB2INST1', "table" 'TIMETYPES')         | 
+ sample | tm2acct           | sample | (schema 'DB2INST1', "table" 'TM2ACCT')           | 
+ sample | uaci_rtdeployment | sample | (schema 'DB2INST1', "table" 'UACI_RTDEPLOYMENT') | 
+ sample | vact              | sample | (schema 'DB2INST1', "table" 'VACT')              | 
+ sample | vastrde1          | sample | (schema 'DB2INST1', "table" 'VASTRDE1')          | 
+ sample | vastrde2          | sample | (schema 'DB2INST1', "table" 'VASTRDE2')          | 
+ sample | vdepmg1           | sample | (schema 'DB2INST1', "table" 'VDEPMG1')           | 
+ sample | vdept             | sample | (schema 'DB2INST1', "table" 'VDEPT')             | 
+ sample | vemp              | sample | (schema 'DB2INST1', "table" 'VEMP')              | 
+ sample | vempdpt1          | sample | (schema 'DB2INST1', "table" 'VEMPDPT1')          | 
+ sample | vemplp            | sample | (schema 'DB2INST1', "table" 'VEMPLP')            | 
+ sample | vempprojact       | sample | (schema 'DB2INST1', "table" 'VEMPPROJACT')       | 
+ sample | vforpla           | sample | (schema 'DB2INST1', "table" 'VFORPLA')           | 
+ sample | vhdept            | sample | (schema 'DB2INST1', "table" 'VHDEPT')            | 
+ sample | vm2acct           | sample | (schema 'DB2INST1', "table" 'VM2ACCT')           | 
+ sample | vphone            | sample | (schema 'DB2INST1', "table" 'VPHONE')            | 
+ sample | vproj             | sample | (schema 'DB2INST1', "table" 'VPROJ')             | 
+ sample | vprojact          | sample | (schema 'DB2INST1', "table" 'VPROJACT')          | 
+ sample | vprojre1          | sample | (schema 'DB2INST1', "table" 'VPROJRE1')          | 
+ sample | vpstrde1          | sample | (schema 'DB2INST1', "table" 'VPSTRDE1')          | 
+ sample | vpstrde2          | sample | (schema 'DB2INST1', "table" 'VPSTRDE2')          | 
+ sample | vstafac1          | sample | (schema 'DB2INST1', "table" 'VSTAFAC1')          | 
+ sample | vstafac2          | sample | (schema 'DB2INST1', "table" 'VSTAFAC2')          | 
+(51 rows)
 
+--
+select db2_diag();
+                                                        db2_diag                                                         
+-------------------------------------------------------------------------------------------------------------------------
+ db2_fdw 18.2.0, PostgreSQL 18.1, DB2INSTANCE=postgres, DB2_HOME=/var/lib/pgsql/sqllib, DB2LIB=/var/lib/pgsql/sqllib/lib
+(1 row)
+
+-- starting testcases
+-- running tc001.sql
+\i tc001.sql
+-- 
+-- TC001: Dropping and re-creating a foreign table "manually"
+--
 -- drop an imported table
+\d+ sample.org;
+                                                                                            Foreign table "sample.org"
+  Column  |         Type          | Collation | Nullable | Default |                                              FDW options                                              | Storage  | Stats target | Description 
+----------+-----------------------+-----------+----------+---------+-------------------------------------------------------------------------------------------------------+----------+--------------+-------------
+ deptnumb | smallint              |           | not null |         | (db2type '5', db2size '5', db2bytes '2', db2chars '5', db2scale '0', db2null '0', db2ccsid '0')       | plain    |              | 
+ deptname | character varying(14) |           |          |         | (db2type '12', db2size '14', db2bytes '14', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208') | extended |              | 
+ manager  | smallint              |           |          |         | (db2type '5', db2size '5', db2bytes '2', db2chars '5', db2scale '0', db2null '1', db2ccsid '0')       | plain    |              | 
+ division | character varying(10) |           |          |         | (db2type '12', db2size '10', db2bytes '10', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208') | extended |              | 
+ location | character varying(13) |           |          |         | (db2type '12', db2size '13', db2bytes '13', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208') | extended |              | 
+Not-null constraints:
+    "org_deptnumb_not_null" NOT NULL "deptnumb"
+Server: sample
+FDW options: (schema 'DB2INST1', "table" 'ORG')
+
 DROP FOREIGN TABLE IF EXISTS sample.org;
 DROP FOREIGN TABLE
 -- recreate it manually
+\d+ sample.org;
+psql:tc001.sql:8: error: Did not find any relation named "sample.org".
 CREATE FOREIGN TABLE sample.org (
                   DEPTNUMB SMALLINT OPTIONS (key 'yes') NOT NULL ,
                   DEPTNAME VARCHAR(14) ,
@@ -86,9 +120,31 @@ CREATE FOREIGN TABLE sample.org (
                    )
       SERVER sample OPTIONS (schema 'DB2INST1',table 'ORG');
 CREATE FOREIGN TABLE
+\d+ sample.org;
+                                               Foreign table "sample.org"
+  Column  |         Type          | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+----------+-----------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ deptnumb | smallint              |           | not null |         | (key 'yes') | plain    |              | 
+ deptname | character varying(14) |           |          |         |             | extended |              | 
+ manager  | smallint              |           |          |         |             | plain    |              | 
+ division | character varying(10) |           |          |         |             | extended |              | 
+ location | character varying(13) |           |          |         |             | extended |              | 
+Not-null constraints:
+    "org_deptnumb_not_null" NOT NULL "deptnumb"
+Server: sample
+FDW options: (schema 'DB2INST1', "table" 'ORG')
+
+-- 
+-- TC001a: on a freshly created foreign table remove the content and manually re-create it again.
+--
 -- remove its content
 delete from sample.org;
 DELETE 8
+SELECT * FROM sample.org;
+ deptnumb | deptname | manager | division | location 
+----------+----------+---------+----------+----------
+(0 rows)
+
 -- repopulate the content
 insert into sample.org (DEPTNUMB,DEPTNAME,MANAGER,DIVISION,LOCATION) values(10,'Head Office',160,'Corporate','New York');
 INSERT 0 1
@@ -107,144 +163,447 @@ INSERT 0 1
 insert into sample.org (DEPTNUMB,DEPTNAME,MANAGER,DIVISION,LOCATION) values(84,'Mountain',290,'Western','Denver');
 INSERT 0 1
 -- inquire the content
-select * from sample.org;
+SELECT * FROM sample.org;
  deptnumb |    deptname    | manager | division  |   location    
 ----------+----------------+---------+-----------+---------------
-      160 | Head Office    |     160 | Corporate | New York
-       50 | New England    |      50 | Eastern   | Boston
-       10 | Mid Atlantic   |      10 | Eastern   | Washington
-       30 | South Atlantic |      30 | Eastern   | Atlanta
-      100 | Great Lakes    |     100 | Midwest   | Chicago
-      140 | Plains         |     140 | Midwest   | Dallas
-      270 | Pacific        |     270 | Western   | San Francisco
-      290 | Mountain       |     290 | Western   | Denver
-(8 Zeilen)
+       10 | Head Office    |     160 | Corporate | New York
+       15 | New England    |      50 | Eastern   | Boston
+       20 | Mid Atlantic   |      10 | Eastern   | Washington
+       38 | South Atlantic |      30 | Eastern   | Atlanta
+       42 | Great Lakes    |     100 | Midwest   | Chicago
+       51 | Plains         |     140 | Midwest   | Dallas
+       66 | Pacific        |     270 | Western   | San Francisco
+       84 | Mountain       |     290 | Western   | Denver
+(8 rows)
 
-select * from sample.sales;
- sales_date | sales_person |    region     | sales 
-------------+--------------+---------------+-------
- 2005-12-31 | LUCCHESSI    | Ontario-South |     1
- 2005-12-31 | LEE          | Ontario-South |     3
- 2005-12-31 | LEE          | Quebec        |     1
- 2005-12-31 | LEE          | Manitoba      |     2
- 2005-12-31 | GOUNOT       | Quebec        |     1
- 2006-03-29 | LUCCHESSI    | Ontario-South |     3
- 2006-03-29 | LUCCHESSI    | Quebec        |     1
- 2006-03-29 | LEE          | Ontario-South |     2
- 1996-03-29 | LEE          | Ontario-North |     2
- 2006-03-29 | LEE          | Quebec        |     3
- 2006-03-29 | LEE          | Manitoba      |     5
- 2006-03-29 | GOUNOT       | Ontario-South |     3
- 2006-03-29 | GOUNOT       | Quebec        |     1
- 2006-03-29 | GOUNOT       | Manitoba      |     7
- 2006-03-30 | LUCCHESSI    | Ontario-South |     1
- 2006-03-30 | LUCCHESSI    | Quebec        |     2
- 2006-03-30 | LUCCHESSI    | Manitoba      |     1
- 2006-03-30 | LEE          | Ontario-South |     7
- 2006-03-30 | LEE          | Ontario-North |     3
- 2006-03-30 | LEE          | Quebec        |     7
- 2006-03-30 | LEE          | Manitoba      |     4
- 2006-03-30 | GOUNOT       | Ontario-South |     2
- 2006-03-30 | GOUNOT       | Quebec        |    18
- 2006-03-31 | GOUNOT       | Manitoba      |     1
- 2006-03-31 | LUCCHESSI    | Manitoba      |     1
- 2006-03-31 | LEE          | Ontario-South |    14
- 2006-03-31 | LEE          | Ontario-North |     3
- 2006-03-31 | LEE          | Quebec        |     7
- 2006-03-31 | LEE          | Manitoba      |     3
- 2006-03-31 | GOUNOT       | Ontario-South |     2
- 2006-03-31 | GOUNOT       | Quebec        |     1
- 2006-04-01 | LUCCHESSI    | Ontario-South |     3
- 2006-04-01 | LUCCHESSI    | Manitoba      |     1
- 2006-04-01 | LEE          | Ontario-South |     8
- 2006-04-01 | LEE          | Ontario-North |      
- 2006-04-01 | LEE          | Quebec        |     8
- 2006-04-01 | LEE          | Manitoba      |     9
- 2006-04-01 | GOUNOT       | Ontario-South |     3
- 2006-04-01 | GOUNOT       | Ontario-North |     1
- 2006-04-01 | GOUNOT       | Quebec        |     3
- 2006-04-01 | GOUNOT       | Manitoba      |     7
-(41 Zeilen)
+--
+-- END of TC001
+--
+-- running tc002.sql
+\i tc002.sql
+-- 
+-- TC002: Importing a single foreign table from a remote schema
+--
+\d+ sample.act;
+                                                                                               Foreign table "sample.act"
+ Column  |         Type          | Collation | Nullable | Default |                                                 FDW options                                                 | Storage  | Stats target | Description 
+---------+-----------------------+-----------+----------+---------+-------------------------------------------------------------------------------------------------------------+----------+--------------+-------------
+ actno   | smallint              |           | not null |         | (db2type '5', db2size '5', db2bytes '2', db2chars '5', db2scale '0', db2null '0', db2ccsid '0', key 'true') | plain    |              | 
+ actkwd  | character(6)          |           | not null |         | (db2type '1', db2size '6', db2bytes '6', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')          | extended |              | 
+ actdesc | character varying(20) |           | not null |         | (db2type '12', db2size '20', db2bytes '20', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')       | extended |              | 
+Not-null constraints:
+    "act_actno_not_null" NOT NULL "actno"
+    "act_actkwd_not_null" NOT NULL "actkwd"
+    "act_actdesc_not_null" NOT NULL "actdesc"
+Server: sample
+FDW options: (schema 'DB2INST1', "table" 'ACT')
+
+SELECT * FROM sample.act;
+ actno | actkwd |       actdesc       
+-------+--------+---------------------
+    10 | MANAGE | MANAGE/ADVISE
+    20 | ECOST  | ESTIMATE COST
+    30 | DEFINE | DEFINE SPECS
+    40 | LEADPR | LEAD PROGRAM/DESIGN
+    50 | SPECS  | WRITE SPECS
+    60 | LOGIC  | DESCRIBE LOGIC
+    70 | CODE   | CODE PROGRAMS
+    80 | TEST   | TEST PROGRAMS
+    90 | ADMQS  | ADM QUERY SYSTEM
+   100 | TEACH  | TEACH CLASSES
+   110 | COURSE | DEVELOP COURSES
+   120 | STAFF  | PERS AND STAFFING
+   130 | OPERAT | OPER COMPUTER SYS
+   140 | MAINT  | MAINT SOFTWARE SYS
+   150 | ADMSYS | ADM OPERATING SYS
+   160 | ADMDB  | ADM DATA BASES
+   170 | ADMDC  | ADM DATA COMM
+   180 | DOC    | DOCUMENT
+   190 | XML    | XML Document
+   999 | ABCDE  | uhbviurw
+(20 rows)
+
+-- drop foreign table act
+DROP FOREIGN TABLE IF EXISTS sample.act;
+DROP FOREIGN TABLE
+-- import it using limit to
+IMPORT FOREIGN SCHEMA "DB2INST1" LIMIT TO ("ACT") FROM SERVER sample INTO sample;
+IMPORT FOREIGN SCHEMA
+-- test its working again
+\d+ sample.act;
+                                                                                               Foreign table "sample.act"
+ Column  |         Type          | Collation | Nullable | Default |                                                 FDW options                                                 | Storage  | Stats target | Description 
+---------+-----------------------+-----------+----------+---------+-------------------------------------------------------------------------------------------------------------+----------+--------------+-------------
+ actno   | smallint              |           | not null |         | (db2type '5', db2size '5', db2bytes '2', db2chars '5', db2scale '0', db2null '0', db2ccsid '0', key 'true') | plain    |              | 
+ actkwd  | character(6)          |           | not null |         | (db2type '1', db2size '6', db2bytes '6', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')          | extended |              | 
+ actdesc | character varying(20) |           | not null |         | (db2type '12', db2size '20', db2bytes '20', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')       | extended |              | 
+Not-null constraints:
+    "act_actno_not_null" NOT NULL "actno"
+    "act_actkwd_not_null" NOT NULL "actkwd"
+    "act_actdesc_not_null" NOT NULL "actdesc"
+Server: sample
+FDW options: (schema 'DB2INST1', "table" 'ACT')
+
+SELECT * FROM sample.act;
+ actno | actkwd |       actdesc       
+-------+--------+---------------------
+    10 | MANAGE | MANAGE/ADVISE
+    20 | ECOST  | ESTIMATE COST
+    30 | DEFINE | DEFINE SPECS
+    40 | LEADPR | LEAD PROGRAM/DESIGN
+    50 | SPECS  | WRITE SPECS
+    60 | LOGIC  | DESCRIBE LOGIC
+    70 | CODE   | CODE PROGRAMS
+    80 | TEST   | TEST PROGRAMS
+    90 | ADMQS  | ADM QUERY SYSTEM
+   100 | TEACH  | TEACH CLASSES
+   110 | COURSE | DEVELOP COURSES
+   120 | STAFF  | PERS AND STAFFING
+   130 | OPERAT | OPER COMPUTER SYS
+   140 | MAINT  | MAINT SOFTWARE SYS
+   150 | ADMSYS | ADM OPERATING SYS
+   160 | ADMDB  | ADM DATA BASES
+   170 | ADMDC  | ADM DATA COMM
+   180 | DOC    | DOCUMENT
+   190 | XML    | XML Document
+   999 | ABCDE  | uhbviurw
+(20 rows)
+
+--
+-- END of TC002
+--
+-- running tc003.sql
+\i tc003.sql
+--
+-- TC003: Run a simple join
+--
+\d+ sample.employee;
+                                                                                               Foreign table "sample.employee"
+  Column   |         Type          | Collation | Nullable | Default |                                                  FDW options                                                   | Storage  | Stats target | Description 
+-----------+-----------------------+-----------+----------+---------+----------------------------------------------------------------------------------------------------------------+----------+--------------+-------------
+ empno     | character(6)          |           | not null |         | (db2type '1', db2size '6', db2bytes '6', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208', key 'true') | extended |              | 
+ firstnme  | character varying(12) |           | not null |         | (db2type '12', db2size '12', db2bytes '12', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')          | extended |              | 
+ midinit   | character(1)          |           |          |         | (db2type '1', db2size '1', db2bytes '1', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ lastname  | character varying(15) |           | not null |         | (db2type '12', db2size '15', db2bytes '15', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')          | extended |              | 
+ workdept  | character(3)          |           |          |         | (db2type '1', db2size '3', db2bytes '3', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ phoneno   | character(4)          |           |          |         | (db2type '1', db2size '4', db2bytes '4', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ hiredate  | date                  |           |          |         | (db2type '91', db2size '10', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')              | plain    |              | 
+ job       | character(8)          |           |          |         | (db2type '1', db2size '8', db2bytes '8', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ edlevel   | smallint              |           | not null |         | (db2type '5', db2size '5', db2bytes '2', db2chars '5', db2scale '0', db2null '0', db2ccsid '0')                | plain    |              | 
+ sex       | character(1)          |           |          |         | (db2type '1', db2size '1', db2bytes '1', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ birthdate | date                  |           |          |         | (db2type '91', db2size '10', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')              | plain    |              | 
+ salary    | numeric(9,2)          |           |          |         | (db2type '3', db2size '9', db2bytes '11', db2chars '9', db2scale '2', db2null '1', db2ccsid '0')               | main     |              | 
+ bonus     | numeric(9,2)          |           |          |         | (db2type '3', db2size '9', db2bytes '11', db2chars '9', db2scale '2', db2null '1', db2ccsid '0')               | main     |              | 
+ comm      | numeric(9,2)          |           |          |         | (db2type '3', db2size '9', db2bytes '11', db2chars '9', db2scale '2', db2null '1', db2ccsid '0')               | main     |              | 
+Not-null constraints:
+    "employee_empno_not_null" NOT NULL "empno"
+    "employee_firstnme_not_null" NOT NULL "firstnme"
+    "employee_lastname_not_null" NOT NULL "lastname"
+    "employee_edlevel_not_null" NOT NULL "edlevel"
+Server: sample
+FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
+
+\d+ sample.sales;
+                                                                                             Foreign table "sample.sales"
+    Column    |         Type          | Collation | Nullable | Default |                                              FDW options                                              | Storage  | Stats target | Description 
+--------------+-----------------------+-----------+----------+---------+-------------------------------------------------------------------------------------------------------+----------+--------------+-------------
+ sales_date   | date                  |           |          |         | (db2type '91', db2size '10', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')     | plain    |              | 
+ sales_person | character varying(15) |           |          |         | (db2type '12', db2size '15', db2bytes '15', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208') | extended |              | 
+ region       | character varying(15) |           |          |         | (db2type '12', db2size '15', db2bytes '15', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208') | extended |              | 
+ sales        | integer               |           |          |         | (db2type '4', db2size '10', db2bytes '4', db2chars '10', db2scale '0', db2null '1', db2ccsid '0')     | plain    |              | 
+Server: sample
+FDW options: (schema 'DB2INST1', "table" 'SALES')
 
 -- test a simple join
 select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
  empno  | firstnme | midinit | lastname  | workdept | phoneno |  hiredate  |   job    | edlevel | sex | birthdate  |  salary  | bonus  |  comm   | sales_date | sales_person |    region     | sales 
 --------+----------+---------+-----------+----------+---------+------------+----------+---------+-----+------------+----------+--------+---------+------------+--------------+---------------+-------
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-04-01 | LUCCHESSI    | Manitoba      |     1
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-04-01 | LUCCHESSI    | Ontario-South |     3
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-31 | LUCCHESSI    | Manitoba      |     1
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-30 | LUCCHESSI    | Manitoba      |     1
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-30 | LUCCHESSI    | Quebec        |     2
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-30 | LUCCHESSI    | Ontario-South |     1
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-29 | LUCCHESSI    | Quebec        |     1
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-29 | LUCCHESSI    | Ontario-South |     3
  000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2005-12-31 | LUCCHESSI    | Ontario-South |     1
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-04-01 | LEE          | Manitoba      |     9
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-04-01 | LEE          | Quebec        |     8
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-04-01 | LEE          | Ontario-North |      
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-04-01 | LEE          | Ontario-South |     8
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-31 | LEE          | Manitoba      |     3
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-31 | LEE          | Quebec        |     7
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-31 | LEE          | Ontario-North |     3
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-31 | LEE          | Ontario-South |    14
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-30 | LEE          | Manitoba      |     4
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-30 | LEE          | Quebec        |     7
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-30 | LEE          | Ontario-North |     3
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-30 | LEE          | Ontario-South |     7
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-29 | LEE          | Manitoba      |     5
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-29 | LEE          | Quebec        |     3
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 1996-03-29 | LEE          | Ontario-North |     2
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-29 | LEE          | Ontario-South |     2
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2005-12-31 | LEE          | Manitoba      |     2
- 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2005-12-31 | LEE          | Quebec        |     1
  000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2005-12-31 | LEE          | Ontario-South |     3
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-04-01 | GOUNOT       | Manitoba      |     7
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-04-01 | GOUNOT       | Quebec        |     3
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-04-01 | GOUNOT       | Ontario-North |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-04-01 | GOUNOT       | Ontario-South |     3
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-31 | GOUNOT       | Quebec        |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-31 | GOUNOT       | Ontario-South |     2
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-31 | GOUNOT       | Manitoba      |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-30 | GOUNOT       | Quebec        |    18
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-30 | GOUNOT       | Ontario-South |     2
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-29 | GOUNOT       | Manitoba      |     7
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-29 | GOUNOT       | Quebec        |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-29 | GOUNOT       | Ontario-South |     3
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2005-12-31 | LEE          | Quebec        |     1
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2005-12-31 | LEE          | Manitoba      |     2
  000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2005-12-31 | GOUNOT       | Quebec        |     1
-(41 Zeilen)
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-29 | LUCCHESSI    | Ontario-South |     3
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-29 | LUCCHESSI    | Quebec        |     1
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-29 | LEE          | Ontario-South |     2
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 1996-03-29 | LEE          | Ontario-North |     2
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-29 | LEE          | Quebec        |     3
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-29 | LEE          | Manitoba      |     5
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-29 | GOUNOT       | Ontario-South |     3
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-29 | GOUNOT       | Quebec        |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-29 | GOUNOT       | Manitoba      |     7
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-30 | LUCCHESSI    | Ontario-South |     1
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-30 | LUCCHESSI    | Quebec        |     2
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-30 | LUCCHESSI    | Manitoba      |     1
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-30 | LEE          | Ontario-South |     7
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-30 | LEE          | Ontario-North |     3
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-30 | LEE          | Quebec        |     7
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-30 | LEE          | Manitoba      |     4
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-30 | GOUNOT       | Ontario-South |     2
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-30 | GOUNOT       | Quebec        |    18
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-31 | GOUNOT       | Manitoba      |     1
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-03-31 | LUCCHESSI    | Manitoba      |     1
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-31 | LEE          | Ontario-South |    14
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-31 | LEE          | Ontario-North |     3
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-31 | LEE          | Quebec        |     7
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-03-31 | LEE          | Manitoba      |     3
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-31 | GOUNOT       | Ontario-South |     2
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-03-31 | GOUNOT       | Quebec        |     1
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-04-01 | LUCCHESSI    | Ontario-South |     3
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00 | 2006-04-01 | LUCCHESSI    | Manitoba      |     1
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-04-01 | LEE          | Ontario-South |     8
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-04-01 | LEE          | Ontario-North |      
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-04-01 | LEE          | Quebec        |     8
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00 | 2006-04-01 | LEE          | Manitoba      |     9
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-04-01 | GOUNOT       | Ontario-South |     3
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-04-01 | GOUNOT       | Ontario-North |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-04-01 | GOUNOT       | Quebec        |     3
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 | 500.00 | 1907.00 | 2006-04-01 | GOUNOT       | Manitoba      |     7
+(41 rows)
 
--- create a local table importing its structure and content from an fdw table
+--
+-- End of TC003
+--
+-- running tc004.sql
+\i tc004.sql
+--
+-- TC004: clone a foreign table into a local table including content
+--
 create table sample.orgcopy as select * from sample.org;
 SELECT 8
 \d+ sample.org*
-                                                         Fremdtabelle »sample.org«
-  Spalte  |          Typ          | Sortierfolge | NULL erlaubt? | Vorgabewert | FDW-Optionen | Speicherung | Statistikziel | Beschreibung 
-----------+-----------------------+--------------+---------------+-------------+--------------+-------------+---------------+--------------
- deptnumb | smallint              |              | not null      |             | (key 'yes')  | plain       |               | 
- deptname | character varying(14) |              |               |             |              | extended    |               | 
- manager  | smallint              |              |               |             |              | plain       |               | 
- division | character varying(10) |              |               |             |              | extended    |               | 
- location | character varying(13) |              |               |             |              | extended    |               | 
-Not-Null-Constraints:
+                                               Foreign table "sample.org"
+  Column  |         Type          | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+----------+-----------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ deptnumb | smallint              |           | not null |         | (key 'yes') | plain    |              | 
+ deptname | character varying(14) |           |          |         |             | extended |              | 
+ manager  | smallint              |           |          |         |             | plain    |              | 
+ division | character varying(10) |           |          |         |             | extended |              | 
+ location | character varying(13) |           |          |         |             | extended |              | 
+Not-null constraints:
     "org_deptnumb_not_null" NOT NULL "deptnumb"
 Server: sample
-FDW-Optionen: (schema 'DB2INST1', "table" 'ORG')
+FDW options: (schema 'DB2INST1', "table" 'ORG')
 
-                                                         Tabelle »sample.orgcopy«
-  Spalte  |          Typ          | Sortierfolge | NULL erlaubt? | Vorgabewert | Speicherung | Kompression | Statistikziel | Beschreibung 
-----------+-----------------------+--------------+---------------+-------------+-------------+-------------+---------------+--------------
- deptnumb | smallint              |              |               |             | plain       |             |               | 
- deptname | character varying(14) |              |               |             | extended    |             |               | 
- manager  | smallint              |              |               |             | plain       |             |               | 
- division | character varying(10) |              |               |             | extended    |             |               | 
- location | character varying(13) |              |               |             | extended    |             |               | 
-Zugriffsmethode: heap
+                                                 Table "sample.orgcopy"
+  Column  |         Type          | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
+----------+-----------------------+-----------+----------+---------+----------+-------------+--------------+-------------
+ deptnumb | smallint              |           |          |         | plain    |             |              | 
+ deptname | character varying(14) |           |          |         | extended |             |              | 
+ manager  | smallint              |           |          |         | plain    |             |              | 
+ division | character varying(10) |           |          |         | extended |             |              | 
+ location | character varying(13) |           |          |         | extended |             |              | 
+Access method: heap
 
 drop table sample.orgcopy;
 DROP TABLE
--- cleanup
+--
+-- END of TC004
+--
+-- running tc005.sql
+\i tc005.sql
+--
+-- TC005: run a pushdown query for aggregate functions
+--
+\d+ sample.employee;
+                                                                                               Foreign table "sample.employee"
+  Column   |         Type          | Collation | Nullable | Default |                                                  FDW options                                                   | Storage  | Stats target | Description 
+-----------+-----------------------+-----------+----------+---------+----------------------------------------------------------------------------------------------------------------+----------+--------------+-------------
+ empno     | character(6)          |           | not null |         | (db2type '1', db2size '6', db2bytes '6', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208', key 'true') | extended |              | 
+ firstnme  | character varying(12) |           | not null |         | (db2type '12', db2size '12', db2bytes '12', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')          | extended |              | 
+ midinit   | character(1)          |           |          |         | (db2type '1', db2size '1', db2bytes '1', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ lastname  | character varying(15) |           | not null |         | (db2type '12', db2size '15', db2bytes '15', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')          | extended |              | 
+ workdept  | character(3)          |           |          |         | (db2type '1', db2size '3', db2bytes '3', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ phoneno   | character(4)          |           |          |         | (db2type '1', db2size '4', db2bytes '4', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ hiredate  | date                  |           |          |         | (db2type '91', db2size '10', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')              | plain    |              | 
+ job       | character(8)          |           |          |         | (db2type '1', db2size '8', db2bytes '8', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ edlevel   | smallint              |           | not null |         | (db2type '5', db2size '5', db2bytes '2', db2chars '5', db2scale '0', db2null '0', db2ccsid '0')                | plain    |              | 
+ sex       | character(1)          |           |          |         | (db2type '1', db2size '1', db2bytes '1', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ birthdate | date                  |           |          |         | (db2type '91', db2size '10', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')              | plain    |              | 
+ salary    | numeric(9,2)          |           |          |         | (db2type '3', db2size '9', db2bytes '11', db2chars '9', db2scale '2', db2null '1', db2ccsid '0')               | main     |              | 
+ bonus     | numeric(9,2)          |           |          |         | (db2type '3', db2size '9', db2bytes '11', db2chars '9', db2scale '2', db2null '1', db2ccsid '0')               | main     |              | 
+ comm      | numeric(9,2)          |           |          |         | (db2type '3', db2size '9', db2bytes '11', db2chars '9', db2scale '2', db2null '1', db2ccsid '0')               | main     |              | 
+Not-null constraints:
+    "employee_empno_not_null" NOT NULL "empno"
+    "employee_firstnme_not_null" NOT NULL "firstnme"
+    "employee_lastname_not_null" NOT NULL "lastname"
+    "employee_edlevel_not_null" NOT NULL "edlevel"
+Server: sample
+FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
+
+explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=3.002..3.137 rows=1.00 loops=1)
+   Output: (min(salary)), (max(salary)), (avg(salary)), (sum(((salary + comm) + bonus))), (count(*))
+   DB2 query: SELECT MIN("SALARY"), MAX("SALARY"), AVG("SALARY"), SUM((("SALARY" + "COMM") + "BONUS")), COUNT(*) FROM "DB2INST1"."EMPLOYEE"
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 11.5, 5622-044 (c) Copyright IBM Corp. 1991, 2019
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 12.1, 5622-044 (c) Copyright IBM Corp. 1991, 2022
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: ******************** DYNAMIC ***************************************
+   DB2 plan: 
+   DB2 plan: ==================== STATEMENT ==========================================
+   DB2 plan: 
+   DB2 plan:     Isolation Level          = Cursor Stability
+   DB2 plan:     Blocking                 = Block Unambiguous Cursors
+   DB2 plan:     Query Optimization Class = 5
+   DB2 plan: 
+   DB2 plan:     Partition Parallel       = No
+   DB2 plan:     Intra-Partition Parallel = No
+   DB2 plan: 
+   DB2 plan:     SQL Path                 = "SYSIBM", "SYSFUN", "SYSPROC", "SYSIBMADM", 
+   DB2 plan:                                    "SYSHADOOP", "DB2INST1"
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: Statement:
+   DB2 plan:   
+   DB2 plan:   SELECT MIN("SALARY" ), MAX("SALARY" ), AVG("SALARY" ), SUM(((
+   DB2 plan:           "SALARY" + "COMM" )+ "BONUS" )), COUNT(*)
+   DB2 plan:   FROM "DB2INST1" ."EMPLOYEE" 
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: compiledInTenantID = 0
+   DB2 plan: 
+   DB2 plan: Section Code Page = 1208
+   DB2 plan: 
+   DB2 plan: Estimated Cost = 6,817206
+   DB2 plan: Estimated Cardinality = 1,000000
+   DB2 plan: 
+   DB2 plan: Access Table Name = DB2INST1.EMPLOYEE  ID = 2,6
+   DB2 plan: |  tenantID = 0
+   DB2 plan: |  #Columns = 3
+   DB2 plan: |  Skip Inserted Rows
+   DB2 plan: |  Avoid Locking Committed Data
+   DB2 plan: |  Currently Committed for Cursor Stability
+   DB2 plan: |  May participate in Scan Sharing structures
+   DB2 plan: |  Scan may start anywhere and wrap, for completion
+   DB2 plan: |  Fast scan, for purposes of scan sharing management
+   DB2 plan: |  Scan can be throttled in scan sharing management
+   DB2 plan: |  Relation Scan
+   DB2 plan: |  |  Prefetch: Eligible
+   DB2 plan: |  Lock Intents
+   DB2 plan: |  |  Table: Intent Share
+   DB2 plan: |  |  Row  : Next Key Share
+   DB2 plan: |  Sargable Predicate(s)
+   DB2 plan: |  |  Predicate Aggregation
+   DB2 plan: |  |  |  Column Function(s)
+   DB2 plan: Aggregation Completion
+   DB2 plan: |  Column Function(s)
+   DB2 plan: Return Data to Application
+   DB2 plan: |  #Columns = 5
+   DB2 plan: 
+   DB2 plan: End of section
+   DB2 plan: 
+   DB2 plan: 
+ Planning:
+   Buffers: shared hit=20
+ Planning Time: 0.132 ms
+ Execution Time: 3.157 ms
+(71 rows)
+
+select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
+   min   |    max    |   avg    |    sum     | count 
+---------+-----------+----------+------------+-------
+ 8000.00 | 152750.00 | 56988.95 | 2567223.00 |    43
+(1 row)
+
+--
+explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 8000 and lastname like 'L%';
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=2.818..2.988 rows=3.00 loops=1)
+   Output: empno, firstnme, lastname, ((salary + bonus) + comm)
+   DB2 query: SELECT "EMPNO", "FIRSTNME", "LASTNAME", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" > 8000)) AND (("LASTNAME" LIKE 'L%' ESCAPE '\'))
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 11.5, 5622-044 (c) Copyright IBM Corp. 1991, 2019
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 12.1, 5622-044 (c) Copyright IBM Corp. 1991, 2022
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: ******************** DYNAMIC ***************************************
+   DB2 plan: 
+   DB2 plan: ==================== STATEMENT ==========================================
+   DB2 plan: 
+   DB2 plan:     Isolation Level          = Cursor Stability
+   DB2 plan:     Blocking                 = Block Unambiguous Cursors
+   DB2 plan:     Query Optimization Class = 5
+   DB2 plan: 
+   DB2 plan:     Partition Parallel       = No
+   DB2 plan:     Intra-Partition Parallel = No
+   DB2 plan: 
+   DB2 plan:     SQL Path                 = "SYSIBM", "SYSFUN", "SYSPROC", "SYSIBMADM", 
+   DB2 plan:                                    "SYSHADOOP", "DB2INST1"
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: Statement:
+   DB2 plan:   
+   DB2 plan:   SELECT "EMPNO" , "FIRSTNME" , "LASTNAME" , "SALARY" , "BONUS" , 
+   DB2 plan:           "COMM" 
+   DB2 plan:   FROM "DB2INST1" ."EMPLOYEE" 
+   DB2 plan:   WHERE (("SALARY" > 8000))AND (("LASTNAME" LIKE 'L%' ESCAPE '\' ))
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: compiledInTenantID = 0
+   DB2 plan: 
+   DB2 plan: Section Code Page = 1208
+   DB2 plan: 
+   DB2 plan: Estimated Cost = 6,816737
+   DB2 plan: Estimated Cardinality = 3,714774
+   DB2 plan: 
+   DB2 plan: Access Table Name = DB2INST1.EMPLOYEE  ID = 2,6
+   DB2 plan: |  tenantID = 0
+   DB2 plan: |  #Columns = 6
+   DB2 plan: |  Skip Inserted Rows
+   DB2 plan: |  Avoid Locking Committed Data
+   DB2 plan: |  Currently Committed for Cursor Stability
+   DB2 plan: |  May participate in Scan Sharing structures
+   DB2 plan: |  Scan may start anywhere and wrap, for completion
+   DB2 plan: |  Fast scan, for purposes of scan sharing management
+   DB2 plan: |  Scan can be throttled in scan sharing management
+   DB2 plan: |  Relation Scan
+   DB2 plan: |  |  Prefetch: Eligible
+   DB2 plan: |  Lock Intents
+   DB2 plan: |  |  Table: Intent Share
+   DB2 plan: |  |  Row  : Next Key Share
+   DB2 plan: |  Sargable Predicate(s)
+   DB2 plan: |  |  #Predicates = 2
+   DB2 plan: |  |  Return Data to Application
+   DB2 plan: |  |  |  #Columns = 6
+   DB2 plan: Return Data Completion
+   DB2 plan: 
+   DB2 plan: End of section
+   DB2 plan: 
+   DB2 plan: 
+ Planning:
+   Buffers: shared hit=3
+ Planning Time: 0.140 ms
+ Execution Time: 3.010 ms
+(70 rows)
+
+select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 8000 and lastname like 'L%';
+ empno  | firstnme | lastname  | ?column? 
+--------+----------+-----------+----------
+ 000110 | VINCENZO | LUCCHESSI | 71120.00
+ 000220 | JENNIFER | LUTZ      | 52827.00
+ 000330 | WING     | LEE       | 47900.00
+(3 rows)
+
+--
+-- END of TC004
+--
+-- testcases ended
+-- starting cleanup
 \c postgres
-Sie sind jetzt verbunden mit der Datenbank »postgres« als Benutzer »postgres«.
+You are now connected to database "postgres" as user "postgres".
 DROP DATABASE regtest;
 DROP DATABASE
---
+-- test finished
