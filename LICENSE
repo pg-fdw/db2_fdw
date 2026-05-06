@@ -1,9 +1,9 @@
 The PostgreSQL License
 
 Copyright (c) 2023, Ing Wolfgang Brandl.
-Copyright (c) 2025, Thomas Muenz, Living-Mainframe GmbH.
+Copyright (c) 2025, Thomas Muenz, PG_FDW Project.
 
-Wolfgang Brandl, Thomas Muenz and Living-Mainframe Gmbh, furthermore called "the developers".
+Wolfgang Brandl, Thomas Muenz, furthermore called "the developers".
 
 Permission to use, copy, modify, and distribute this software and its documentation for any purpose, without fee, and without a written agreement is hereby granted, provided that the above copyright notice and this paragraph and the following two paragraphs appear in all copies.
 
