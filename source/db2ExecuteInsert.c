@@ -34,14 +34,21 @@ int db2ExecuteInsert (DB2Session* session, ParamDesc* paramList) {
   SQLCHAR     cname[256]   = {0};  /* 256 is usually plenty; see note below */
   int         rowcount     = 0;
   int         param_count  = 0;
+  int         indicator_count = 0;
   
   db2Entry1();
   for (param = paramList; param != NULL; param = param->next) {
     ++param_count;
   }
   db2Debug2("paramcount: %d",param_count);
-  /* allocate a temporary array of indicators */
-  indicators = db2alloc ((param_count * sizeof (SQLLEN)), "indicators[%d]", param_count);
+  /*
+   * Allocate a temporary array of indicators.
+   *
+   * We use 1-based indexing below (indicator[1..param_count]) to match the
+   * parameter numbering passed to SQLBindParameter.
+   */
+  indicator_count = param_count + 1;
+  indicators = db2alloc(indicator_count * sizeof(SQLLEN), "indicators[%d]", indicator_count);
 
   /* bind the parameters */
   param_count = 0;
@@ -67,7 +74,7 @@ int db2ExecuteInsert (DB2Session* session, ParamDesc* paramList) {
   }
 
   /* db2free all indicators */
-  db2free (indicators, "indicators[%d]", param_count);
+  db2free (indicators, "indicators[%d]", indicator_count);
   if (rc == SQL_NO_DATA) {
     db2Debug3("SQL_NO_DATA");
   } else {
