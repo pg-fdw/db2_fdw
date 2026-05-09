@@ -47,8 +47,8 @@ set log_min_messages=debug5;
 \i ./test/sql/tc009.sql
 -- running tc010.sql
 \i ./test/sql/tc010.sql
--- running tc011.sql
---\i ./test/sql/tc011.sql
+--running tc011.sql
+\i ./test/sql/tc011.sql
 -- running tc012.sql
 \i ./test/sql/tc012.sql
 -- testcases ended

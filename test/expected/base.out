@@ -442,7 +442,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
                                                                  QUERY PLAN                                                                 
 --------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=3.864..4.106 rows=1.00 loops=1)
+ Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=3.630..3.900 rows=1.00 loops=1)
    Output: (min(salary)), (max(salary)), (avg(salary)), (sum(((salary + comm) + bonus))), (count(*))
    DB2 query: SELECT MIN("SALARY"), MAX("SALARY"), AVG("SALARY"), SUM((("SALARY" + "COMM") + "BONUS")), COUNT(*) FROM "DB2INST1"."EMPLOYEE"
    DB2 plan: 
@@ -511,8 +511,8 @@ explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary 
    DB2 plan: 
  Planning:
    Buffers: shared hit=20
- Planning Time: 3.501 ms
- Execution Time: 5.306 ms
+ Planning Time: 3.398 ms
+ Execution Time: 5.036 ms
 (71 rows)
 
 select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
@@ -525,7 +525,7 @@ select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) fr
 explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 8000 and lastname like 'L%';
                                                                                  QUERY PLAN                                                                                  
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=3.881..4.902 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=3.987..4.655 rows=3.00 loops=1)
    Output: empno, firstnme, lastname, ((salary + bonus) + comm)
    DB2 query: SELECT "EMPNO", "FIRSTNME", "LASTNAME", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" > 8000)) AND (("LASTNAME" LIKE 'L%' ESCAPE '\'))
    DB2 plan: 
@@ -593,8 +593,8 @@ explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm
    DB2 plan: 
  Planning:
    Buffers: shared hit=3
- Planning Time: 3.898 ms
- Execution Time: 6.151 ms
+ Planning Time: 4.045 ms
+ Execution Time: 5.857 ms
 (70 rows)
 
 select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 8000 and lastname like 'L%';
@@ -636,7 +636,7 @@ SELECT deptnumb, deptname, location FROM sample.org WHERE deptnumb = 10;
 
 -- UPDATE + verify
 UPDATE sample.org SET location = 'New York City' WHERE deptnumb = 10;
-psql:test/sql/tc006.sql:10: FEHLER:  pfree called with invalid pointer 0x425e530 (header 0x0000000000000002)
+psql:test/sql/tc006.sql:10: FEHLER:  pfree called with invalid pointer 0xc542eb0 (header 0x0000000000000002)
 SELECT deptnumb, deptname, location FROM sample.org WHERE deptnumb = 10;
  deptnumb |  deptname   | location 
 ----------+-------------+----------
@@ -645,7 +645,7 @@ SELECT deptnumb, deptname, location FROM sample.org WHERE deptnumb = 10;
 
 -- Revert + verify
 UPDATE sample.org SET location = 'New York' WHERE deptnumb = 10;
-psql:test/sql/tc006.sql:14: FEHLER:  pfree called with invalid pointer 0x425e530 (header 0x0000000000000002)
+psql:test/sql/tc006.sql:14: FEHLER:  pfree called with invalid pointer 0xc542eb0 (header 0x0000000000000002)
 SELECT deptnumb, deptname, location FROM sample.org WHERE deptnumb = 10;
  deptnumb |  deptname   | location 
 ----------+-------------+----------
@@ -660,7 +660,7 @@ SELECT * FROM sample.org WHERE deptnumb = 84;
 (1 row)
 
 DELETE FROM sample.org WHERE deptnumb = 84;
-psql:test/sql/tc006.sql:19: FEHLER:  pfree called with invalid pointer 0x425e530 (header 0x000000000425e4f8)
+psql:test/sql/tc006.sql:19: FEHLER:  pfree called with invalid pointer 0xc542eb0 (header 0x000000000c542e78)
 SELECT * FROM sample.org WHERE deptnumb = 84;
  deptnumb | deptname | manager | division | location 
 ----------+----------+---------+----------+----------
@@ -694,7 +694,7 @@ SELECT deptnumb, location FROM sample.org WHERE deptnumb = 15;
 BEGIN;
 BEGIN
   UPDATE sample.org SET location = 'Boston (temp)' WHERE deptnumb = 15;
-psql:test/sql/tc007.sql:8: FEHLER:  pfree called with invalid pointer 0x425e530 (header 0x0000000000000002)
+psql:test/sql/tc007.sql:8: FEHLER:  pfree called with invalid pointer 0xc542eb0 (header 0x0000000000000002)
   SELECT deptnumb, location FROM sample.org WHERE deptnumb = 15;
 psql:test/sql/tc007.sql:9: FEHLER:  aktuelle Transaktion wurde abgebrochen, Befehle werden bis zum Ende der Transaktion ignoriert
 ROLLBACK;
@@ -840,8 +840,117 @@ FROM sample.employee;
 --
 -- END of TC010
 --
--- running tc011.sql
---\i ./test/sql/tc011.sql
+--running tc011.sql
+\i ./test/sql/tc011.sql
+--
+-- TC011: ORDER BY with LIMIT/OFFSET
+--
+EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on sample.employee  (cost=100.06..101.19 rows=5 width=90) (actual time=4.394..5.143 rows=5.00 loops=1)
+   Output: empno, lastname, salary
+   DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" ORDER BY "SALARY" DESC NULLS FIRST, "EMPNO" ASC NULLS LAST OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 11.5, 5622-044 (c) Copyright IBM Corp. 1991, 2019
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 12.1, 5622-044 (c) Copyright IBM Corp. 1991, 2022
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: ******************** DYNAMIC ***************************************
+   DB2 plan: 
+   DB2 plan: ==================== STATEMENT ==========================================
+   DB2 plan: 
+   DB2 plan:     Isolation Level          = Cursor Stability
+   DB2 plan:     Blocking                 = Block Unambiguous Cursors
+   DB2 plan:     Query Optimization Class = 5
+   DB2 plan: 
+   DB2 plan:     Partition Parallel       = No
+   DB2 plan:     Intra-Partition Parallel = No
+   DB2 plan: 
+   DB2 plan:     SQL Path                 = "SYSIBM", "SYSFUN", "SYSPROC", "SYSIBMADM", 
+   DB2 plan:                                    "SYSHADOOP", "DB2INST1"
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: Statement:
+   DB2 plan:   
+   DB2 plan:   SELECT "EMPNO" , "LASTNAME" , "SALARY" 
+   DB2 plan:   FROM "DB2INST1" ."EMPLOYEE" 
+   DB2 plan:   ORDER BY "SALARY" DESC NULLS FIRST, "EMPNO" ASC NULLS LAST OFFSET 2 
+   DB2 plan:           ROWS 
+   DB2 plan:   FETCH NEXT 5 ROWS ONLY
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: compiledInTenantID = 0
+   DB2 plan: 
+   DB2 plan: Section Code Page = 1208
+   DB2 plan: 
+   DB2 plan: Estimated Cost = 6,816353
+   DB2 plan: Estimated Cardinality = 2,333333
+   DB2 plan: 
+   DB2 plan: Access Table Name = DB2INST1.EMPLOYEE  ID = 2,6
+   DB2 plan: |  tenantID = 0
+   DB2 plan: |  #Columns = 3
+   DB2 plan: |  Skip Inserted Rows
+   DB2 plan: |  Avoid Locking Committed Data
+   DB2 plan: |  Currently Committed for Cursor Stability
+   DB2 plan: |  May participate in Scan Sharing structures
+   DB2 plan: |  Scan may start anywhere and wrap, for completion
+   DB2 plan: |  Fast scan, for purposes of scan sharing management
+   DB2 plan: |  Scan can be throttled in scan sharing management
+   DB2 plan: |  Relation Scan
+   DB2 plan: |  |  Prefetch: Eligible
+   DB2 plan: |  Lock Intents
+   DB2 plan: |  |  Table: Intent Share
+   DB2 plan: |  |  Row  : Next Key Share
+   DB2 plan: |  Sargable Predicate(s)
+   DB2 plan: |  |  Insert Into Sorted Temp Table  ID = t1
+   DB2 plan: |  |  |  tenantID = 0
+   DB2 plan: |  |  |  #Columns = 3
+   DB2 plan: |  |  |  #Sort Key Columns = 2
+   DB2 plan: |  |  |  |  Key 1: SALARY (Descending)
+   DB2 plan: |  |  |  |  Key 2: EMPNO (Ascending)
+   DB2 plan: |  |  |  Sortheap Allocation Parameters:
+   DB2 plan: |  |  |  |  #Rows     = 7,000000
+   DB2 plan: |  |  |  |  Row Width = 28
+   DB2 plan: |  |  |  |  Sort Limited To Estimated Row Count
+   DB2 plan: |  |  |  Piped
+   DB2 plan: Sorted Temp Table Completion  ID = t1
+   DB2 plan: Access Temp Table  ID = t1
+   DB2 plan: |  tenantID = 0
+   DB2 plan: |  #Columns = 3
+   DB2 plan: |  Relation Scan
+   DB2 plan: |  |  Prefetch: Eligible
+   DB2 plan: Residual Predicate(s)
+   DB2 plan: |  #Predicates = 1
+   DB2 plan: Return Data to Application
+   DB2 plan: |  #Columns = 3
+   DB2 plan: 
+   DB2 plan: End of section
+   DB2 plan: 
+   DB2 plan: 
+ Planning:
+   Buffers: shared hit=12
+ Planning Time: 4.867 ms
+ Execution Time: 6.184 ms
+(88 rows)
+
+SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
+ empno  | lastname  |  salary  
+--------+-----------+----------
+ 000070 | PULASKI   | 96170.00
+ 000020 | THOMPSON  | 94250.00
+ 000090 | HENDERSON | 89750.00
+ 000100 | SPENSER   | 86150.00
+ 000050 | GEYER     | 80175.00
+(5 rows)
+
+--
+-- END of TC011
+--
 -- running tc012.sql
 \i ./test/sql/tc012.sql
 --
@@ -853,7 +962,7 @@ PREPARE
 EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=5.048..5.343 rows=1.00 loops=1)
+ Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=4.685..4.991 rows=1.00 loops=1)
    Output: actno, actkwd, actdesc
    DB2 query: SELECT "ACTNO", "ACTKWD", "ACTDESC" FROM "DB2INST1"."ACT" WHERE (("ACTNO" = 10))
    DB2 plan: 
@@ -926,8 +1035,8 @@ EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 1.417 ms
- Execution Time: 5.821 ms
+ Planning Time: 1.453 ms
+ Execution Time: 5.446 ms
 (75 rows)
 
 EXECUTE act_by_no(10);

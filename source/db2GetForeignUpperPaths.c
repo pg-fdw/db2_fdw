@@ -51,7 +51,9 @@ static void         merge_fdw_options         (DB2FdwState* fpinfo, const DB2Fdw
 void db2GetForeignUpperPaths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel, RelOptInfo *output_rel, void *extra) {
   db2Entry1();
   if (root != NULL && root->parse != NULL && input_rel->fdw_private != NULL && output_rel->fdw_private == NULL) {
-    Query*       query   = root->parse;
+    Query*       query  = root->parse;
+    DB2FdwState* fpinfo = NULL;
+
     db2Debug3("query->hasAggs        : %s", query->hasAggs         ? "true" : "false");
     db2Debug3("query->hasWindowFuncs : %s", query->hasWindowFuncs  ? "true" : "false");
     db2Debug3("query->hasDistinctOn  : %s", query->hasDistinctOn   ? "true" : "false");
@@ -65,74 +67,84 @@ void db2GetForeignUpperPaths(PlannerInfo *root, UpperRelationKind stage, RelOptI
     db2Debug3("query->hasSubLinks    : %s", query->hasSubLinks     ? "true" : "false");
     db2Debug3("query->hasRowSecurity : %s", query->hasRowSecurity  ? "true" : "false");
 
-//  if (db2_is_shippable(root, stage, input_rel, output_rel)) {
-      db2CloneFdwStateUpper(root, input_rel, output_rel);
+    db2CloneFdwStateUpper(root, input_rel, output_rel);
 
-      switch (stage) {
-        case UPPERREL_SETOP:              // UNION/INTERSECT/EXCEPT
-          db2Debug2("stage: %d - UPPERREL_SETOP", stage);
-        break;
-        case UPPERREL_PARTIAL_GROUP_AGG:  // partial grouping/aggregation
-          db2Debug2("stage: %d - UPPERREL_PARTIAL_GROUP_AGG", stage);
-          db2Debug2("query->hasAggs: %d", query->hasAggs);
-          db2Debug2("query->groupClause: %x", query->groupClause);
-          if (query->hasAggs || query->groupClause != NIL) {
-            add_foreign_grouping_paths(root, input_rel, output_rel, (GroupPathExtraData*) extra);
-          }
-        break;
-        case UPPERREL_GROUP_AGG: {        // grouping/aggregation
-          db2Debug2("stage: %d - UPPERREL_GROUP_AGG", stage);
-          db2Debug2("query->hasAggs: %d", query->hasAggs);
-          db2Debug2("query->groupClause: %x", query->groupClause);
-          if (query->hasAggs || query->groupClause != NIL) {
-            add_foreign_grouping_paths(root, input_rel, output_rel, (GroupPathExtraData*) extra);
-          }
+    /*
+     * Ensure upperrel FDW state is fully initialized.
+     * - stage is relied upon by later upper-path stages (e.g. FINAL handling of ORDERED input).
+     * - outerrel must point at the immediate underlying relation for upperrels.
+     */
+    fpinfo = (DB2FdwState*) output_rel->fdw_private;
+    if (fpinfo != NULL) {
+      fpinfo->stage    = stage;
+      fpinfo->outerrel = input_rel;
+    }    
+    switch (stage) {
+      case UPPERREL_SETOP:              // UNION/INTERSECT/EXCEPT
+        db2Debug2("stage: %d - UPPERREL_SETOP", stage);
+      break;
+      case UPPERREL_PARTIAL_GROUP_AGG:  // partial grouping/aggregation
+        db2Debug2("stage: %d - UPPERREL_PARTIAL_GROUP_AGG", stage);
+        db2Debug2("query->hasAggs: %d", query->hasAggs);
+        db2Debug2("query->groupClause: %x", query->groupClause);
+        if (query->hasAggs || query->groupClause != NIL) {
+          add_foreign_grouping_paths(root, input_rel, output_rel, (GroupPathExtraData*) extra);
         }
-        break;
-        case UPPERREL_WINDOW: {           // window functions
-          db2Debug2("stage: %d - UPPERREL_WINDOW", stage);
-          db2Debug2("query->hasWindowFuncs: %d", query->hasWindowFuncs);
-          if (query->hasWindowFuncs) {
-            db2Debug2("window function push down not yet implemented");
-          }
+      break;
+      case UPPERREL_GROUP_AGG: {        // grouping/aggregation
+        db2Debug2("stage: %d - UPPERREL_GROUP_AGG", stage);
+        db2Debug2("query->hasAggs: %d", query->hasAggs);
+        db2Debug2("query->groupClause: %x", query->groupClause);
+        if (query->hasAggs || query->groupClause != NIL) {
+          add_foreign_grouping_paths(root, input_rel, output_rel, (GroupPathExtraData*) extra);
         }
-        break;
-        #if PG_VERSION_NUM >= 150000
-        case UPPERREL_PARTIAL_DISTINCT: { // partial "SELECT DISTINCT"
-          db2Debug2("stage: %d - UPPERREL_PARTIAL_DISTINCT", stage);
-          db2Debug2("query->hasDistinctOn: %d", query->hasDistinctOn);
-          if (query->hasDistinctOn) {
-            db2Debug2("distinct function push down not yet implemented");
-          }
-        }
-        break;
-        #endif
-        case UPPERREL_DISTINCT: {         // "SELECT DISTINCT"
-          db2Debug2("stage: %d - UPPERREL_DISTINCT", stage);
-          db2Debug2("query->hasDistinctOn: %d", query->hasDistinctOn);
-          if (query->hasDistinctOn) {
-            db2Debug2("distinct function push down not yet implemented");
-          }
-        }
-        break;
-        case UPPERREL_ORDERED:            // ORDER BY
-          db2Debug2("stage: %d - UPPERREL_ORDERED", stage);
-          db2Debug2("query->setOperations: %x", query->setOperations);
-          if (query->setOperations != NULL) {
-            add_foreign_ordered_paths(root, input_rel, output_rel);
-          }
-        break;
-        case UPPERREL_FINAL:              // any remaining top-level actions
-          db2Debug2("stage: %d - UPPERREL_FINAL", stage);
-          add_foreign_final_paths(root, input_rel, output_rel, (FinalPathExtraData*) extra);
-        break;
-        default:                          // unknown stage type
-          db2Debug2("stage: %d - unknown", stage);
-        break;
       }
-//    } else {
-//      db2Debug2("stage and or functions are not shippable to DB2");
-//    }
+      break;
+      case UPPERREL_WINDOW: {           // window functions
+        db2Debug2("stage: %d - UPPERREL_WINDOW", stage);
+        db2Debug2("query->hasWindowFuncs: %d", query->hasWindowFuncs);
+        if (query->hasWindowFuncs) {
+          db2Debug2("window function push down not yet implemented");
+        }
+      }
+      break;
+      #if PG_VERSION_NUM >= 150000
+      case UPPERREL_PARTIAL_DISTINCT: { // partial "SELECT DISTINCT"
+        db2Debug2("stage: %d - UPPERREL_PARTIAL_DISTINCT", stage);
+        db2Debug2("query->hasDistinctOn: %d", query->hasDistinctOn);
+        if (query->hasDistinctOn) {
+          db2Debug2("distinct function push down not yet implemented");
+        }
+      }
+      break;
+      #endif
+      case UPPERREL_DISTINCT: {         // "SELECT DISTINCT"
+        db2Debug2("stage: %d - UPPERREL_DISTINCT", stage);
+        db2Debug2("query->hasDistinctOn: %d", query->hasDistinctOn);
+        if (query->hasDistinctOn) {
+          db2Debug2("distinct function push down not yet implemented");
+        }
+      }
+      break;
+      case UPPERREL_ORDERED:            // ORDER BY
+        db2Debug2("stage: %d - UPPERREL_ORDERED", stage);
+        db2Debug2("query->setOperations: %x", query->setOperations);
+        /*
+         * ORDER BY handling: attempt pushdown when this query has a sort clause.
+         * (The ordered upperrel is part of the normal path even when there are no set operations.)
+         */
+        if (query->sortClause != NIL) {
+          add_foreign_ordered_paths(root, input_rel, output_rel);
+        }
+      break;
+      case UPPERREL_FINAL:              // any remaining top-level actions
+        db2Debug2("stage: %d - UPPERREL_FINAL", stage);
+        add_foreign_final_paths(root, input_rel, output_rel, (FinalPathExtraData*) extra);
+      break;
+      default:                          // unknown stage type
+        db2Debug2("stage: %d - unknown", stage);
+      break;
+    }
   } else {
     db2Debug2("skipping this call");
     db2Debug2("root: %x", root);
@@ -157,42 +169,41 @@ static void db2CloneFdwStateUpper(PlannerInfo* root, RelOptInfo* input_rel, RelO
   if (fdw_in != NULL) {
     copy = (DB2FdwState*) db2alloc(sizeof(DB2FdwState), "copy");
 
-    /* Connection/session fields */
-    copy->dbserver     = fdw_in->dbserver   ? db2strdup(fdw_in->dbserver, "copy->dbserver")   : NULL;
-    copy->user         = fdw_in->user       ? db2strdup(fdw_in->user,     "copy->user")       : NULL;
-    copy->password     = fdw_in->password   ? db2strdup(fdw_in->password, "copy->password")   : NULL;
-    copy->jwt_token    = fdw_in->jwt_token  ? db2strdup(fdw_in->jwt_token,"copy->jwt_token ") : NULL;
-    copy->nls_lang     = fdw_in->nls_lang   ? db2strdup(fdw_in->nls_lang, "copy->nls_lang")   : NULL;
-    /* Planner-time session handle can be shared (it is not serialized). */
-    copy->session      = fdw_in->session;
+    /* Start from a full struct copy so we don't leave fields uninitialized. */
+    *copy = *fdw_in;
 
-    /* Planning/execution fields */
-    copy->query        = fdw_in->query ? db2strdup(fdw_in->query,copy->query) : NULL;
-    copy->prefetch     = fdw_in->prefetch;
-    copy->startup_cost = fdw_in->startup_cost;
-    copy->total_cost   = fdw_in->total_cost;
-    copy->rowcount     = 0;
-    copy->temp_cxt     = NULL;
-
-    copy->order_clause = fdw_in->order_clause ? db2strdup(fdw_in->order_clause,"copy->order_clause") : NULL;
-    copy->where_clause = fdw_in->where_clause ? db2strdup(fdw_in->where_clause,"copy->where_clause") : NULL;
+    /* Deep-copy mutable/owned pointer fields */
+    copy->dbserver      = fdw_in->dbserver      ? db2strdup(fdw_in->dbserver,      "copy->dbserver")      : NULL;
+    copy->user          = fdw_in->user          ? db2strdup(fdw_in->user,          "copy->user")          : NULL;
+    copy->password      = fdw_in->password      ? db2strdup(fdw_in->password,      "copy->password")      : NULL;
+    copy->jwt_token     = fdw_in->jwt_token     ? db2strdup(fdw_in->jwt_token,     "copy->jwt_token")     : NULL;
+    copy->nls_lang      = fdw_in->nls_lang      ? db2strdup(fdw_in->nls_lang,      "copy->nls_lang")      : NULL;
+    copy->query         = fdw_in->query         ? db2strdup(fdw_in->query,         "copy->query")         : NULL;
+    copy->order_clause  = fdw_in->order_clause  ? db2strdup(fdw_in->order_clause,  "copy->order_clause")  : NULL;
+    copy->where_clause  = fdw_in->where_clause  ? db2strdup(fdw_in->where_clause,  "copy->where_clause")  : NULL;
+    copy->relation_name = fdw_in->relation_name ? db2strdup(fdw_in->relation_name, "copy->relation_name") : NULL;
 
     /* Shallow-copy expression lists (Expr nodes are immutable at this stage), but ensure list cells are independent because createQuery mutates the list. */
-    copy->params       = fdw_in->params       ? list_copy(fdw_in->params)       : NIL;
-    copy->remote_conds = fdw_in->remote_conds ? list_copy(fdw_in->remote_conds) : NIL;
-    copy->local_conds  = fdw_in->local_conds  ? list_copy(fdw_in->local_conds)  : NIL;
+    copy->params              = fdw_in->params              ? list_copy(fdw_in->params)              : NIL;
+    copy->retrieved_attr      = fdw_in->retrieved_attr      ? list_copy(fdw_in->retrieved_attr)      : NIL;
+    copy->remote_conds        = fdw_in->remote_conds        ? list_copy(fdw_in->remote_conds)        : NIL;
+    copy->local_conds         = fdw_in->local_conds         ? list_copy(fdw_in->local_conds)         : NIL;
+    copy->final_remote_exprs  = fdw_in->final_remote_exprs  ? list_copy(fdw_in->final_remote_exprs)  : NIL;
+    copy->shippable_extensions= fdw_in->shippable_extensions? list_copy(fdw_in->shippable_extensions): NIL;
+    copy->joinclauses         = fdw_in->joinclauses         ? list_copy(fdw_in->joinclauses)         : NIL;
+    copy->grouped_tlist       = fdw_in->grouped_tlist       ? list_copy(fdw_in->grouped_tlist)       : NIL;
 
-    /* Deep-copy DB2 table/columns because DB2Column used is re-derived for each planned query shape. */
-    copy->db2Table     = db2CloneDb2TableForPlan(fdw_in->db2Table);
+    copy->attrs_used          = fdw_in->attrs_used          ? bms_copy(fdw_in->attrs_used)           : NULL;
+    copy->lower_subquery_rels = fdw_in->lower_subquery_rels ? bms_copy(fdw_in->lower_subquery_rels)  : NULL;
+    copy->hidden_subquery_rels= fdw_in->hidden_subquery_rels? bms_copy(fdw_in->hidden_subquery_rels) : NULL;
 
-    /* Join info: keep as-is (typically NULL for baserels). */
-    copy->outerrel     = fdw_in->outerrel;
-    copy->innerrel     = fdw_in->innerrel;
-    copy->jointype     = fdw_in->jointype;
-    copy->joinclauses  = fdw_in->joinclauses ? list_copy(fdw_in->joinclauses) : NIL;
+    /* Deep-copy DB2 table/columns because DB2Column.used is re-derived for each planned query shape. */
+    copy->db2Table            = db2CloneDb2TableForPlan(fdw_in->db2Table);
 
-    /* paramList is constructed at execution time from fdw_exprs. */
-    copy->paramList    = NULL;
+    /* Runtime-only / per-plan rebuilt fields */
+    copy->rowcount            = 0;
+    copy->temp_cxt            = NULL;
+    copy->paramList           = NULL;
   }
   output_rel->fdw_private = copy;
   db2Exit4();
