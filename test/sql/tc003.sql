@@ -4,6 +4,7 @@
 \d+ sample.employee;
 \d+ sample.sales;
 -- test a simple join
+explain (analyze,verbose) select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
 select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
 --
 -- End of TC003

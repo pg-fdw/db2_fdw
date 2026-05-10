@@ -1,29 +1,10 @@
 \set ECHO all
-CREATE DATABASE regtest;
-GRANT ALL PRIVILEGES ON DATABASE regtest to postgres;
-\c regtest
--- Install extension
-CREATE EXTENSION IF NOT EXISTS db2_fdw;
--- Install FDW Server
-CREATE SERVER IF NOT EXISTS sample FOREIGN DATA WRAPPER db2_fdw OPTIONS (dbserver 'SAMPLE');
--- Map a user
-CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user 'db2inst1', password 'db2inst1');
--- CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user '', password '');
--- Prepare a local schema
-CREATE SCHEMA IF NOT EXISTS sample;
--- Import the complete sample db into the local schema
-IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO sample;
+\pset null '[NULL]'
 
--- For UPDATE/DELETE, db2_fdw requires at least one primary key column marked
--- with the column option "key".
--- The DB2 SAMPLE.ORG table uses DEPTNUMB as its primary key.
-ALTER FOREIGN TABLE sample.org
-  ALTER COLUMN deptnumb OPTIONS (ADD key 'true');
+\i ./test/sql/tccdb.sql
+\i ./test/sql/tcfdw.sql
+\i ./test/sql/tcstart.sql
 
--- list imported tables
-\detr+ sample.*
---
-select db2_diag();
 set log_min_messages=debug5;
 
 -- starting testcases
@@ -51,8 +32,9 @@ set log_min_messages=debug5;
 \i ./test/sql/tc011.sql
 -- running tc012.sql
 \i ./test/sql/tc012.sql
+-- running tc013.sql
+\i ./test/sql/tc013.sql
 -- testcases ended
 -- starting cleanup
-\c postgres
-DROP DATABASE regtest;
+\i ./test/sql/tcend.sql
 -- test finished
