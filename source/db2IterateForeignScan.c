@@ -12,7 +12,7 @@
 extern int          db2IsStatementOpen        (DB2Session* session);
 extern void         db2PrepareQuery           (DB2Session* session, const char *query, DB2ResultColumn* resultList, unsigned long prefetch, int fetchsize);
 extern int          db2ExecuteQuery           (DB2Session* session, ParamDesc* paramList);
-extern int          db2FetchNext              (DB2Session* session);
+extern int          db2FetchNext              (DB2Session* session, DB2ResultColumn* resultList);
 extern void         db2CloseStatement         (DB2Session* session);
 extern void         convertTuple              (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls);
 extern char*        deparseDate               (Datum datum);
@@ -38,7 +38,7 @@ TupleTableSlot* db2IterateForeignScan (ForeignScanState* node) {
   if (db2IsStatementOpen (fdw_state->session)) {
     db2Debug2("get next row in foreign table scan");
     /* fetch the next result row */
-    have_result = db2FetchNext (fdw_state->session);
+    have_result = db2FetchNext (fdw_state->session, fdw_state->resultList);
   } else {
     /* fill the parameter list with the actual values */
     char* paramInfo = setSelectParameters (fdw_state->paramList, econtext);
@@ -46,7 +46,7 @@ TupleTableSlot* db2IterateForeignScan (ForeignScanState* node) {
     db2Debug2("execute query in foreign table scan '%s'", paramInfo);
     db2PrepareQuery (fdw_state->session, fdw_state->query, fdw_state->resultList, fdw_state->prefetch, fdw_state->fetch_size);
     have_result = db2ExecuteQuery (fdw_state->session, fdw_state->paramList);
-    have_result = db2FetchNext (fdw_state->session);
+    have_result = db2FetchNext (fdw_state->session, fdw_state->resultList);
   }
   /* initialize virtual tuple */
   ExecClearTuple (slot);

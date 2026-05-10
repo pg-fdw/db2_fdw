@@ -3,6 +3,8 @@
 #include <catalog/pg_namespace.h>
 #include <catalog/pg_proc.h>
 #include <catalog/pg_type.h>
+#include <nodes/makefuncs.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/planmain.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
@@ -32,7 +34,6 @@ extern List*  serializePlanData       (DB2FdwState* fdw_state);
        ForeignScan* db2GetForeignPlan       (PlannerInfo* root, RelOptInfo* foreignrel, Oid foreigntableid, ForeignPath* best_path, List* tlist, List* scan_clauses , Plan* outer_plan);
 static void         getUsedColumns          (Expr* expr, RelOptInfo* foreignrel, DB2ResultColumn* resCol);
 static void         copyCol2Result          (DB2ResultColumn*  resCol, DB2Column* db2Column);
-static int          compareResultColumns    (const void* a, const void* b);
 
 /* postgresGetForeignPlan
  * Create ForeignScan plan node which implements selected best path
@@ -80,71 +81,122 @@ ForeignScan* db2GetForeignPlan(PlannerInfo* root, RelOptInfo* foreignrel, Oid fo
   ptlist_len = list_length(ptlist);
 
   if (IS_SIMPLE_REL(foreignrel)) {
-    DB2ResultColumn** cols      = NULL;
+//    DB2ResultColumn** cols      = NULL;
     ListCell*         cell      = NULL;
-    int               iResCol   = 0;
+//    int               iResCol   = 0;
 
     db2Debug3("base relation scan: set scan_relid to %d", foreignrel->relid);
     /* For base relations, set scan_relid as the relid of the relation. */
     scan_relid = foreignrel->relid;
 
-    if (ptlist_len >0) {
-      DB2ResultColumn* resCol = NULL;
-      /* find all the columns to include in the select list */
-      /* examine each SELECT list entry for Var nodes */
-      db2Debug3("size of tlist: %d", ptlist_len);
-      foreach (cell, ptlist) {
-        resCol             = (DB2ResultColumn*)db2alloc(sizeof(DB2ResultColumn), "resCol");
-        getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
-        db2Debug3("resCol->colName: %s", resCol->colName);
-        db2Debug3("resCol->pgattnum: %d", resCol->pgattnum);
-        if (resCol->colName != NULL && resCol->pgattnum <= fpinfo->db2Table->npgcols) {
-          resCol->next       = fpinfo->resultList;
-          db2Debug3("resCol->next: %x", resCol->next);
-          fpinfo->resultList = resCol;
-          db2Debug3("fpinfo->resultList: %x", fpinfo->resultList);
-        } else {
-          db2Debug3("about to free resCol: %x, colName: %s, pgattnum: %d", resCol, resCol->colName, resCol->pgattnum);
-          db2free(resCol,"resCol");
-        }
+    /*
+     * If we have any locally-evaluated quals, they might reference Vars that are
+     * *not* part of the query's output targetlist. Those Vars must still be
+     * available in the ForeignScan's tuple slot, otherwise setrefs.c can error
+     * out with "variable not found in subplan target list".
+     *
+     * IMPORTANT:
+     * We must include Vars referenced by quals that can be evaluated locally.
+     * That includes:
+     *  - fpinfo->local_conds (not shippable), and
+     *  - fpinfo->remote_conds, because they are stored in fdw_recheck_quals and
+     *    can be evaluated locally during EPQ recheck.
+     *
+     * The remote SELECT list must also include these Vars; deparseSelectSql()
+     * is responsible for honoring the fdw_scan_tlist (ptlist) for base rels.
+     */
+    {
+      List*     qual_vars = NIL;
+      ListCell* c = NULL;
+
+      foreach (c, fpinfo->local_conds) {
+        RestrictInfo* rinfo = lfirst_node(RestrictInfo, c);
+        qual_vars = list_concat(qual_vars, pull_var_clause((Node*) rinfo->clause, PVC_RECURSE_PLACEHOLDERS));
       }
-      for (resCol = fpinfo->resultList; resCol; resCol = resCol->next) {
-        iResCol++;
+
+      foreach (c, fpinfo->remote_conds) {
+        RestrictInfo* rinfo = lfirst_node(RestrictInfo, c);
+        qual_vars = list_concat(qual_vars, pull_var_clause((Node*) rinfo->clause, PVC_RECURSE_PLACEHOLDERS));
       }
-      cols    = (DB2ResultColumn**)db2alloc(iResCol+1 * sizeof(DB2ResultColumn*),"cols(%d)",iResCol+1);
-      iResCol = 0;
-      for (resCol = fpinfo->resultList; resCol; resCol = resCol->next) {
-        db2Debug2("resCol: %x", resCol);
-        cols[iResCol] = resCol;
-        db2Debug2("cols[%d]         : %x", iResCol, cols[iResCol]);
-        db2Debug2("cols[%d]->colName: %s", iResCol, cols[iResCol]->colName);
-        db2Debug2("cols[%d]->resnum : %d", iResCol, cols[iResCol]->resnum);
-        iResCol++;
-        db2Debug2("resCol->next: %x", resCol->next);
-      }
-      // sort the array in ascending order of the pgattnum, so that we can compare it with the order of columns in the foreign table
-      db2Debug3("sorting result cols %d columns by pgattnum", iResCol);
-      qsort(cols, iResCol, sizeof(DB2ResultColumn*), compareResultColumns);
-      // generate the sorted array into the resultList
-      fpinfo->resultList = NULL;
-      for (int idx = 0, cidx = 0; idx < iResCol; idx++) {
-        db2Debug3("result column %d: %s", idx, cols[idx]->colName);
-        if (idx > 0) {
-          // check if this column is the same as the one before and if so, skip it
-          if (cols[idx]->pgattnum == cols[idx-1]->pgattnum) {
+
+      if (qual_vars != NIL) {
+        ListCell* v = NULL;
+
+        ptlist = add_to_flat_tlist(ptlist, qual_vars);
+        ptlist_len = list_length(ptlist);
+
+        foreach (v, qual_vars) {
+          Var* var = lfirst_node(Var, v);
+
+          /* Ignore system columns and whole-row refs. */
+          if (var->varattno <= 0)
             continue;
+
+          if (tlist_member((Expr*) var, tlist) == NULL) {
+            char*       attname = get_attname(foreigntableid, var->varattno, false);
+            TargetEntry* tle = makeTargetEntry((Expr*) copyObject(var), list_length(tlist) + 1, attname, true);
+
+            /* makeTargetEntry(..., resjunk=true) already sets resjunk */
+            tlist = lappend(tlist, tle);
           }
         }
-        cols[idx]->next    = fpinfo->resultList;
-        cols[idx]->resnum  = ++cidx;  // result number must be 1 - based
-        db2Debug3("column %s added to result list with resnum %d", cols[idx]->colName, cols[idx]->resnum);
-        fpinfo->resultList = cols[idx];
       }
+    }
+
+    if (ptlist_len > 0) {
+      DB2ResultColumn* resCol = NULL;
+      DB2ResultColumn* tail   = NULL;
+      int              resnum = 0;
+
+      /*
+       * Build fpinfo->resultList in the same order as ptlist (which is also the
+       * order used to deparse the remote SELECT-list). Do NOT sort by pgattnum:
+       * that can reorder resjunk columns and desynchronize resnum vs DB2 cursor
+       * column positions, leading to mis-fetched values (e.g. WORKDEPT receiving
+       * SALARY bytes).
+       */
+      fpinfo->resultList = NULL;
+      db2Debug3("size of tlist: %d", ptlist_len);
+      foreach (cell, ptlist) {
+        DB2ResultColumn* scan = NULL;
+        bool             dup  = false;
+
+        resCol = (DB2ResultColumn*) db2alloc(sizeof(DB2ResultColumn), "resCol");
+        getUsedColumns((Expr*) lfirst(cell), foreignrel, resCol);
+
+        if (resCol->colName == NULL || resCol->pgattnum > fpinfo->db2Table->npgcols) {
+          db2free(resCol, "resCol");
+          continue;
+        }
+
+        /* De-duplicate by pgattnum (same base relation). */
+        for (scan = fpinfo->resultList; scan; scan = scan->next) {
+          if (scan->pgattnum == resCol->pgattnum) {
+            dup = true;
+            break;
+          }
+        }
+        if (dup) {
+          db2free(resCol, "resCol");
+          continue;
+        }
+
+        resCol->resnum = ++resnum;
+        resCol->next = NULL;
+        if (fpinfo->resultList == NULL) {
+          fpinfo->resultList = resCol;
+          tail = resCol;
+        } else {
+          tail->next = resCol;
+          tail = resCol;
+        }
+      }
+
       /* examine each condition for Var nodes */
       db2Debug3("size of conditions: %d", list_length(foreignrel->baserestrictinfo));
       foreach (cell, foreignrel->baserestrictinfo) {
         db2Debug3("examine condition");
-        getUsedColumns ((Expr*) lfirst (cell), foreignrel, NULL);
+        getUsedColumns((Expr*) lfirst(cell), foreignrel, NULL);
       }
     }
     /* In a base-relation scan, we must apply the given scan_clauses.
@@ -214,6 +266,25 @@ ForeignScan* db2GetForeignPlan(PlannerInfo* root, RelOptInfo* foreignrel, Oid fo
         getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         db2Debug3("result column %d: %s", resCol->resnum, resCol->colName);
         resnum++;
+      }
+
+      /*
+       * The loop above prepends each entry, so fpinfo->resultList is built in
+       * reverse order.  For joinrels/upperrels we rely on the SELECT-list order
+       * to match result bindings (resnum / DB2 column positions).
+       */
+      {
+        DB2ResultColumn* prev = NULL;
+        DB2ResultColumn* cur  = fpinfo->resultList;
+
+        while (cur) {
+          DB2ResultColumn* next = cur->next;
+          cur->next = prev;
+          prev = cur;
+          cur = next;
+        }
+
+        fpinfo->resultList = prev;
       }
     }
 
@@ -301,9 +372,27 @@ static void getUsedColumns (Expr* expr, RelOptInfo* foreignrel, DB2ResultColumn*
         DB2FdwState*  fpinfo  = (DB2FdwState*) foreignrel->fdw_private;
         Var*          var     = NULL;
         int           index   = 0;
+        int           relid   = 0;
 
         var = (Var*) expr;
         db2Debug4("var->varattno: %d", var->varattno); 
+
+        /*
+         * For joinrels, Vars can refer to join inputs via OUTER_VAR/INNER_VAR.
+         * Attribute numbers can overlap between the two inputs, so matching only
+         * on varattno can bind the wrong column (and later mis-convert values).
+         *
+         * Resolve OUTER_VAR/INNER_VAR to the underlying child's relid so we can
+         * match on (pgrelid, pgattnum).
+         */
+        relid = var->varno;
+        if (!IS_SIMPLE_REL(foreignrel) && fpinfo) {
+          if (relid == OUTER_VAR && fpinfo->outerrel)
+            relid = fpinfo->outerrel->relid;
+          else if (relid == INNER_VAR && fpinfo->innerrel)
+            relid = fpinfo->innerrel->relid;
+        }
+
         /* ignore system columns */
         if (var->varattno < 0)
           break;
@@ -333,7 +422,8 @@ static void getUsedColumns (Expr* expr, RelOptInfo* foreignrel, DB2ResultColumn*
         } else {
           /* get db2Table column index corresponding to this column (-1 if none) */
           index = fpinfo->db2Table->ncols - 1;
-          while (index >= 0 && fpinfo->db2Table->cols[index]->pgattnum != var->varattno) {
+          while (index >= 0 && (fpinfo->db2Table->cols[index]->pgattnum != var->varattno ||
+                                (relid != 0 && fpinfo->db2Table->cols[index]->pgrelid != relid))) {
             --index;
           }
           if (index == -1) {
@@ -577,18 +667,4 @@ static void copyCol2Result(DB2ResultColumn* resCol, DB2Column* column) {
     resCol->noencerr       = column->noencerr;
   }
   db2Exit4();
-}
-
-/* compareResultColumns
- * Compare two DB2ResultColumn pointers by their pgattnum.
- */
-static int compareResultColumns(const void* a, const void* b) {
-  DB2ResultColumn* colA = *(DB2ResultColumn**) a;
-  DB2ResultColumn* colB = *(DB2ResultColumn**) b;
-  int result = 0;
-  db2Entry4();
-  result = (colA->pgattnum - colB->pgattnum);
-  db2Debug5("comparing %s -> pgattnum %d and %s -> pgattnum %d, result = %d", colA->colName, colA->pgattnum, colB->colName, colB->pgattnum, result);
-  db2Exit4(": %d", result);
-  return result;
 }

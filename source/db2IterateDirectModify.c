@@ -8,7 +8,7 @@
 extern int          db2IsStatementOpen        (DB2Session* session);
 extern void         db2PrepareQuery           (DB2Session* session, const char *query, DB2ResultColumn* resultList, unsigned long prefetch, int fetchsize);
 extern int          db2ExecuteQuery           (DB2Session* session, ParamDesc* paramList);
-extern int          db2FetchNext              (DB2Session* session);
+extern int          db2FetchNext              (DB2Session* session, DB2ResultColumn* resultList);
 extern void         db2CloseStatement         (DB2Session* session);
 
 /** local prototypes */

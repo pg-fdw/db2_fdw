@@ -43,23 +43,54 @@ SQLRETURN db2CheckErr (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleTyp
       SQLCHAR     submessage [SUBMESSAGE_LEN];
       SQLCHAR     sqlstate   [SQLSTATE_LEN];
       SQLINTEGER  sqlcode;
+      SQLINTEGER  diag_column_number = 0;
+      SQLLEN      diag_row_number = 0;
+      char        diag_info   [128];
       SQLSMALLINT msgLen;
       int         i = 1;
 
       memset(submessage,0x00,SUBMESSAGE_LEN);
       memset(message   ,0x00,SQL_MAX_MESSAGE_LENGTH);
+      memset(diag_info,0x00,sizeof(diag_info));
  
       while (SQL_SUCCEEDED(SQLGetDiagRec(handleType,handle,i,sqlstate,&sqlcode,message,SQL_MAX_MESSAGE_LENGTH,&msgLen))) {
         db2Debug5("SQLCODE :  %d ",sqlcode);
-        db2Debug5("SQLSTATE:  %d ",sqlstate);
+        db2Debug5("SQLSTATE:  %s ",sqlstate);
         db2Debug5("MESSAGE : '%s'",message);
+        if (i == 1) {
+          SQLRETURN diag_rc;
+          diag_rc = SQLGetDiagField(handleType, handle, i, SQL_DIAG_COLUMN_NUMBER,
+                                   &diag_column_number, (SQLSMALLINT) sizeof(diag_column_number), NULL);
+          if (SQL_SUCCEEDED(diag_rc)) {
+            db2Debug5("DIAG_COLUMN_NUMBER: %d", diag_column_number);
+          }
+          diag_rc = SQLGetDiagField(handleType, handle, i, SQL_DIAG_ROW_NUMBER,
+                                   &diag_row_number, (SQLSMALLINT) sizeof(diag_row_number), NULL);
+          if (SQL_SUCCEEDED(diag_rc)) {
+            db2Debug5("DIAG_ROW_NUMBER   : %ld", (long) diag_row_number);
+          }
+          if (diag_column_number != 0 || diag_row_number != 0) {
+            snprintf(diag_info, sizeof(diag_info),
+                     "DIAG_COLUMN_NUMBER=%d\nDIAG_ROW_NUMBER=%ld\n",
+                     diag_column_number, (long) diag_row_number);
+          }
+        }
         snprintf((char*)submessage, SUBMESSAGE_LEN, "SQLSTATE = %s  SQLCODE = %d\nline=%d\nfile=%s\n", sqlstate,sqlcode,line,file);
+        if (diag_info[0] != '\0') {
+          if ((sizeof(submessage) - strlen((char*)submessage)) > strlen(diag_info) + 1) {
+            size_t avail = sizeof(submessage) - strlen((char*)submessage) - 1;
+            strncat((char*)submessage, diag_info, avail);
+          }
+        }
         if ((sizeof(db2Message) - strlen((char*)db2Message)) > strlen((char*)submessage) + 1) {
-          strncat ((char*)db2Message,(char*)submessage, SUBMESSAGE_LEN);
+          size_t avail = sizeof(db2Message) - strlen((char*)db2Message) - 1;
+          strncat((char*)db2Message, (char*)submessage, avail);
         }
         if ((sizeof(db2Message) - strlen((char*)db2Message)) > strlen((char*)message) + 2) {
-          strncat ((char*)db2Message,(char*)message,SQL_MAX_MESSAGE_LENGTH);
-          strncat ((char*)db2Message,"\n",strlen("\n"));
+          size_t avail = sizeof(db2Message) - strlen((char*)db2Message) - 1;
+          strncat((char*)db2Message, (char*)message, avail);
+          avail = sizeof(db2Message) - strlen((char*)db2Message) - 1;
+          strncat((char*)db2Message, "\n", avail);
         }
         if (i == 1) {
           err_code = ((sqlcode == -911 || sqlcode == -913) && strcmp((char*)sqlstate,"40001") == 0) ? 8177 : abs(sqlcode);

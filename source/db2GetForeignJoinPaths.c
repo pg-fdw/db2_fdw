@@ -12,6 +12,22 @@ extern char*        deparseExpr               (PlannerInfo* root, RelOptInfo* fo
 /** local prototypes */
 void db2GetForeignJoinPaths(PlannerInfo* root, RelOptInfo* joinrel, RelOptInfo* outerrel, RelOptInfo* innerrel, JoinType jointype, JoinPathExtraData* extra);
 static bool foreign_join_ok       (PlannerInfo* root, RelOptInfo* joinrel, JoinType jointype, RelOptInfo* outerrel, RelOptInfo* innerrel, JoinPathExtraData* extra);
+static DB2Column* db2FindColumnByRelidAttnum(DB2Table* db2Table, int pgrelid, int pgattnum);
+
+/* db2FindColumnByRelidAttnum
+ * Find the DB2Column descriptor for a base foreign relation column.
+ */
+static DB2Column* db2FindColumnByRelidAttnum(DB2Table* db2Table, int pgrelid, int pgattnum) {
+  int i;
+  if (!db2Table || !db2Table->cols)
+    return NULL;
+  for (i = 0; i < db2Table->ncols; ++i) {
+    DB2Column* tmp = db2Table->cols[i];
+    if (tmp && tmp->pgrelid == pgrelid && tmp->pgattnum == pgattnum)
+      return tmp;
+  }
+  return NULL;
+}
 
 /* db2GetForeignJoinPaths
  * Add possible ForeignPath to joinrel if the join is safe to push down.
@@ -19,6 +35,8 @@ static bool foreign_join_ok       (PlannerInfo* root, RelOptInfo* joinrel, JoinT
  */
 void db2GetForeignJoinPaths (PlannerInfo * root, RelOptInfo * joinrel, RelOptInfo * outerrel, RelOptInfo * innerrel, JoinType jointype, JoinPathExtraData * extra) {
   DB2FdwState* fdwState                = NULL;
+  DB2FdwState* fdwState_o              = NULL;
+  DB2FdwState* fdwState_i              = NULL;
   ForeignPath* joinpath                = NULL;
   double       joinclauses_selectivity = 0;
   double       rows                    = 0;      /* estimated number of returned rows */
@@ -54,6 +72,9 @@ void db2GetForeignJoinPaths (PlannerInfo * root, RelOptInfo * joinrel, RelOptInf
 
         /* this performs further checks and completes joinrel->fdw_private */
         if (foreign_join_ok (root, joinrel, jointype, outerrel, innerrel, extra)) {
+          fdwState_o = (DB2FdwState*) outerrel->fdw_private;
+          fdwState_i = (DB2FdwState*) innerrel->fdw_private;
+
           /* estimate the number of result rows for the join */
           #if PG_VERSION_NUM < 140000
           if (outerrel->pages > 0 && innerrel->pages > 0)
@@ -69,11 +90,17 @@ void db2GetForeignJoinPaths (PlannerInfo * root, RelOptInfo * joinrel, RelOptInf
             rows = 1000.0;
           }
 
-          /* use a random "high" value for startup cost */
-          startup_cost = 10000.0;
-
-          /* estimate total cost as startup cost + (returned rows) * 10.0 */
-          total_cost   = startup_cost + rows * 10.0;
+          /*
+           * Minimal cost tweak:
+           * The previous hard-coded startup_cost=10000 made the foreign-join path
+           * effectively impossible to win against a local join, so join pushdown
+           * never happened even when it was otherwise safe.
+           *
+           * Use the already-estimated costs of the two input foreign relations as
+           * the baseline cost for the pushed-down join.
+           */
+          startup_cost = (fdwState_o ? fdwState_o->startup_cost : 0) + (fdwState_i ? fdwState_i->startup_cost : 0);
+          total_cost   = (fdwState_o ? fdwState_o->total_cost   : 0) + (fdwState_i ? fdwState_i->total_cost   : 0);
 
           /* store cost estimation results */
           joinrel->rows          = rows;
@@ -100,6 +127,14 @@ void db2GetForeignJoinPaths (PlannerInfo * root, RelOptInfo * joinrel, RelOptInf
                                             );
           /* add generated path to joinrel */
           add_path(joinrel, (Path *) joinpath);
+        } else {
+          /*
+           * foreign_join_ok can reject pushdown for reasons that might depend on
+           * planner state (or because we could not map join target columns). In
+           * that case, don't leave a half-initialized marker state behind that
+           * prevents reconsideration.
+           */
+          joinrel->fdw_private = NULL;
         }
       }
     }
@@ -119,7 +154,6 @@ static bool foreign_join_ok (PlannerInfo * root, RelOptInfo * joinrel, JoinType 
   DB2Table*    db2Table_i   = NULL;
   ListCell*    lc           = NULL;
   List*        otherclauses = NULL;
-  char*        tabname      = NULL;/* for warning messages */
 
   db2Entry1();
   /* we only support pushing down INNER joins */
@@ -223,8 +257,9 @@ static bool foreign_join_ok (PlannerInfo * root, RelOptInfo * joinrel, JoinType 
   db2Table_i = fdwState_i->db2Table;
 
   fdwState->db2Table          = (DB2Table*) db2alloc(sizeof (DB2Table), "fdw_state->db2Table");
-  fdwState->db2Table->name    = db2strdup ("", "fdwState->db2Table->name");
-  fdwState->db2Table->pgname  = db2strdup ("", "fdwState->db2Table->pgname");
+  /* Give the joinrel a non-empty name so warnings/debug output are readable. */
+  fdwState->db2Table->name    = db2strdup ("joinrel", "fdwState->db2Table->name");
+  fdwState->db2Table->pgname  = db2strdup ("joinrel", "fdwState->db2Table->pgname");
   fdwState->db2Table->ncols   = 0;
   fdwState->db2Table->npgcols = 0;
   fdwState->db2Table->cols    = (DB2Column **) db2alloc((sizeof (DB2Column*) * (db2Table_o->ncols + db2Table_i->ncols)), "fdw_state->db2Table->cols[%d]",(db2Table_o->ncols + db2Table_i->ncols));
@@ -233,66 +268,84 @@ static bool foreign_join_ok (PlannerInfo * root, RelOptInfo * joinrel, JoinType 
    * Here we assume that children are foreign table, not foreign join.
    * We need capability to track relid chain through join tree to support N-way join.
    */
-  tabname = "?";
   foreach (lc, joinrel->reltarget->exprs) {
-    int i;
-    Var *var = (Var *) lfirst (lc);
-    struct db2Column *col = NULL;
-    struct db2Column *newcol;
-    int used_flag = 0;
+    Var*      var      = (Var *) lfirst(lc);
+    DB2Column* col     = NULL;
+    DB2Column* newcol  = NULL;
+    int       used_flag = 0;
+    int       src_varno;
+    int       src_attno;
+    int       src_relid;
 
-    Assert (IsA (var, Var));
-    /* Find appropriate entry from children's db2Table. */
-    for (i = 0; i < db2Table_o->ncols; ++i) {
-      struct db2Column *tmp = db2Table_o->cols[i];
+    if (!IsA(var, Var))
+      return false;
 
-      if (tmp->pgrelid == var->varno) {
-        tabname = db2Table_o->pgname;
+    /*
+     * joinrel->reltarget->exprs can contain Vars referencing join inputs via
+     * OUTER_VAR/INNER_VAR (and sometimes direct baserel RT indexes).  Resolve
+     * those to the appropriate child's relid so we can look up the base column
+     * descriptor and copy its DB2/PG type metadata.
+     */
+    src_varno = var->varno;
+    src_attno = var->varattno;
+    src_relid = src_varno;
 
-        if (tmp->pgattnum == var->varattno) {
-          col = tmp;
-          break;
-        }
-      }
-    }
+    if (src_varno == OUTER_VAR)
+      src_relid = outerrel->relid;
+    else if (src_varno == INNER_VAR)
+      src_relid = innerrel->relid;
+
+    col = db2FindColumnByRelidAttnum(db2Table_o, src_relid, src_attno);
     if (!col) {
-      for (i = 0; i < db2Table_i->ncols; ++i) {
-        struct db2Column *tmp = db2Table_i->cols[i];
-
-        if (tmp->pgrelid == var->varno) {
-          tabname = db2Table_i->pgname;
-
-          if (tmp->pgattnum == var->varattno) {
-            col = tmp;
-            break;
-          }
-        }
-      }
+      col = db2FindColumnByRelidAttnum(db2Table_i, src_relid, src_attno);
     }
 
-    newcol = (DB2Column*) db2alloc(sizeof (DB2Column), "newcol");
+    newcol = (DB2Column*) db2alloc(sizeof(DB2Column), "newcol");
+    memset(newcol, 0, sizeof(DB2Column));
+
     if (col) {
-      memcpy (newcol, col, sizeof (struct db2Column));
+      memcpy(newcol, col, sizeof(DB2Column));
       used_flag = 1;
     } else {
-      /* non-existing column, print a warning */
-      ereport (WARNING
-              ,(errcode(ERRCODE_WARNING)
-               ,errmsg ("column number %d of foreign table \"%s\" does not exist in foreign DB2 table, will be replaced by NULL"
-                       ,var->varattno
-                       ,tabname
-                       )
-               )
-              );
+      /*
+       * If we can't map an output column back to an underlying foreign table
+       * column, join pushdown isn't safe (we'd otherwise create a column with
+       * undefined pgtype/colType and crash at execution time).
+       */
+      ereport(DEBUG2,
+              (errmsg("db2_fdw: cannot map join output column (varno=%d attno=%d); disabling join pushdown for this join",
+                      var->varno, var->varattno)));
+      return false;
     }
+
     newcol->used = used_flag;
-    /* pgattnum should be the index in SELECT clause of join query. */
-    newcol->pgattnum = fdwState->db2Table->ncols + 1;
+    /*
+     * IMPORTANT:
+     * db2GetForeignPlan() later maps Vars by Var.varattno to db2Table->cols[*]->pgattnum.
+     * For joinrels these Var.varattno values are already the join's attribute numbers,
+     * so we must preserve them here (not renumber sequentially), otherwise planning
+     * will fail to find columns and leave result bindings uninitialized.
+     */
+    newcol->pgattnum = var->varattno;
 
     fdwState->db2Table->cols[fdwState->db2Table->ncols++] = newcol;
   }
 
-  fdwState->db2Table->npgcols = fdwState->db2Table->ncols;
+  /*
+   * IMPORTANT:
+   * For base foreign tables, db2Table->npgcols matches the number of PG columns
+   * and convertTuple() can map output columns by pgattnum.
+   *
+   * For join pushdown, however, the executor slot natts equals the number of
+   * projected join output columns, while the pgattnum values we carry in the
+   * DB2ResultColumn descriptors refer to *base-table* attnums (and can be
+   * sparse / non-1..N).  If npgcols == natts, convertTuple() would treat the
+   * join as a "simple select" and use pgattnum as the destination index,
+   * causing out-of-bounds writes and corrupted tuples.
+   *
+   * Force convertTuple() to use resnum-based mapping for joinrels.
+   */
+  fdwState->db2Table->npgcols = 0;
 
   db2Exit1();
   return true;

@@ -1437,14 +1437,24 @@ static void deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_att
     // For a join or upper relation the input tlist gives the list of columns required to be fetched from the foreign server.
     deparseExplicitTargetList(tlist, false, retrieved_attrs, context);
   } else {
-    // For a base relation fpinfo->attrs_used gives the list of columns* required to be fetched from the foreign server.
-    RangeTblEntry *rte = planner_rt_fetch(foreignrel->relid, root);
+    /*
+     * For base relations, prefer the caller-provided tlist (fdw_scan_tlist) when
+     * present.  This ensures the remote SELECT list includes any resjunk Vars
+     * needed locally (e.g., for EPQ recheck quals), avoiding result-column list
+     * mismatches.
+     */
+    if (tlist != NIL) {
+      deparseExplicitTargetList(tlist, false, retrieved_attrs, context);
+    } else {
+      // Fallback: use fpinfo->attrs_used.
+      RangeTblEntry *rte = planner_rt_fetch(foreignrel->relid, root);
 
-    // Core code already has some lock on each rel being planned, so we can use NoLock here.
-    Relation	rel = table_open(rte->relid, NoLock);
+      // Core code already has some lock on each rel being planned, so we can use NoLock here.
+      Relation	rel = table_open(rte->relid, NoLock);
 
-    deparseTargetList(buf, rte, foreignrel->relid, rel, false, fpinfo->attrs_used, false, retrieved_attrs);
-    table_close(rel, NoLock);
+      deparseTargetList(buf, rte, foreignrel->relid, rel, false, fpinfo->attrs_used, false, retrieved_attrs);
+      table_close(rel, NoLock);
+    }
   }
   db2Exit1(": %s", buf->data);
 }

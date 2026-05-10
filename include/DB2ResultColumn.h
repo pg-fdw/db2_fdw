@@ -1,5 +1,18 @@
 #ifndef DB2RESULTCOLUMN_H
 #define DB2RESULTCOLUMN_H
+
+/*
+ * ODBC/CLI uses SQLLEN* as the indicator pointer for SQLBindCol.
+ *
+ * This header is included from PostgreSQL-facing code paths where we avoid
+ * including DB2 CLI headers (sqlcli.h/sqlcli1.h) due to header conflicts.
+ * Also, DB2's sqlcli.h defines SQLLEN as a macro, so attempting to typedef it
+ * here is fragile.
+ *
+ * We therefore store the indicator in a toolchain-agnostic pointer-sized
+ * integer, and cast to SQLLEN* only in the DB2-CLI compilation units.
+ */
+#include <stdint.h>
 /** DB2ResultColumn
  *  A full descriptor of a DB2 table column and its corresponding PG column.
  * 
@@ -26,7 +39,7 @@ typedef struct db2ResultColumn {
   char*                   val;           // buffer for DB2 to return results in (LOB locator for LOBs)
   size_t                  val_size;      // allocated size in val
   size_t                  val_len;       // actual length of val
-  int                     val_null;      // indicator for NULL value
+  intptr_t                val_null;      // NULL indicator (cast to SQLLEN* at SQLBindCol)
   db2NoEncErrType         noencerr;      // no encoding error produced
   struct db2ResultColumn* next;
 } DB2ResultColumn;

@@ -46,6 +46,7 @@ void db2EndForeignModifyCommon(EState *estate, ResultRelInfo *rinfo) {
 
   if (output_funcs){
     db2free(output_funcs,"output_funcs");
+    output_funcs = NULL;
   }
  
   rinfo->ri_FdwState = NULL;

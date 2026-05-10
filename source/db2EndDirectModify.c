@@ -43,6 +43,7 @@ void db2EndDirectModify(ForeignScanState* node) {
 
   if (output_funcs){
     db2free(output_funcs,"output_funcs");
+    output_funcs = NULL;
   }
  
   db2free(fdw_state,"fdw_state");
