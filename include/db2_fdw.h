@@ -24,6 +24,10 @@
 #define STRVAL(arg) ((Value*)(arg))->val.str
 #endif
 
+#if PG_VERSION_NUM < 130000
+#error "This extension requires PostgreSQL version 13.0 or higher."
+#endif
+
 #if PG_VERSION_NUM < PG_SUPPORTED_MIN_VERSION
 #error "This extension requires PostgreSQL version 13.0 or higher."
 #endif
