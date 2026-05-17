@@ -1,5 +1,3 @@
-#include <sqlcli1.h>
-#include <postgres_ext.h>
 #include "db2_fdw.h"
 
 /** global variables  */
@@ -10,24 +8,23 @@ extern int          sql_initialized;       /* set to "1" as soon as SQLAllocHand
 extern DB2EnvEntry* rootenvEntry;          /* Linked list of handles for cached DB2 connections.            */
 
 /** external prototypes */
-extern void      db2Debug1            (const char* message, ...);
 extern void      db2FreeEnvHdl        (DB2EnvEntry* envp, const char* nls_lang);
 extern void      db2CloseConnections  (void);
 
 /** local prototypes */
 void db2Shutdown(void);
 
-/** db2Shutdown
- *   Close all open connections, release handles, terminate DB2.
- *   This will be called at the end of the PostgreSQL session.
+/* db2Shutdown
+ * Close all open connections, release handles, terminate DB2.
+ * This will be called at the end of the PostgreSQL session.
  */
 void db2Shutdown (void) {
-  db2Debug1("> db2Shutdown");
+  db2Entry1();
   /* don't report error messages */
   silent = 1;
   db2CloseConnections();
   /* done with DB2 */
   if (sql_initialized)
     db2FreeEnvHdl(rootenvEntry, NULL);
-  db2Debug1("< db2Shutdown");
+  db2Exit1();
 }

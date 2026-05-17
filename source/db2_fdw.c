@@ -14,15 +14,12 @@
 #include <commands/explain_state.h>
 #include <commands/explain_format.h>
 #endif
-#include <foreign/fdwapi.h>
-#include <foreign/foreign.h>
 #include <miscadmin.h>
 #include <storage/ipc.h>
 #include <utils/builtins.h>
 #include <utils/array.h>
 #include <utils/guc.h>
 #include <utils/syscache.h>
-#include <nodes/pathnodes.h>
 #include <optimizer/optimizer.h>
 #include <access/heapam.h>
 #include "db2_fdw.h"
@@ -64,11 +61,18 @@ DB2FdwOption valid_options[] = {
   {OPT_READONLY         , ForeignTableRelationId      , false},
   {OPT_SAMPLE           , ForeignTableRelationId      , false},
   {OPT_PREFETCH         , ForeignTableRelationId      , false},
+  {OPT_FETCHSZ          , ForeignTableRelationId      , false},
   {OPT_KEY              , AttributeRelationId         , false},
+  {OPT_DB2TYPE          , AttributeRelationId         , false},
+  {OPT_DB2SIZE          , AttributeRelationId         , false},
+  {OPT_DB2BYTES         , AttributeRelationId         , false},
+  {OPT_DB2CHARS         , AttributeRelationId         , false},
+  {OPT_DB2SCALE         , AttributeRelationId         , false},
+  {OPT_DB2NULL          , AttributeRelationId         , false},
+  {OPT_DB2CCSID         , AttributeRelationId         , false},
 #if PG_VERSION_NUM >= 140000
   {OPT_BATCH_SIZE       , ForeignServerRelationId     , false},
   {OPT_BATCH_SIZE       , ForeignTableRelationId      , false},
-  {OPT_BATCH_SIZE       , AttributeRelationId         , false},
 #endif
   {OPT_NO_ENCODING_ERROR, ForeignDataWrapperRelationId, false},
   {OPT_NO_ENCODING_ERROR, ForeignTableRelationId      , false},
@@ -93,6 +97,7 @@ extern void             db2GetForeignRelSize       (PlannerInfo* root, RelOptInf
  */
 extern ForeignScan*     db2GetForeignPlan           (PlannerInfo* root, RelOptInfo* foreignrel, Oid foreigntableid, ForeignPath* best_path, List* tlist, List* scan_clauses , Plan* outer_plan);
 extern void             db2GetForeignPaths          (PlannerInfo* root, RelOptInfo* baserel, Oid foreigntableid);
+extern void             db2GetForeignUpperPaths     (PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel, RelOptInfo *output_rel, void *extra);
 extern void             db2GetForeignJoinPaths      (PlannerInfo* root, RelOptInfo* joinrel, RelOptInfo* outerrel, RelOptInfo* innerrel, JoinType jointype, JoinPathExtraData* extra);
 extern bool             db2AnalyzeForeignTable      (Relation relation, AcquireSampleRowsFunc* func, BlockNumber* totalpages);
 extern void             db2ExplainForeignScan       (ForeignScanState* node, ExplainState* es);
@@ -116,6 +121,11 @@ extern void             db2EndForeignInsert         (EState* estate, ResultRelIn
 extern void             db2ExplainForeignModify     (ModifyTableState* mtstate, ResultRelInfo* rinfo, List* fdw_private, int subplan_index, ExplainState* es);
 extern int              db2IsForeignRelUpdatable    (Relation rel);
 extern List*            db2ImportForeignSchema      (ImportForeignSchemaStmt* stmt, Oid serverOid);
+extern bool             db2PlanDirectModify         (PlannerInfo* root, ModifyTable* plan, Index resultRelation, int subplan_index);
+extern void             db2BeginDirectModify        (ForeignScanState* node, int eflags);
+extern TupleTableSlot*  db2IterateDirectModify      (ForeignScanState* node);
+extern void             db2EndDirectModify          (ForeignScanState* node);
+
 #if PG_VERSION_NUM >= 140000
 extern void             db2ExecForeignTruncate      (List *rels, DropBehavior behavior, bool restart_seqs);
 extern TupleTableSlot** db2ExecForeignBatchInsert   (EState *estate, ResultRelInfo *rinfo, TupleTableSlot **slots, TupleTableSlot **planSlots, int *numSlots);
@@ -126,14 +136,14 @@ extern char*           guessNlsLang              (char* nls_lang);
 extern void            exitHook                  (int code, Datum arg);
 
 
-/** Foreign-data wrapper handler function: return a struct with pointers
- * to callback routines.
+/* Foreign-data wrapper handler function: return a struct with pointers to callback routines.
  */
 PGDLLEXPORT Datum db2_fdw_handler (PG_FUNCTION_ARGS) {
-  FdwRoutine *fdwroutine = makeNode (FdwRoutine);
+  FdwRoutine* fdwroutine    = makeNode (FdwRoutine);
 
   fdwroutine->GetForeignRelSize         = db2GetForeignRelSize;
   fdwroutine->GetForeignPaths           = db2GetForeignPaths;
+  fdwroutine->GetForeignUpperPaths      = db2GetForeignUpperPaths;
   fdwroutine->GetForeignJoinPaths       = db2GetForeignJoinPaths;
   fdwroutine->GetForeignPlan            = db2GetForeignPlan;
   fdwroutine->AnalyzeForeignTable       = db2AnalyzeForeignTable;
@@ -154,6 +164,12 @@ PGDLLEXPORT Datum db2_fdw_handler (PG_FUNCTION_ARGS) {
   fdwroutine->ImportForeignSchema       = db2ImportForeignSchema;
   fdwroutine->BeginForeignInsert        = db2BeginForeignInsert;
   fdwroutine->EndForeignInsert          = db2EndForeignInsert;
+
+  fdwroutine->PlanDirectModify          = db2PlanDirectModify;
+  fdwroutine->BeginDirectModify         = db2BeginDirectModify;
+  fdwroutine->IterateDirectModify       = db2IterateDirectModify;
+  fdwroutine->EndDirectModify           = db2EndDirectModify;
+
   #if PG_VERSION_NUM >= 140000
   fdwroutine->ExecForeignTruncate       = db2ExecForeignTruncate;
   fdwroutine->ExecForeignBatchInsert    = db2ExecForeignBatchInsert;
@@ -163,12 +179,9 @@ PGDLLEXPORT Datum db2_fdw_handler (PG_FUNCTION_ARGS) {
   PG_RETURN_POINTER (fdwroutine);
 }
 
-/** db2_fdw_validator
- *   Validate the generic options given to a FOREIGN DATA WRAPPER, SERVER,
- *   USER MAPPING or FOREIGN TABLE that uses db2_fdw.
- *
- *   Raise an ERROR if the option or its value are considered invalid
- *   or a required option is missing.
+/* db2_fdw_validator
+ * Validate the generic options given to a FOREIGN DATA WRAPPER, SERVER, USER MAPPING or FOREIGN TABLE that uses db2_fdw.
+ * Raise an ERROR if the option or its value are considered invalid or a required option is missing.
  */
 PGDLLEXPORT Datum db2_fdw_validator (PG_FUNCTION_ARGS) {
   List*     options_list               = untransformRelOptions (PG_GETARG_DATUM (0));
@@ -234,12 +247,20 @@ PGDLLEXPORT Datum db2_fdw_validator (PG_FUNCTION_ARGS) {
                   )
                 );
     }
+    /* check valid values for column options */
     /* check valid values for max_long */
-    if (strcmp (def->defname, OPT_MAX_LONG) == 0) {
+    if (strcmp (def->defname, OPT_DB2TYPE ) == 0 
+    ||  strcmp (def->defname, OPT_DB2NULL ) == 0
+    ||  strcmp (def->defname, OPT_DB2SIZE ) == 0
+    ||  strcmp (def->defname, OPT_DB2BYTES) == 0
+    ||  strcmp (def->defname, OPT_DB2CHARS) == 0
+    ||  strcmp (def->defname, OPT_DB2SCALE) == 0
+    ||  strcmp (def->defname, OPT_DB2CCSID) == 0
+    ||  strcmp (def->defname, OPT_MAX_LONG) == 0) {
       char *val = STRVAL(def->arg);
       char *endptr;
-      unsigned long max_long = strtoul (val, &endptr, 0);
-      if (val[0] == '\0' || *endptr != '\0' || max_long < 1 || max_long > 1073741823ul)
+      long  lvalue = strtol (val, &endptr, 0);
+      if (val[0] == '\0' || *endptr != '\0' || lvalue < LONG_MIN || lvalue > LONG_MAX)
         ereport (ERROR
                 , ( errcode(ERRCODE_FDW_INVALID_ATTRIBUTE_VALUE)
                   , errmsg ("invalid value for option \"%s\"", def->defname)
@@ -267,11 +288,24 @@ PGDLLEXPORT Datum db2_fdw_validator (PG_FUNCTION_ARGS) {
       char *val = STRVAL(def->arg);
       char *endptr;
       unsigned long prefetch = strtol (val, &endptr, 0);
-      if (val[0] == '\0' || *endptr != '\0' || prefetch < 0 || prefetch > 10240)
+      if (val[0] == '\0' || *endptr != '\0' || prefetch < 0 || prefetch > DB2_MAX_ATTR_PREFETCH_NROWS)
         ereport ( ERROR
                 , ( errcode (ERRCODE_FDW_INVALID_ATTRIBUTE_VALUE)
                   , errmsg ("invalid value for option \"%s\"", def->defname)
-                  , errhint ("Valid values in this context are integers between 0 and 10240.")
+                  , errhint ("Valid values in this context are integers between 0 and %d.", DB2_MAX_ATTR_PREFETCH_NROWS)
+                  )
+                );
+    }
+    /* check valid values for "fetchsize" */
+    if (strcmp (def->defname, OPT_FETCHSZ) == 0) {
+      char *val = STRVAL(def->arg);
+      char *endptr;
+      unsigned long fetchsz = strtol (val, &endptr, 0);
+      if (val[0] == '\0' || *endptr != '\0' || fetchsz < 0 || fetchsz > DB2_MAX_ATTR_ROW_ARRAY_SIZE)
+        ereport ( ERROR
+                , ( errcode (ERRCODE_FDW_INVALID_ATTRIBUTE_VALUE)
+                  , errmsg ("invalid value for option \"%s\"", def->defname)
+                  , errhint ("Valid values in this context are integers between 1 and %d.", DB2_MAX_ATTR_ROW_ARRAY_SIZE)
                   )
                 );
     }
@@ -343,8 +377,8 @@ PGDLLEXPORT Datum db2_fdw_validator (PG_FUNCTION_ARGS) {
   PG_RETURN_VOID ();
 }
 
-/** db2_close_connections
- *   Close all open DB2 connections.
+/* db2_close_connections
+ * Close all open DB2 connections.
  */
 PGDLLEXPORT Datum db2_close_connections (PG_FUNCTION_ARGS) {
   if (dml_in_transaction)
@@ -359,21 +393,21 @@ PGDLLEXPORT Datum db2_close_connections (PG_FUNCTION_ARGS) {
   PG_RETURN_VOID ();
 }
 
-/** db2_diag
- *   Get the DB2 client version.
- *   If a non-NULL argument is supplied, it must be a foreign server name.
- *   In this case, the remote server version is returned as well.
+/* db2_diag
+ * Get the DB2 client version.
+ * If a non-NULL argument is supplied, it must be a foreign server name.
+ * In this case, the remote server version is returned as well.
  */
 PGDLLEXPORT Datum db2_diag (PG_FUNCTION_ARGS) {
   Oid            srvId     = InvalidOid;
   char*          pgversion = NULL;
   StringInfoData version;
 
-  /** Get the PostgreSQL server version.
+  /* Get the PostgreSQL server version.
    * We cannot use PG_VERSION because that would give the version against which
-   * db2xa_fdw was compiled, not the version it is running with.
+   * db2_fdw was compiled, not the version it is running with.
    */
-  pgversion = GetConfigOptionByName ("server_version", NULL);
+  pgversion = GetConfigOptionByName ("server_version", NULL, false);
 
   initStringInfo (&version);
   appendStringInfo (&version, "db2_fdw %s, PostgreSQL %s", DB2_FDW_VERSION, pgversion);
@@ -418,6 +452,7 @@ PGDLLEXPORT Datum db2_diag (PG_FUNCTION_ARGS) {
     }
     srvId = ((Form_pg_foreign_server)GETSTRUCT(tup))->oid;
     table_close (rel, AccessShareLock);
+
     /* get the foreign server, the user mapping and the FDW */
     server  = GetForeignServer (srvId);
     mapping = GetUserMapping (GetUserId (), srvId);
@@ -451,11 +486,37 @@ PGDLLEXPORT Datum db2_diag (PG_FUNCTION_ARGS) {
   PG_RETURN_TEXT_P (cstring_to_text (version.data));
 }
 
-/** _PG_init
- *   Library load-time initalization.
- *   Sets exitHook() callback for backend shutdown.
+/* _PG_init
+ * Library load-time initalization.
+ * Sets exitHook() callback for backend shutdown.
  */
 void _PG_init (void) {
-  /* register an exit hook */
-  on_proc_exit (&exitHook, PointerGetDatum (NULL));
+  char*       pgversion     = NULL;
+  int         min_pgversion = PG_SUPPORTED_MIN_VERSION / 10000;
+  int         i_pgversion   = min_pgversion;
+
+  /* Get the PostgreSQL server version.
+   * We cannot use PG_VERSION because that would give the version against which
+   * db2_fdw was compiled, not the version it is running with.
+   */
+  pgversion     = GetConfigOptionByName ("server_version", NULL, false);
+  if (pgversion != NULL) {
+    char majorversion[3];
+    majorversion[0] = pgversion[0];
+    majorversion[1] = pgversion[1];
+    majorversion[2] = '\0';
+    i_pgversion     = atoi(majorversion);
+  }
+
+  if (i_pgversion >= min_pgversion) {
+    /* register an exit hook */
+    on_proc_exit (&exitHook, PointerGetDatum (NULL));
+  } else {
+    ereport (ERROR
+            , ( errcode(ERRCODE_INSUFFICIENT_RESOURCES)
+              , errmsg ("You are running a PG version %s which is not supported.", pgversion)
+              , errhint("You need at least PG version %d or higher.", min_pgversion)
+              )
+            );
+  }
 }

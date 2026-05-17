@@ -1,50 +1,76 @@
 #include <postgres.h>
-#include <nodes/pathnodes.h>
-#include <optimizer/optimizer.h>
-#include <access/heapam.h>
 #include "db2_fdw.h"
 
 /*+ external prototypes */
-extern void         db2Debug5                 (const char* message, ...);
 
 /** local prototypes */
-void* db2alloc         (const char* type, size_t size);
-void* db2realloc       (void* p, size_t size);
-void  db2free          (void* p);
-char* db2strdup        (const char* source);
 
-/** db2alloc
- *   Expose palloc() to DB2 functions.
+/* db2Alloc
+ * Expose palloc0() to DB2 functions.
  */
-void* db2alloc (const char* type, size_t size) {
-  void* memory = palloc0(size);
-  db2Debug5("  ++ %x: %d bytes - %s", memory, size, type);
+void* db2Alloc (size_t size,const char* message, ...) {
+  void*   memory = palloc0(size);
+
+  if (db2IsLogEnabled(DB2DEBUG5)) {
+    char    cBuffer[4000];
+    va_list arg_marker;
+    va_start(arg_marker, message);
+    vsnprintf(cBuffer, sizeof(cBuffer), message, arg_marker);
+    db2Debug5("++ %s: %x: %d bytes - %s", cBuffer, memory, size, memory);
+    va_end  (arg_marker);
+  }
   return memory;
 }
 
-/** db2realloc
- *   Expose repalloc() to DB2 functions.
+/* db2ReAlloc
+ * Expose repalloc() to DB2 functions.
  */
-void* db2realloc (void* p, size_t size) {
-  void* memory = repalloc(p, size);
-  db2Debug5("  ++ %x: %d bytes", memory, size);
+void* db2ReAlloc (size_t size, void* p, const char* message, ...) {
+  void*   memory = repalloc(p, size);
+
+  if (db2IsLogEnabled(DB2DEBUG5)) {
+    char    cBuffer[4000];
+    va_list arg_marker;
+    va_start(arg_marker, message);
+    vsnprintf(cBuffer, sizeof(cBuffer), message, arg_marker);
+    db2Debug5("++ %s: %x: %d bytes - %x", cBuffer, memory, size, p);
+    va_end  (arg_marker);
+  }
   return memory;
 }
-/** db2free
- *   Expose pfree() to DB2 functions.
+
+/* db2Free
+ * Expose pfree() to DB2 functions.
  */
-void db2free (void* p) {
+void db2Free (void* p, const char* message, ...) {
+  if (db2IsLogEnabled(DB2DEBUG5) && p != NULL) {
+    char    cBuffer[4000];
+    va_list arg_marker;
+    va_start(arg_marker, message);
+    vsnprintf(cBuffer, sizeof(cBuffer), message, arg_marker);
+    db2Debug5("-- %s: %x", cBuffer, p);
+    va_end  (arg_marker);
+  }
   if (p != NULL) {
-    db2Debug5("  -- %x", p);
     pfree (p);
   }
 }
 
-char* db2strdup(const char* source) {
-  char* target = NULL;
+/* db2StrDup
+ * Expose pstrdup() to DB2 functions.
+ */
+char* db2StrDup(const char* source, const char* message, ...) {
+  char*   target = NULL;
   if (source != NULL && source[0] != '\0') {
     target = pstrdup(source);
   }
-  db2Debug5("  ++ %x: dup'ed string from %x content '%s'",target, source, source);
+  if (db2IsLogEnabled(DB2DEBUG5) && source != NULL && source[0] != '\0') {
+    char    cBuffer[4000];
+    va_list arg_marker;
+    va_start(arg_marker, message);
+    vsnprintf(cBuffer, sizeof(cBuffer), message, arg_marker);
+    db2Debug5("++ %s: %x: dup'ed string from %x content source: '%s' target: '%s'",cBuffer, target, source, source, target);
+   va_end  (arg_marker);
+  }
   return target;
 }

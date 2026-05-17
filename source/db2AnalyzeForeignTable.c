@@ -1,60 +1,59 @@
 #include <postgres.h>
-#include <commands/vacuum.h>
-#include <foreign/fdwapi.h>
-#include <utils/memutils.h>
-#include <nodes/pathnodes.h>
-#include <optimizer/optimizer.h>
 #include <access/heapam.h>
+#if PG_VERSION_NUM < 140000
+#include <access/xact.h>
+#endif
+#include <commands/vacuum.h>
+#include <optimizer/optimizer.h>
+#include <utils/memutils.h>
 #include "db2_fdw.h"
 #include "DB2FdwState.h"
 
 /** external prototypes */
+extern DB2Session*  db2GetSession             (const char* connectstring, char* user, char* password, char* jwt_token, const char* nls_lang, int curlevel);
 extern DB2FdwState* db2GetFdwState            (Oid foreigntableid, double* sample_percent, bool describe);
 extern int          db2IsStatementOpen        (DB2Session* session);
-extern void         db2PrepareQuery           (DB2Session* session, const char* query, DB2Table* db2Table, unsigned long prefetch);
-extern int          db2ExecuteQuery           (DB2Session* session, const DB2Table* db2Table, ParamDesc* paramList);
-extern int          db2FetchNext              (DB2Session* session);
+extern void         db2PrepareQuery           (DB2Session* session, const char *query, DB2ResultColumn* resultList, unsigned long prefetch, int fetchsize);
+extern int          db2ExecuteQuery           (DB2Session* session, ParamDesc* paramList);
+extern int          db2FetchNext              (DB2Session* session, DB2ResultColumn* resultList);
 extern void         checkDataType             (short db2type, int scale, Oid pgtype, const char* tablename, const char* colname);
 extern short        c2dbType                  (short fcType);
-extern void         convertTuple              (DB2FdwState* fdw_state, Datum* values, bool* nulls) ;
-extern void         db2Debug1                 (const char* message, ...);
-extern void         db2Debug2                 (const char* message, ...);
-extern void         db2Debug3                 (const char* message, ...);
-extern void*        db2alloc                  (const char* type, size_t size);
+extern void         convertTuple              (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls);
 
 /** local prototypes */
-bool db2AnalyzeForeignTable(Relation relation, AcquireSampleRowsFunc* func, BlockNumber* totalpages);
-int  acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple* rows, int targrows, double* totalrows, double* totaldeadrows);
+       bool db2AnalyzeForeignTable(Relation relation, AcquireSampleRowsFunc* func, BlockNumber* totalpages);
+static int  acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple* rows, int targrows, double* totalrows, double* totaldeadrows);
 
-/** db2AnalyzeForeignTable
- * 
- */
+/* db2AnalyzeForeignTable */
 bool db2AnalyzeForeignTable (Relation relation, AcquireSampleRowsFunc* func, BlockNumber* totalpages) {
-  db2Debug1("> db2AnalyzeForeignTable");
+  db2Entry1();
   *func = acquireSampleRowsFunc;
   /* use positive page count as a sign that the table has been ANALYZEd */
   *totalpages = 42;
-  db2Debug1("< db2AnalyzeForeignTable");
+  db2Exit1(": true");
   return true;
 }
 
-/** acquireSampleRowsFunc
- *   Perform a sequential scan on the DB2 table and return a sampe of rows.
- *   exceeding this is not used by compute_scalar_stats().
+/* acquireSampleRowsFunc
+ * Perform a sequential scan on the DB2 table and return a sample of rows.
+ * All LOB values are truncated to WIDTH_THRESHOLD+1 because anything exceeding this is not used by compute_scalar_stats().
  */
-int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int targrows, double *totalrows, double *totaldeadrows) {
-  int collected_rows = 0, i;
-  DB2FdwState* fdw_state;
-  bool first_column = true;
-  StringInfoData query;
-  TupleDesc tupDesc = RelationGetDescr (relation);
-  Datum* values = (Datum*) db2alloc("values", tupDesc->natts* sizeof (Datum));
-  bool*  nulls  = (bool*)  db2alloc("null"  , tupDesc->natts* sizeof (bool));
-  double rstate, rowstoskip = -1, sample_percent;
-  MemoryContext old_cxt, tmp_cxt;
+static int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple* rows, int targrows, double* totalrows, double* totaldeadrows) {
+  int               collected_rows  = 0;
+  DB2FdwState*      fdw_state       = NULL;
+  bool              first_column    = true;
+  StringInfoData    query;
+  TupleDesc         tupDesc         = RelationGetDescr (relation);
+  Datum*            values          = (Datum*) db2alloc(tupDesc->natts* sizeof (Datum), "values");
+  bool*             nulls           = (bool*)  db2alloc(tupDesc->natts* sizeof (bool) , "null");
+  double            rstate          = 0;
+  double            rowstoskip      = -1;
+  double            sample_percent  = 0;
+  MemoryContext     old_cxt;
+  MemoryContext     tmp_cxt;
 
-  db2Debug1("> acquireSampleRowsFunc");
-  elog (DEBUG1, "db2_fdw: analyze foreign table %d", RelationGetRelid (relation));
+  db2Entry1();
+  db2Debug2("db2_fdw: analyze foreign table %d", RelationGetRelid (relation));
 
   *totalrows = 0;
 
@@ -65,42 +64,23 @@ int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int 
   rstate = anl_init_selection_state (targrows);
 
   /* get connection options, connect and get the remote table description */
-  fdw_state = db2GetFdwState (RelationGetRelid (relation), &sample_percent, true);
-  fdw_state->paramList = NULL;
-  fdw_state->rowcount = 0;
+  fdw_state             = db2GetFdwState (RelationGetRelid (relation), &sample_percent, true);
+  if (!fdw_state->session) {
+    fdw_state->session  = db2GetSession (fdw_state->dbserver, fdw_state->user, fdw_state->password, fdw_state->jwt_token, fdw_state->nls_lang, GetCurrentTransactionNestLevel () );
+  }
+  fdw_state->paramList  = NULL;
+  fdw_state->rowcount   = 0;
 
   /* construct query */
   initStringInfo (&query);
   appendStringInfo (&query, "SELECT ");
 
   /* loop columns */
-  for (i = 0; i < fdw_state->db2Table->ncols; ++i) {
-    /* don't get LONG, LONG RAW and untranslatable values */
-    short dbType = c2dbType(fdw_state->db2Table->cols[i]->colType);
-    if (dbType == DB2_BIGINT || dbType == DB2_UNKNOWN_TYPE) {
-      fdw_state->db2Table->cols[i]->used = 0;
-    } else {
-      db2Debug2("  fdw_state->db2Table->cols[%d]->name: %s",i,fdw_state->db2Table->cols[i]->colName);
-      /* all columns are used */
-      fdw_state->db2Table->cols[i]->used = 1;
-      db2Debug2("  fdw_state->db2Table->cols[%d]->used: %d",i,fdw_state->db2Table->cols[i]->used);
-
-      /* allocate memory for return value */
-      db2Debug2("  fdw_state->db2Table->cols[%d]->val_size: %x",i,fdw_state->db2Table->cols[i]->val_size);
-      fdw_state->db2Table->cols[i]->val = (char *) db2alloc ("fdw_state->db2Table->cols[i]->val", fdw_state->db2Table->cols[i]->val_size + 1);
-      db2Debug2("  fdw_state->db2Table->cols[%d]->val: %x",i,fdw_state->db2Table->cols[i]->val);
-      fdw_state->db2Table->cols[i]->val_len  = 0;
-      db2Debug2("  fdw_state->db2Table->cols[%d]->val_len: %x",i,fdw_state->db2Table->cols[i]->val);
-      fdw_state->db2Table->cols[i]->val_null = 1;
-      db2Debug2("  fdw_state->db2Table->cols[%d]->val_null: %x",i,fdw_state->db2Table->cols[i]->val_null);
-
-      if (first_column)
-        first_column = false;
-      else
-        appendStringInfo (&query, ", ");
-
-      /* append column name */
-      appendStringInfo (&query, "%s", fdw_state->db2Table->cols[i]->colName);
+  for (int i = 0; i < fdw_state->db2Table->ncols; ++i) {
+    if (DB2_UNKNOWN_TYPE != c2dbType(fdw_state->db2Table->cols[i]->colType)) {
+      checkDataType(fdw_state->db2Table->cols[i]->colType,fdw_state->db2Table->cols[i]->colScale,fdw_state->db2Table->cols[i]->pgtype,fdw_state->db2Table->pgname,fdw_state->db2Table->cols[i]->pgname);
+      appendStringInfo (&query, "%s%s", ((first_column) ? "" : ", "), fdw_state->db2Table->cols[i]->colName);
+      first_column = false;
     }
   }
 
@@ -116,16 +96,12 @@ int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int 
     appendStringInfo (&query, " SAMPLE BLOCK (%f)", sample_percent);
 
   fdw_state->query = query.data;
-  elog (DEBUG2, "  fdw_state->query: '%s'", fdw_state->query);
+  db2Debug2("fdw_state->query: '%s'", fdw_state->query);
 
-  /* get PostgreSQL column data types, check that they match DB2's */
-  for (i = 0; i < fdw_state->db2Table->ncols; ++i)
-    if (fdw_state->db2Table->cols[i]->used)
-      checkDataType (fdw_state->db2Table->cols[i]->colType, fdw_state->db2Table->cols[i]->colScale, fdw_state->db2Table->cols[i]->pgtype, fdw_state->db2Table->pgname, fdw_state->db2Table->cols[i]->pgname);
-
-  db2Debug3("  loop through query results");
+  db2Debug3("loop through query results");
   /* loop through query results */
-  while (db2IsStatementOpen (fdw_state->session) ? db2FetchNext (fdw_state->session) : (db2PrepareQuery (fdw_state->session, fdw_state->query, fdw_state->db2Table, fdw_state->prefetch), db2ExecuteQuery (fdw_state->session, fdw_state->db2Table, fdw_state->paramList))) {
+  fdw_state->rowcount = -1;
+  while (db2IsStatementOpen (fdw_state->session) ? db2FetchNext (fdw_state->session, fdw_state->resultList) : (db2PrepareQuery (fdw_state->session, fdw_state->query, fdw_state->resultList, fdw_state->prefetch, fdw_state->fetch_size), db2ExecuteQuery (fdw_state->session, fdw_state->paramList))) {
     /* allow user to interrupt ANALYZE */
     #if PG_VERSION_NUM >= 180000
     vacuum_delay_point (true);
@@ -139,13 +115,12 @@ int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int 
       /* the first "targrows" rows are added as samples */
       /* use a temporary memory context during convertTuple */
       old_cxt = MemoryContextSwitchTo (tmp_cxt);
-      convertTuple (fdw_state, values, nulls);
+      convertTuple (fdw_state->session,fdw_state->db2Table,fdw_state->resultList, tupDesc->natts, values, nulls);
       MemoryContextSwitchTo (old_cxt);
       rows[collected_rows++] = heap_form_tuple (tupDesc, values, nulls);
       MemoryContextReset (tmp_cxt);
     } else {
-      /*
-       * Skip a number of rows before replacing a random sample row.
+      /* Skip a number of rows before replacing a random sample row.
        * A more detailed description of the algorithm can be found in analyze.c
        */
       if (rowstoskip < 0) {
@@ -156,7 +131,7 @@ int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int 
         heap_freetuple (rows[k]);
         /* use a temporary memory context during convertTuple */
         old_cxt = MemoryContextSwitchTo (tmp_cxt);
-        convertTuple (fdw_state, values, nulls);
+        convertTuple (fdw_state->session,fdw_state->db2Table,fdw_state->resultList, tupDesc->natts, values, nulls);
         MemoryContextSwitchTo (old_cxt);
         rows[k] = heap_form_tuple (tupDesc, values, nulls);
         MemoryContextReset (tmp_cxt);
@@ -166,13 +141,13 @@ int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int 
 
   MemoryContextDelete (tmp_cxt);
 
-  *totalrows = (double) fdw_state->rowcount / sample_percent * 100.0;
-  *totaldeadrows = 0;
+  *totalrows      = (double) fdw_state->rowcount / sample_percent * 100.0;
+  *totaldeadrows  = 0;
 
   /* report report */
-  ereport (elevel, (errmsg ("\"%s\": table contains %lu rows; %d rows in sample", RelationGetRelationName (relation), fdw_state->rowcount, collected_rows)));
+  ereport (elevel, (errmsg ("\"%s\": table contains %lu rows; %d rows in sample", RelationGetRelationName (relation), fdw_state->rowcount, collected_rows-1)));
 
-  db2Debug1("< acquireSampleRowsFunc");
+  db2Exit1();
   return collected_rows;
 }
 

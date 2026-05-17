@@ -1,380 +1,365 @@
 #include <postgres.h>
-#include <common/md5.h>
-#include <optimizer/planmain.h>
-#include <optimizer/tlist.h>
-#include <parser/parsetree.h>
-#include <nodes/pathnodes.h>
+#include <access/htup_details.h>
+#include <catalog/pg_namespace.h>
+#include <catalog/pg_proc.h>
+#include <catalog/pg_type.h>
+#include <nodes/makefuncs.h>
 #include <optimizer/optimizer.h>
-#include <access/heapam.h>
+#include <optimizer/planmain.h>
+#include <optimizer/restrictinfo.h>
+#include <optimizer/tlist.h>
+#include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include "db2_fdw.h"
 #include "DB2FdwState.h"
 
+/* This enum describes what's kept in the fdw_private list for a ForeignPath.
+ * We store:
+ *
+ * 1) Boolean flag showing if the remote query has the final sort
+ * 2) Boolean flag showing if the remote query has the LIMIT clause
+ */
+enum FdwPathPrivateIndex {
+  FdwPathPrivateHasFinalSort, /* has-final-sort flag (as a Boolean node) */
+  FdwPathPrivateHasLimit,     /* has-limit flag (as a Boolean node)      */
+};
+
 /** external prototypes */
-extern List*        serializePlanData         (DB2FdwState* fdwState);
-extern char*        deparseExpr               (DB2Session* session, RelOptInfo * foreignrel, Expr* expr, const DB2Table* db2Table, List** params);
-extern void         checkDataType             (short db2type, int scale, Oid pgtype, const char* tablename, const char* colname);
-extern void         db2Debug1                 (const char* message, ...);
-extern void         db2Debug2                 (const char* message, ...);
-extern void         db2Debug3                 (const char* message, ...);
-extern void         db2free                   (void* p);
-extern char*        db2strdup                 (const char* p);
+extern bool   is_foreign_expr         (PlannerInfo* root, RelOptInfo* baserel, Expr* expr);
+extern void   deparseSelectStmtForRel (StringInfo buf, PlannerInfo* root, RelOptInfo* rel, List* tlist, List* remote_conds, List* pathkeys, bool has_final_sort, bool has_limit, bool is_subquery, List** retrieved_attrs, List** params_list);
+extern List*  build_tlist_to_deparse  (RelOptInfo* foreignrel);
+extern List*  serializePlanData       (DB2FdwState* fdw_state);
 
 /** local prototypes */
-const char*  get_jointype_name     (JoinType jointype);
-List*        build_tlist_to_deparse(RelOptInfo* foreignrel);
-void         getUsedColumns        (Expr* expr, DB2Table* db2Table, int foreignrelid);
-void         appendConditions      (List* exprs, StringInfo buf, RelOptInfo* joinrel, List** params_list);
-char*        createQuery           (DB2FdwState* fdwState, RelOptInfo* foreignrel, bool modify, List* query_pathkeys);
-void         deparseFromExprForRel (DB2FdwState* fdwState, StringInfo buf, RelOptInfo* foreignrel, List** params_list);
-ForeignScan* db2GetForeignPlan     (PlannerInfo* root, RelOptInfo* foreignrel, Oid foreigntableid, ForeignPath* best_path, List* tlist, List* scan_clauses , Plan* outer_plan);
+       ForeignScan* db2GetForeignPlan       (PlannerInfo* root, RelOptInfo* foreignrel, Oid foreigntableid, ForeignPath* best_path, List* tlist, List* scan_clauses , Plan* outer_plan);
+static void         getUsedColumns          (Expr* expr, RelOptInfo* foreignrel, DB2ResultColumn* resCol);
+static void         copyCol2Result          (DB2ResultColumn*  resCol, DB2Column* db2Column);
 
-/** db2GetForeignPlan
- *   Construct a ForeignScan node containing the serialized DB2FdwState,
- *   the RestrictInfo clauses not handled entirely by DB2 and the list
- *   of parameters we need for execution.
+/* postgresGetForeignPlan
+ * Create ForeignScan plan node which implements selected best path
  */
-ForeignScan* db2GetForeignPlan (PlannerInfo* root, RelOptInfo* foreignrel, Oid foreigntableid, ForeignPath* best_path, List* tlist, List* scan_clauses , Plan* outer_plan) {
-  DB2FdwState* fdwState    = (DB2FdwState*) foreignrel->fdw_private;
-  List*        fdw_private = NIL;
-  int          i;
-  bool         need_keys  = false, 
-               for_update = false,
-               has_trigger;
-  Relation     rel;
-  Index        scan_relid;                               /* will be 0 for join relations */
-  List*        local_exprs    = fdwState->local_conds;
-  List*        fdw_scan_tlist = NIL;
-  ForeignScan* result         = NULL;
+ForeignScan* db2GetForeignPlan(PlannerInfo* root, RelOptInfo* foreignrel, Oid foreigntableid, ForeignPath* best_path, List* tlist, List* scan_clauses, Plan* outer_plan) {
+  DB2FdwState*   fpinfo            = (DB2FdwState*) foreignrel->fdw_private;
+  ForeignScan*   fscan             = NULL;
+  List*          fdw_private       = NIL;
+  List*          remote_exprs      = NIL;
+  List*          local_exprs       = NIL;
+  List*          params_list       = NIL;
+  List*          fdw_recheck_quals = NIL;
+  List*          retrieved_attrs   = NIL;
+  List*          ptlist            = NIL;
+  int            ptlist_len        = 0; 
+  ListCell*      lc                = NULL;
+  bool           has_final_sort    = false;
+  bool           has_limit         = false;
+  Index          scan_relid;
+  StringInfoData sql;
 
-  db2Debug1("> db2GetForeignPlan");
-  /* treat base relations and join relations differently */
-  if (IS_SIMPLE_REL (foreignrel)) {
-    /* for base relations, set scan_relid as the relid of the relation */
+  db2Entry1();
+  /* Get FDW private data created by db2GetForeignUpperPaths(), if any. */
+  if (best_path->fdw_private) {
+    #if PG_VERSION_NUM < 150000
+    has_final_sort  = intVal(list_nth(best_path->fdw_private, FdwPathPrivateHasFinalSort));
+    has_limit       = intVal(list_nth(best_path->fdw_private,	FdwPathPrivateHasLimit));
+    #else
+    has_final_sort  = boolVal(list_nth(best_path->fdw_private, FdwPathPrivateHasFinalSort));
+    has_limit       = boolVal(list_nth(best_path->fdw_private, FdwPathPrivateHasLimit));
+    #endif
+  }
+
+  db2Debug2("length of tlist: %d", list_length(tlist));
+
+  /*
+   * fdw_scan_tlist must contain all base Vars required to evaluate local
+   * quals and to compute any non-pushed-down target expressions.
+   *
+   * Using a non-flattened PathTarget tlist here can leave out Vars that are
+   * only referenced inside expressions (e.g. salary + bonus + comm), which can
+   * lead to setrefs.c errors like "variable not found in subplan target list".
+   */
+  ptlist     = build_tlist_to_deparse(foreignrel);
+  ptlist_len = list_length(ptlist);
+
+  if (IS_SIMPLE_REL(foreignrel)) {
+//    DB2ResultColumn** cols      = NULL;
+    ListCell*         cell      = NULL;
+//    int               iResCol   = 0;
+
+    db2Debug3("base relation scan: set scan_relid to %d", foreignrel->relid);
+    /* For base relations, set scan_relid as the relid of the relation. */
     scan_relid = foreignrel->relid;
-    /* check if the foreign scan is for an UPDATE or DELETE */
-#if PG_VERSION_NUM < 140000
-    if (foreignrel->relid == root->parse->resultRelation && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)) {
-#else
-    if (bms_is_member(foreignrel->relid, root->all_result_relids) && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)) {
-#endif  /* PG_VERSION_NUM */
-      /* we need the table's primary key columns */
-      need_keys = true;
-    }
-    /* check if FOR [KEY] SHARE/UPDATE was specified */
-    if (need_keys || get_parse_rowmark (root->parse, foreignrel->relid)) {
-      /* we should add FOR UPDATE */
-      for_update = true;
-    }
-    if (need_keys) {
-      /* we need to fetch all primary key columns */
-      for (i = 0; i < fdwState->db2Table->ncols; ++i) {
-        if (fdwState->db2Table->cols[i]->colPrimKeyPart) {
-          fdwState->db2Table->cols[i]->used = 1;
-        }
-      }
-    }
+
     /*
-     * Core code already has some lock on each rel being planned, so we can
-     * use NoLock here.
+     * If we have any locally-evaluated quals, they might reference Vars that are
+     * *not* part of the query's output targetlist. Those Vars must still be
+     * available in the ForeignScan's tuple slot, otherwise setrefs.c can error
+     * out with "variable not found in subplan target list".
+     *
+     * IMPORTANT:
+     * We must include Vars referenced by quals that can be evaluated locally.
+     * That includes:
+     *  - fpinfo->local_conds (not shippable), and
+     *  - fpinfo->remote_conds, because they are stored in fdw_recheck_quals and
+     *    can be evaluated locally during EPQ recheck.
+     *
+     * The remote SELECT list must also include these Vars; deparseSelectSql()
+     * is responsible for honoring the fdw_scan_tlist (ptlist) for base rels.
      */
-    rel = table_open (foreigntableid, NoLock);
-    /* is there an AFTER trigger FOR EACH ROW? */
-    has_trigger = (foreignrel->relid == root->parse->resultRelation) 
-                && rel->trigdesc 
-                && ((root->parse->commandType == CMD_UPDATE && rel->trigdesc->trig_update_after_row) || (root->parse->commandType == CMD_DELETE && rel->trigdesc->trig_delete_after_row));
-    table_close (rel, NoLock);
-    if (has_trigger) {
-      /* we need to fetch and return all columns */
-      for (i = 0; i < fdwState->db2Table->ncols; ++i) {
-        if (fdwState->db2Table->cols[i]->pgname) {
-          fdwState->db2Table->cols[i]->used = 1;
+    {
+      List*     qual_vars = NIL;
+      ListCell* c = NULL;
+
+      foreach (c, fpinfo->local_conds) {
+        RestrictInfo* rinfo = lfirst_node(RestrictInfo, c);
+        qual_vars = list_concat(qual_vars, pull_var_clause((Node*) rinfo->clause, PVC_RECURSE_PLACEHOLDERS));
+      }
+
+      foreach (c, fpinfo->remote_conds) {
+        RestrictInfo* rinfo = lfirst_node(RestrictInfo, c);
+        qual_vars = list_concat(qual_vars, pull_var_clause((Node*) rinfo->clause, PVC_RECURSE_PLACEHOLDERS));
+      }
+
+      if (qual_vars != NIL) {
+        ListCell* v = NULL;
+
+        ptlist = add_to_flat_tlist(ptlist, qual_vars);
+        ptlist_len = list_length(ptlist);
+
+        foreach (v, qual_vars) {
+          Var* var = lfirst_node(Var, v);
+
+          /* Ignore system columns and whole-row refs. */
+          if (var->varattno <= 0)
+            continue;
+
+          if (tlist_member((Expr*) var, tlist) == NULL) {
+            char*       attname = get_attname(foreigntableid, var->varattno, false);
+            TargetEntry* tle = makeTargetEntry((Expr*) copyObject(var), list_length(tlist) + 1, attname, true);
+
+            /* makeTargetEntry(..., resjunk=true) already sets resjunk */
+            tlist = lappend(tlist, tle);
+          }
         }
       }
     }
+
+    if (ptlist_len > 0) {
+      DB2ResultColumn* resCol = NULL;
+      DB2ResultColumn* tail   = NULL;
+      int              resnum = 0;
+
+      /*
+       * Build fpinfo->resultList in the same order as ptlist (which is also the
+       * order used to deparse the remote SELECT-list). Do NOT sort by pgattnum:
+       * that can reorder resjunk columns and desynchronize resnum vs DB2 cursor
+       * column positions, leading to mis-fetched values (e.g. WORKDEPT receiving
+       * SALARY bytes).
+       */
+      fpinfo->resultList = NULL;
+      db2Debug3("size of tlist: %d", ptlist_len);
+      foreach (cell, ptlist) {
+        DB2ResultColumn* scan = NULL;
+        bool             dup  = false;
+
+        resCol = (DB2ResultColumn*) db2alloc(sizeof(DB2ResultColumn), "resCol");
+        getUsedColumns((Expr*) lfirst(cell), foreignrel, resCol);
+
+        if (resCol->colName == NULL || resCol->pgattnum > fpinfo->db2Table->npgcols) {
+          db2free(resCol, "resCol");
+          continue;
+        }
+
+        /* De-duplicate by pgattnum (same base relation). */
+        for (scan = fpinfo->resultList; scan; scan = scan->next) {
+          if (scan->pgattnum == resCol->pgattnum) {
+            dup = true;
+            break;
+          }
+        }
+        if (dup) {
+          db2free(resCol, "resCol");
+          continue;
+        }
+
+        resCol->resnum = ++resnum;
+        resCol->next = NULL;
+        if (fpinfo->resultList == NULL) {
+          fpinfo->resultList = resCol;
+          tail = resCol;
+        } else {
+          tail->next = resCol;
+          tail = resCol;
+        }
+      }
+
+      /* examine each condition for Var nodes */
+      db2Debug3("size of conditions: %d", list_length(foreignrel->baserestrictinfo));
+      foreach (cell, foreignrel->baserestrictinfo) {
+        db2Debug3("examine condition");
+        getUsedColumns((Expr*) lfirst(cell), foreignrel, NULL);
+      }
+    }
+    /* In a base-relation scan, we must apply the given scan_clauses.
+     *
+     * Separate the scan_clauses into those that can be executed remotely and those that can't.
+     * baserestrictinfo clauses that were previously determined to be safe or unsafe by classifyConditions
+     * are found in fpinfo->remote_conds and fpinfo->local_conds.
+     * Anything else in the scan_clauses list will be a join clause, which we have to check for remote-safety.
+     *
+     * Note: the join clauses we see here should be the exact same ones previously examined by postgresGetForeignPaths.
+     * Possibly it'd be worth passing forward the classification work done then, rather than repeating it here.
+     *
+     * This code must match "extract_actual_clauses(scan_clauses, false)" except for the additional decision about remote versus local execution.
+     */
+    foreach(lc, scan_clauses) {
+      RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+      /* Ignore any pseudoconstants, they're dealt with elsewhere */
+      if (rinfo->pseudoconstant)
+        continue;
+      if (list_member_ptr(fpinfo->remote_conds, rinfo))
+        remote_exprs = lappend(remote_exprs, rinfo->clause);
+      else if (list_member_ptr(fpinfo->local_conds, rinfo))
+        local_exprs = lappend(local_exprs, rinfo->clause);
+      else if (is_foreign_expr(root, foreignrel, rinfo->clause))
+        remote_exprs = lappend(remote_exprs, rinfo->clause);
+      else
+        local_exprs = lappend(local_exprs, rinfo->clause);
+    }
+
+    /* For a base-relation scan, we have to support EPQ recheck, which should recheck all the remote quals. */
+    fdw_recheck_quals = remote_exprs;
   } else {
-    /* we have a join relation, so set scan_relid to 0 */
+    db2Debug3("join relation scan: set scan_relid to 0");
+    /* Join relation or upper relation - set scan_relid to 0. */
     scan_relid = 0;
-    /*
-     * create_scan_plan() and create_foreignscan_plan() pass
-     * rel->baserestrictinfo + parameterization clauses through
-     * scan_clauses. For a join rel->baserestrictinfo is NIL and we are
-     * not considering parameterization right now, so there should be no
-     * scan_clauses for a joinrel.
+
+    /* For a join rel, baserestrictinfo is NIL and we are not considering parameterization right now, 
+     * so there should be no scan_clauses for a joinrel or an upper rel either.
      */
-    Assert (!scan_clauses);
-    /* Build the list of columns to be fetched from the foreign server. */
-    fdw_scan_tlist = build_tlist_to_deparse (foreignrel);
-    /*
-     * Ensure that the outer plan produces a tuple whose descriptor
-     * matches our scan tuple slot. This is safe because all scans and
-     * joins support projection, so we never need to insert a Result node.
-     * Also, remove the local conditions from outer plan's quals, lest
-     * they will be evaluated twice, once by the local plan and once by
-     * the scan.
+    Assert(!scan_clauses);
+
+    /* Instead we get the conditions to apply from the fdw_private structure. */
+    remote_exprs  = extract_actual_clauses(fpinfo->remote_conds, false);
+    local_exprs   = extract_actual_clauses(fpinfo->local_conds, false);
+
+    /* We leave fdw_recheck_quals empty in this case, since we never need to apply EPQ recheck clauses.  In the case of a joinrel, EPQ
+     * recheck is handled elsewhere --- see postgresGetForeignJoinPaths().
+     * If we're planning an upperrel (ie, remote grouping or aggregation) then there's no EPQ to do because SELECT FOR UPDATE wouldn't be
+     * allowed, and indeed we *can't* put the remote clauses into fdw_recheck_quals because the unaggregated Vars won't be available
+     * locally.
+     * 
+     * Build the list of columns to be fetched from the foreign server.
+     */
+    if (ptlist_len > 0) {
+      ListCell*   cell    = NULL;
+      int         resnum  = 1;
+
+      /* examine each condition for Tlist nodes; they come in the correct sequence as in the query and do not need to be sorted */
+      db2Debug3("size of tlist: %d", ptlist_len);
+      foreach (cell, ptlist) {
+        DB2ResultColumn* resCol = (DB2ResultColumn*)db2alloc(sizeof(DB2ResultColumn),"DB2ResultColumn* resCol");
+        db2Debug3("examine tlist");
+        resCol->next       = fpinfo->resultList;
+        fpinfo->resultList = resCol;
+        resCol->resnum     = resnum;
+        getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
+        db2Debug3("result column %d: %s", resCol->resnum, resCol->colName);
+        resnum++;
+      }
+
+      /*
+       * The loop above prepends each entry, so fpinfo->resultList is built in
+       * reverse order.  For joinrels/upperrels we rely on the SELECT-list order
+       * to match result bindings (resnum / DB2 column positions).
+       */
+      {
+        DB2ResultColumn* prev = NULL;
+        DB2ResultColumn* cur  = fpinfo->resultList;
+
+        while (cur) {
+          DB2ResultColumn* next = cur->next;
+          cur->next = prev;
+          prev = cur;
+          cur = next;
+        }
+
+        fpinfo->resultList = prev;
+      }
+    }
+
+    /* Ensure that the outer plan produces a tuple whose descriptor matches our scan tuple slot.  Also, remove the local conditions
+     * from outer plan's quals, lest they be evaluated twice, once by the local plan and once by the scan.
      */
     if (outer_plan) {
-      ListCell* lc;
-      outer_plan->targetlist = fdw_scan_tlist;
-      foreach (lc, local_exprs) {
-        Join* join_plan  = (Join*) outer_plan;
-        Node* qual       = lfirst (lc);
-        outer_plan->qual = list_delete (outer_plan->qual, qual);
-        /*
-         * For an inner join the local conditions of foreign scan plan
-         * can be part of the joinquals as well.
+      db2Debug3("adjusting outer plan's targetlist and quals to match scan's needs");
+      /* Right now, we only consider grouping and aggregation beyond joins. 
+       * Queries involving aggregates or grouping do not require EPQ mechanism, hence should not have an outer plan here.
+       */
+      Assert(!IS_UPPER_REL(foreignrel));
+      /* First, update the plan's qual list if possible.
+       * In some cases the quals might be enforced below the topmost plan level, in which case we'll fail to remove them; it's not worth working
+       * harder than this.
+       */
+      foreach(lc, local_exprs) {
+        Node* qual  = lfirst(lc);
+
+        outer_plan->qual = list_delete(outer_plan->qual, qual);
+        /* For an inner join the local conditions of foreign scan plan can be part of the joinquals as well.
+         * (They might also be in the mergequals or hashquals, but we can't touch those without breaking the plan.)
          */
-        if (join_plan->jointype == JOIN_INNER) {
-           join_plan->joinqual = list_delete (join_plan->joinqual, qual);
+        if (IsA(outer_plan, NestLoop) || IsA(outer_plan, MergeJoin) || IsA(outer_plan, HashJoin)) {
+          Join* join_plan = (Join*) outer_plan;
+
+          if (join_plan->jointype == JOIN_INNER)
+            join_plan->joinqual = list_delete(join_plan->joinqual, qual);
         }
       }
+      /* Now fix the subplan's tlist --- this might result in inserting a Result node atop the plan tree. */
+      outer_plan = change_plan_targetlist(outer_plan, tlist, best_path->path.parallel_safe);
     }
   }
-  /* create remote query */
-  fdwState->query = createQuery (fdwState, foreignrel, for_update, best_path->path.pathkeys);
-  db2Debug2("  db2_fdw: remote query is: %s", fdwState->query);
-  /* get PostgreSQL column data types, check that they match DB2's */
-  for (i = 0; i < fdwState->db2Table->ncols; ++i) {
-    if (fdwState->db2Table->cols[i]->used) {
-      checkDataType (fdwState->db2Table->cols[i]->colType
-                    ,fdwState->db2Table->cols[i]->colScale
-                    ,fdwState->db2Table->cols[i]->pgtype
-                    ,fdwState->db2Table->pgname
-                    ,fdwState->db2Table->cols[i]->pgname
-                    );
-    }
-  }
-  fdw_private = serializePlanData (fdwState);
-  /*
-   * Create the ForeignScan node for the given relation.
+
+  /* Build the query string to be sent for execution, and identify expressions to be sent as parameters. */
+  initStringInfo(&sql);
+  deparseSelectStmtForRel(&sql, root, foreignrel, ptlist, remote_exprs, best_path->path.pathkeys, has_final_sort, has_limit, false, &retrieved_attrs, &params_list);
+  db2Debug2("deparsed foreign query: %s", sql.data);
+  /* Remember remote_exprs for possible use by postgresPlanDirectModify */
+  fpinfo->final_remote_exprs = remote_exprs;
+
+  /* Build the fdw_private list that will be available to the executor.
+   * Items in the list must match order in enum FdwScanPrivateIndex.
+   */
+  fpinfo->query             = sql.data;
+  fpinfo->retrieved_attr    = retrieved_attrs;
+  fdw_private               = serializePlanData(fpinfo);
+  
+  /* Create the ForeignScan node for the given relation.
    *
    * Note that the remote parameter expressions are stored in the fdw_exprs
    * field of the finished plan node; we can't keep them in private state
    * because then they wouldn't be subject to later planner processing.
    */
-
-  result = make_foreignscan (tlist, local_exprs, scan_relid, fdwState->params, fdw_private, fdw_scan_tlist, NIL, outer_plan);
-  db2Debug1("< db2GetForeignPlan");
-  return result;
+  fscan = make_foreignscan(tlist, local_exprs, scan_relid, params_list, fdw_private, ptlist, fdw_recheck_quals, outer_plan);
+  db2Exit1(": %x",fscan);
+  return fscan;
 }
 
-/** createQuery
- *   Construct a query string for DB2 that
- *   a) contains only the necessary columns in the SELECT list
- *   b) has all the WHERE and ORDER BY clauses that can safely be translated to DB2.
- *   Untranslatable clauses are omitted and left for PostgreSQL to check.
- *   "query_pathkeys" contains the desired sort order of the scan results
- *   which will be translated to ORDER BY clauses if possible.
- *   As a side effect for base relations, we also mark the used columns in db2Table.
+/* getUsedColumns
+ * Set "used=true" in db2Table for all columns used in the expression.
  */
-char* createQuery (DB2FdwState* fdwState, RelOptInfo* foreignrel, bool modify, List* query_pathkeys) {
-  ListCell*      cell;
-  bool           in_quote = false;
-  int            i, index;
-  char*          wherecopy, *p, md5[33], parname[10], *separator = "";
-  StringInfoData query, result;
-  List*          columnlist, *conditions = foreignrel->baserestrictinfo;
-  #if PG_VERSION_NUM >= 150000
-  const char*    errstr = NULL;
-  #endif
+static void getUsedColumns (Expr* expr, RelOptInfo* foreignrel, DB2ResultColumn* resCol) {
+  ListCell* cell  = NULL;
 
-  db2Debug1("> createQuery");
-
-  columnlist = foreignrel->reltarget->exprs;
-
-  if (IS_SIMPLE_REL (foreignrel)) {
-    db2Debug3("  IS_SIMPLE_REL");
-    /* find all the columns to include in the select list */
-    /* examine each SELECT list entry for Var nodes */
-    db2Debug3("  size of columnlist: %d", list_length(columnlist));
-    foreach (cell, columnlist) {
-      db2Debug3("  examine column");
-      getUsedColumns ((Expr*) lfirst (cell), fdwState->db2Table, foreignrel->relid);
-    }
-    /* examine each condition for Var nodes */
-    db2Debug3("  size of conditions: %d", list_length(conditions));
-    foreach (cell, conditions) {
-      db2Debug3("  examine condition");
-      getUsedColumns ((Expr *) lfirst (cell), fdwState->db2Table, foreignrel->relid);
-    }
-  }
-
-  /* construct SELECT list */
-  initStringInfo (&query);
-  for (i = 0; i < fdwState->db2Table->ncols; ++i) {
-    db2Debug2("  %s.%s.->used: %d",fdwState->db2Table->name,fdwState->db2Table->cols[i]->colName,fdwState->db2Table->cols[i]->used);
-    if (fdwState->db2Table->cols[i]->used) {
-      StringInfoData alias;
-      initStringInfo (&alias);
-      /* table alias is created from range table index */
-      ADD_REL_QUALIFIER (&alias, fdwState->db2Table->cols[i]->varno);
-
-      /* add qualified column name */
-      appendStringInfo (&query, "%s%s%s", separator, alias.data, fdwState->db2Table->cols[i]->colName);
-      separator = ", ";
-    }
-  }
-
-  /* dummy column if there is no result column we need from DB2 */
-  if (separator[0] == '\0')
-    appendStringInfo (&query, "'1'");
-
-  /* append FROM clause */
-  appendStringInfo (&query, " FROM ");
-  deparseFromExprForRel (fdwState, &query, foreignrel, &(fdwState->params));
-
-  /*
-   * For inner joins, all conditions that are pushed down get added
-   * to fdwState->joinclauses and have already been added above,
-   * so there is no extra WHERE clause.
-   */
-  if (IS_SIMPLE_REL (foreignrel)) {
-    /* append WHERE clauses */
-    if (fdwState->where_clause)
-      appendStringInfo (&query, "%s", fdwState->where_clause);
-  }
-
-  /* append ORDER BY clause if all its expressions can be pushed down */
-  if (fdwState->order_clause)
-    appendStringInfo (&query, " ORDER BY%s", fdwState->order_clause);
-
-  /* append FOR UPDATE if if the scan is for a modification */
-  if (modify)
-    appendStringInfo (&query, " FOR UPDATE");
-
-  /* get a copy of the where clause without single quoted string literals */
-  wherecopy = db2strdup (query.data);
-  for (p = wherecopy; *p != '\0'; ++p) {
-    if (*p == '\'')
-      in_quote = !in_quote;
-    if (in_quote)
-      *p = ' ';
-  }
-
-  /* remove all parameters that do not actually occur in the query */
-  index = 0;
-  foreach (cell, fdwState->params) {
-    ++index;
-    snprintf (parname, 10, ":p%d", index);
-    if (strstr (wherecopy, parname) == NULL) {
-      /* set the element to NULL to indicate it's gone */
-      lfirst (cell) = NULL;
-    }
-  }
-
-  db2free (wherecopy);
-
-  /*
-   * Calculate MD5 hash of the query string so far.
-   * This is needed to find the query in DB2's library cache for EXPLAIN.
-   */
-#if PG_VERSION_NUM >= 150000
-  if (!pg_md5_hash (query.data, strlen (query.data), md5,&errstr)) {
-    ereport (ERROR, (errcode (ERRCODE_OUT_OF_MEMORY), errmsg ("out of memory")));
-  }
-#else
-if (!pg_md5_hash (query.data, strlen (query.data), md5)) {
-     ereport (ERROR, (errcode (ERRCODE_OUT_OF_MEMORY), errmsg ("out of memory")));
-  }
-#endif
-  /* add comment with MD5 hash to query */
-  initStringInfo (&result);
-  appendStringInfo (&result, "SELECT /*%s*/ %s", md5, query.data);
-  db2free (query.data);
-
-  db2Debug1("< createQuery returns: '%s'",result.data);
-  return result.data;
-}
-
-/** deparseFromExprForRel
- *   Construct FROM clause for given relation.
- *   The function constructs ... JOIN ... ON ... for join relation. For a base
- *   relation it just returns the table name.
- *   All tables get an alias based on the range table index.
- */
-void deparseFromExprForRel (DB2FdwState* fdwState, StringInfo buf, RelOptInfo* foreignrel, List** params_list) {
-  db2Debug1("> deparseFromExprForRel");
-  db2Debug2("  buf: '%s",buf->data);
-  if (IS_SIMPLE_REL (foreignrel)) {
-    appendStringInfo (buf, "%s", fdwState->db2Table->name);
-
-    appendStringInfo (buf, " %s%d", REL_ALIAS_PREFIX, foreignrel->relid);
-  } else {
-    /* join relation */
-    RelOptInfo *rel_o = fdwState->outerrel;
-    RelOptInfo *rel_i = fdwState->innerrel;
-    StringInfoData join_sql_o;
-    StringInfoData join_sql_i;
-    DB2FdwState* fdwState_o = (DB2FdwState*) rel_o->fdw_private;
-    DB2FdwState* fdwState_i = (DB2FdwState*) rel_i->fdw_private;
-
-    /* Deparse outer relation */
-    initStringInfo (&join_sql_o);
-    deparseFromExprForRel (fdwState_o, &join_sql_o, rel_o, params_list);
-
-    /* Deparse inner relation */
-    initStringInfo (&join_sql_i);
-    deparseFromExprForRel (fdwState_i, &join_sql_i, rel_i, params_list);
-
-    /*
-     * For a join relation FROM clause entry is deparsed as
-     *
-     * (outer relation) <join type> (inner relation) ON joinclauses
-     */
-    appendStringInfo (buf, "(%s %s JOIN %s ON ", join_sql_o.data, get_jointype_name (fdwState->jointype), join_sql_i.data);
-
-    /* we can only get here if the join is pushed down, so there are join clauses */
-    Assert (fdwState->joinclauses);
-    appendConditions (fdwState->joinclauses, buf, foreignrel, params_list);
-
-    /* End the FROM clause entry. */
-    appendStringInfo (buf, ")");
-  }
-  db2Debug2("  buf: '%s'",buf->data);
-  db2Debug1("< deparseFromExprForRel");
-}
-
-/** appendConditions
- *  Deparse conditions from the provided list and append them to buf.
- *    The conditions in the list are assumed to be ANDed.
- *    This function is used to deparse JOIN ... ON clauses.
- */
-void appendConditions(List* exprs, StringInfo buf, RelOptInfo* joinrel, List** params_list) {
-    ListCell *lc = NULL;
-    bool is_first = true;
-    char *where = NULL;
-
-    db2Debug1("> appendConditions( buf = '%s' )", buf->data);
-    foreach (lc, exprs)
-    {
-        Expr *expr = (Expr *)lfirst(lc);
-        /* connect expressions with AND */
-        if (!is_first)
-            appendStringInfo(buf, " AND ");
-        /* deparse and append a join condition */
-        where = deparseExpr(NULL, joinrel, expr, NULL, params_list);
-        appendStringInfo(buf, "%s", where);
-        is_first = false;
-    }
-    db2Debug2("  buf.data: '%s'", buf->data);
-    db2Debug1("< appendConditions");
-}
-
-/** getUsedColumns
- *   Set "used=true" in db2Table for all columns used in the expression.
- */
-void getUsedColumns (Expr* expr, DB2Table* db2Table, int foreignrelid) {
-  ListCell* cell;
-  Var*      variable;
-  int       index;
-
-  db2Debug1("> getUsedColumns");
+  db2Entry3();
   if (expr != NULL) {
+    db2Debug4("examine node of type: %d", expr->type);
     switch (expr->type) {
       case T_RestrictInfo:
-        getUsedColumns (((RestrictInfo*) expr)->clause, db2Table, foreignrelid);
+        getUsedColumns (((RestrictInfo*) expr)->clause, foreignrel, resCol);
       break;
       case T_TargetEntry:
-        getUsedColumns (((TargetEntry*) expr)->expr, db2Table, foreignrelid);
+        getUsedColumns (((TargetEntry*) expr)->expr, foreignrel, resCol);
       break;
       case T_Const:
       case T_Param:
@@ -383,238 +368,303 @@ void getUsedColumns (Expr* expr, DB2Table* db2Table, int foreignrelid) {
       case T_CurrentOfExpr:
       case T_NextValueExpr:
       break;
-      case T_Var:
-        variable = (Var*) expr;
+      case T_Var: {
+        DB2FdwState*  fpinfo  = (DB2FdwState*) foreignrel->fdw_private;
+        Var*          var     = NULL;
+        int           index   = 0;
+        int           relid   = 0;
+
+        var = (Var*) expr;
+        db2Debug4("var->varattno: %d", var->varattno); 
+
+        /*
+         * For joinrels, Vars can refer to join inputs via OUTER_VAR/INNER_VAR.
+         * Attribute numbers can overlap between the two inputs, so matching only
+         * on varattno can bind the wrong column (and later mis-convert values).
+         *
+         * Resolve OUTER_VAR/INNER_VAR to the underlying child's relid so we can
+         * match on (pgrelid, pgattnum).
+         */
+        relid = var->varno;
+        if (!IS_SIMPLE_REL(foreignrel) && fpinfo) {
+          if (relid == OUTER_VAR && fpinfo->outerrel)
+            relid = fpinfo->outerrel->relid;
+          else if (relid == INNER_VAR && fpinfo->innerrel)
+            relid = fpinfo->innerrel->relid;
+        }
+
         /* ignore system columns */
-        if (variable->varattno < 0)
+        if (var->varattno < 0)
           break;
         /* if this is a wholerow reference, we need all columns */
-        if (variable->varattno == 0) {
-          for (index = 0; index < db2Table->ncols; ++index)
-            if (db2Table->cols[index]->pgname)
-              db2Table->cols[index]->used = 1;
+        if (var->varattno == 0) {
+          DB2ResultColumn* tmpCol = NULL;
+          db2Debug4("found whole-row reference, need to add all columns");
+          db2Debug4("fpinfo->resultList: %x", fpinfo->resultList);
+          // add all columns but the last one here
+          for (index = 0; index < (fpinfo->db2Table->ncols - 1); index++) {
+            if (fpinfo->db2Table->cols[index]->pgname) {
+              tmpCol = (DB2ResultColumn*)db2alloc(sizeof(DB2ResultColumn),"tmpCol");
+              tmpCol->resnum     = index+1;
+              copyCol2Result(tmpCol,fpinfo->db2Table->cols[index]);
+              db2Debug4("db2Table[%d]->colName %s added to result list", index, fpinfo->db2Table->cols[index]->colName);
+              tmpCol->next       = fpinfo->resultList;
+              db2Debug4("tmpCol-next: %x", tmpCol->next);
+              fpinfo->resultList = tmpCol;
+              db2Debug4("fpinfo->resultList: %x", fpinfo->resultList);
+            }
+          }
+          // now add the last colum using the resCol passed in, so that the column name in the result list is correct for whole row reference
+          copyCol2Result(resCol,fpinfo->db2Table->cols[index]);
+          resCol->resnum     = index+1;
+          db2Debug4("db2Table[%d]->colName %s added to result list", index, fpinfo->db2Table->cols[index]->colName);
           break;
-        }
-        /* get db2Table column index corresponding to this column (-1 if none) */
-        index = db2Table->ncols - 1;
-        while (index >= 0 && db2Table->cols[index]->pgattnum != variable->varattno) {
-          --index;
-        }
-        if (index == -1) {
-          ereport (WARNING, (errcode (ERRCODE_WARNING),errmsg ("column number %d of foreign table \"%s\" does not exist in foreign DB2 table, will be replaced by NULL", variable->varattno, db2Table->pgname)));
         } else {
-          db2Table->cols[index]->used = 1;
+          /* get db2Table column index corresponding to this column (-1 if none) */
+          index = fpinfo->db2Table->ncols - 1;
+          while (index >= 0 && (fpinfo->db2Table->cols[index]->pgattnum != var->varattno ||
+                                (relid != 0 && fpinfo->db2Table->cols[index]->pgrelid != relid))) {
+            --index;
+          }
+          if (index == -1) {
+            ereport (WARNING, (errcode (ERRCODE_WARNING),errmsg ("column number %d of foreign table \"%s\" does not exist in foreign DB2 table, will be replaced by NULL", var->varattno, fpinfo->db2Table->pgname)));
+          } else {
+            copyCol2Result(resCol,fpinfo->db2Table->cols[index]);
+          }
         }
+      }
       break;
-      case T_Aggref:
-        foreach (cell, ((Aggref*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+      case T_Aggref: {
+        Aggref* aggref = (Aggref*) expr;
+        /* Resolve aggregate function name (OID -> pg_proc.proname). */
+        HeapTuple tuple   = SearchSysCache1(PROCOID, ObjectIdGetDatum(aggref->aggfnoid));
+        char*     aggname = NULL;
+        char*     nspname = NULL;
+        if (HeapTupleIsValid(tuple)) {
+          Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(tuple);
+          aggname = pstrdup(NameStr(procform->proname));
+          /* Optional: capture schema for debugging/qualification decisions. */
+          if (OidIsValid(procform->pronamespace)) {
+            HeapTuple ntup = SearchSysCache1(NAMESPACEOID, ObjectIdGetDatum(procform->pronamespace));
+            if (HeapTupleIsValid(ntup)) {
+              Form_pg_namespace nspform = (Form_pg_namespace) GETSTRUCT(ntup);
+              nspname = pstrdup(NameStr(nspform->nspname));
+              ReleaseSysCache(ntup);
+            }
+          }
+          ReleaseSysCache(tuple);
         }
-        foreach (cell, ((Aggref*) expr)->aggorder) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+        db2Debug4("aggref->aggfnoid=%u name=%s%s%s", aggref->aggfnoid, nspname ? nspname : "", nspname ? "." : "", aggname ? aggname : "<unknown>");
+        if (aggname && strcmp(aggname, "count") == 0) {
+          DB2FdwState*  fpinfo  = (DB2FdwState*) foreignrel->fdw_private;
+          /* if it's a COUNT(*) then we need an additional result */
+          DB2Column* col = db2alloc(sizeof(DB2Column),"DB2Column* col");
+          db2Debug4("found COUNT aggregate");
+          col->colName        = "count";
+          col->colType        = -5; // SQL_BIGINT type in DB2, which can hold the result of COUNT(*)
+          col->colSize        = 8;
+          col->colScale       = 0;
+          col->colNulls       = 1;
+          col->colChars       = 23; // max number of characters needed to represent a 8-byte integer, including sign
+          col->colBytes       = 8;
+          col->colPrimKeyPart = 0;
+          col->colCodepage    = 0; 
+          col->pgname         = "count";
+          col->pgattnum       = 0;
+          col->pgtype         = INT8OID;
+          col->pgtypmod       = -1;
+          col->used           = 1;
+          col->pkey           = 0;
+          col->val_size       = 24;
+          col->noencerr       = fpinfo->db2Table->cols[0]->noencerr; // use same noencerr as first column 
+          copyCol2Result(resCol,col);
+        } else {
+          db2Debug4("count aggref->args: %d",list_length(aggref->args));
+          foreach (cell, aggref->args) {
+            getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
+          }
+          foreach (cell, aggref->aggorder) {
+            getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
+          }
+          foreach (cell, aggref->aggdistinct) {
+            getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
+          }
         }
-        foreach (cell, ((Aggref*) expr)->aggdistinct) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
-        }
+      }
       break;
       case T_WindowFunc:
         foreach (cell, ((WindowFunc*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_SubscriptingRef: {
         SubscriptingRef* ref = (SubscriptingRef*) expr;
         foreach(cell, ref->refupperindexpr) {
-          getUsedColumns((Expr*)lfirst(cell), db2Table, foreignrelid);
+          getUsedColumns((Expr*)lfirst(cell), foreignrel, resCol);
         }
         foreach(cell, ref->reflowerindexpr) {
-          getUsedColumns((Expr*)lfirst(cell), db2Table, foreignrelid);
+          getUsedColumns((Expr*)lfirst(cell), foreignrel, resCol);
         }
-        getUsedColumns(ref->refexpr, db2Table, foreignrelid);
-        getUsedColumns(ref->refassgnexpr, db2Table, foreignrelid);
+        getUsedColumns(ref->refexpr, foreignrel, resCol);
+        getUsedColumns(ref->refassgnexpr, foreignrel, resCol);
       }
       break;
       case T_FuncExpr:
         foreach (cell, ((FuncExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_OpExpr:
         foreach (cell, ((OpExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_DistinctExpr:
         foreach (cell, ((DistinctExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_NullIfExpr:
         foreach (cell, ((NullIfExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_ScalarArrayOpExpr:
         foreach (cell, ((ScalarArrayOpExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_BoolExpr:
         foreach (cell, ((BoolExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_SubPlan:
         foreach (cell, ((SubPlan*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_AlternativeSubPlan:
         /* examine only first alternative */
-        getUsedColumns ((Expr*) linitial (((AlternativeSubPlan*) expr)->subplans), db2Table, foreignrelid);
+        getUsedColumns ((Expr*) linitial (((AlternativeSubPlan*) expr)->subplans), foreignrel, resCol);
       break;
       case T_NamedArgExpr:
-        getUsedColumns (((NamedArgExpr*) expr)->arg, db2Table, foreignrelid);
+        getUsedColumns (((NamedArgExpr*) expr)->arg, foreignrel, resCol);
       break;
       case T_FieldSelect:
-        getUsedColumns (((FieldSelect*) expr)->arg, db2Table, foreignrelid);
+        getUsedColumns (((FieldSelect*) expr)->arg, foreignrel, resCol);
       break;
       case T_RelabelType:
-        getUsedColumns (((RelabelType*) expr)->arg, db2Table, foreignrelid);
+        getUsedColumns (((RelabelType*) expr)->arg, foreignrel, resCol);
       break;
       case T_CoerceViaIO:
-        getUsedColumns (((CoerceViaIO*) expr)->arg, db2Table, foreignrelid);
+        getUsedColumns (((CoerceViaIO*) expr)->arg, foreignrel, resCol);
       break;
       case T_ArrayCoerceExpr:
-        getUsedColumns (((ArrayCoerceExpr*) expr)->arg, db2Table, foreignrelid);
+        getUsedColumns (((ArrayCoerceExpr*) expr)->arg, foreignrel, resCol);
       break;
       case T_ConvertRowtypeExpr:
-        getUsedColumns (((ConvertRowtypeExpr*) expr)->arg, db2Table, foreignrelid);
+        getUsedColumns (((ConvertRowtypeExpr*) expr)->arg, foreignrel, resCol);
       break;
       case T_CollateExpr:
-        getUsedColumns (((CollateExpr*) expr)->arg, db2Table, foreignrelid);
+        getUsedColumns (((CollateExpr*) expr)->arg, foreignrel, resCol);
       break;
       case T_CaseExpr:
         foreach (cell, ((CaseExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
-        getUsedColumns (((CaseExpr*) expr)->arg, db2Table, foreignrelid);
-        getUsedColumns (((CaseExpr*) expr)->defresult, db2Table, foreignrelid);
+        getUsedColumns (((CaseExpr*) expr)->arg, foreignrel, resCol);
+        getUsedColumns (((CaseExpr*) expr)->defresult, foreignrel, resCol);
       break;
       case T_CaseWhen:
-        getUsedColumns (((CaseWhen*) expr)->expr, db2Table, foreignrelid);
-        getUsedColumns (((CaseWhen*) expr)->result, db2Table, foreignrelid);
+        getUsedColumns (((CaseWhen*) expr)->expr, foreignrel, resCol);
+        getUsedColumns (((CaseWhen*) expr)->result, foreignrel, resCol);
       break;
       case T_ArrayExpr:
         foreach (cell, ((ArrayExpr*) expr)->elements) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_RowExpr:
         foreach (cell, ((RowExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_RowCompareExpr:
         foreach (cell, ((RowCompareExpr*) expr)->largs) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
         foreach (cell, ((RowCompareExpr*) expr)->rargs) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_CoalesceExpr:
         foreach (cell, ((CoalesceExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_MinMaxExpr:
         foreach (cell, ((MinMaxExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_XmlExpr:
         foreach (cell, ((XmlExpr*) expr)->named_args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
         foreach (cell, ((XmlExpr*) expr)->args) {
-          getUsedColumns ((Expr*) lfirst (cell), db2Table, foreignrelid);
+          getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
         }
       break;
       case T_NullTest:
-        getUsedColumns (((NullTest*) expr)->arg, db2Table, foreignrelid);
+        getUsedColumns (((NullTest*) expr)->arg, foreignrel, resCol);
       break;
       case T_BooleanTest:
-        getUsedColumns (((BooleanTest*) expr)->arg, db2Table, foreignrelid);
+        getUsedColumns (((BooleanTest*) expr)->arg, foreignrel, resCol);
       break;
       case T_CoerceToDomain:
-        getUsedColumns (((CoerceToDomain*) expr)->arg, db2Table, foreignrelid);
+        getUsedColumns (((CoerceToDomain*) expr)->arg, foreignrel, resCol);
       break;
       case T_PlaceHolderVar:
-        getUsedColumns (((PlaceHolderVar*) expr)->phexpr, db2Table, foreignrelid);
+        getUsedColumns (((PlaceHolderVar*) expr)->phexpr, foreignrel, resCol);
       break;
       case T_SQLValueFunction:
         //nop
       break;                                /* contains no column references */
       default:
-        /*
-         * We must be able to handle all node types that can
-         * appear because we cannot omit a column from the remote
-         * query that will be needed.
+        /* We must be able to handle all node types that can appear because we cannot omit a column from the remote query that will be needed.
          * Throw an error if we encounter an unexpected node type.
          */
         ereport (ERROR, (errcode (ERRCODE_FDW_UNABLE_TO_CREATE_REPLY), errmsg ("Internal db2_fdw error: encountered unknown node type %d.", expr->type)));
        break;
     }
   }
-  db2Debug1("< getUsedColumns");
+  db2Exit3();
 }
 
-/** Build the targetlist for given relation to be deparsed as SELECT clause.
- *
- * The output targetlist contains the columns that need to be fetched from the
- * foreign server for the given relation.
+/* copyCol2Result
+ * Copy the column information from the db2Table column to the result column.
  */
-List* build_tlist_to_deparse (RelOptInfo* foreignrel) {
-  List*        tlist    = NIL;
-  DB2FdwState* fdwState = (DB2FdwState*) foreignrel->fdw_private;
-
-  db2Debug1("> build_tlist_to_deparse");
-  /*
-   * We require columns specified in foreignrel->reltarget->exprs and those
-   * required for evaluating the local conditions.
-   */
-  tlist = add_to_flat_tlist (tlist, pull_var_clause ((Node *) foreignrel->reltarget->exprs, PVC_RECURSE_PLACEHOLDERS));
-  tlist = add_to_flat_tlist (tlist, pull_var_clause ((Node *) fdwState->local_conds, PVC_RECURSE_PLACEHOLDERS));
-
-  db2Debug1("< build_tlist_to_deparse");
-  return tlist;
-}
-
-/** Output join name for given join type 
- */
-const char* get_jointype_name (JoinType jointype) {
-  char* type = NULL;
-  db2Debug1("> get_jointype_name");
-  switch (jointype) {
-    case JOIN_INNER:
-      type = "INNER";
-    break;
-    case JOIN_LEFT:
-      type = "LEFT";
-    break;
-    case JOIN_RIGHT:
-      type = "RIGHT";
-    break;
-    case JOIN_FULL:
-      type= "FULL";
-    break;
-    default:
-      /* Shouldn't come here, but protect from buggy code. */
-      elog (ERROR, "unsupported join type %d", jointype);
-    break;
+static void copyCol2Result(DB2ResultColumn* resCol, DB2Column* column) {
+  db2Entry4();
+  if (resCol && resCol->colName == NULL) {
+    resCol->colName        = db2strdup(column->colName,"resCol->colName");
+    resCol->colType        = column->colType;
+    resCol->colSize        = column->colSize;
+    resCol->colScale       = column->colScale;
+    resCol->colNulls       = column->colNulls;
+    resCol->colChars       = column->colChars;
+    resCol->colBytes       = column->colBytes;
+    resCol->colPrimKeyPart = column->colPrimKeyPart;
+    resCol->colCodepage    = column->colCodepage;
+    resCol->pgbaserelid    = column->pgrelid;
+    resCol->pgname         = db2strdup(column->pgname,"resCol->pgname");
+    resCol->pgattnum       = column->pgattnum;
+    resCol->pgtype         = column->pgtype;
+    resCol->pgtypmod       = column->pgtypmod;
+    resCol->pkey           = column->pkey;
+    resCol->val_size       = column->val_size;
+    resCol->noencerr       = column->noencerr;
   }
-  db2Debug2("  type: '%s'",type);
-  db2Debug1("< get_jointype_name");
-  return type;
+  db2Exit4();
 }

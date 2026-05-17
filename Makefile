@@ -2,8 +2,11 @@ EXTENSION    = db2_fdw
 EXTVERSION   = $(shell grep default_version $(EXTENSION).control | sed -e "s/default_version[[:space:]]*=[[:space:]]*'\([^']*\)'/\1/")
 MODULE_big   = db2_fdw
 OBJS         = source/db2_fdw.o\
+               source/db2_deparse.o\
+               source/db2_de_serialize.o\
                source/db2GetForeignPlan.o\
                source/db2GetForeignPaths.o\
+               source/db2GetForeignUpperPaths.o\
                source/db2GetForeignJoinPaths.o\
                source/db2AnalyzeForeignTable.o\
                source/db2ExplainForeignScan.o\
@@ -26,12 +29,12 @@ OBJS         = source/db2_fdw.o\
                source/db2ExplainForeignModify.o\
                source/db2IsForeignRelUpdatable.o\
                source/db2ImportForeignSchema.o\
+               source/db2ImportForeignSchemaData.o\
                source/db2GetFdwState.o\
                source/db2GetForeignRelSize.o\
                source/db2ReAllocFree.o\
                source/db2SetHandlers.o\
                source/db2Callbacks.o\
-               source/db2GetOptions.o\
                source/db2Debug.o\
                source/db2ServerVersion.o\
                source/db2ClientVersion.o\
@@ -44,7 +47,6 @@ OBJS         = source/db2_fdw.o\
                source/db2FreeStmtHdl.o\
                source/db2GetSession.o\
                source/db2Describe.o\
-               source/db2GetImportColumn.o\
                source/db2PrepareQuery.o\
                source/db2BindParameter.o\
                source/db2ExecuteQuery.o\
@@ -64,6 +66,10 @@ OBJS         = source/db2_fdw.o\
                source/db2Shutdown.o\
                source/db2CopyText.o\
                source/db2IsStatementOpen.o\
+               source/db2PlanDirectModify.o\
+               source/db2BeginDirectModify.o\
+               source/db2IterateDirectModify.o\
+               source/db2EndDirectModify.o\
                source/db2_utils.o
 RELEASE      = $(shell grep default_version $(EXTENSION).control | sed -e "s/default_version[[:space:]]*=[[:space:]]*'\([^']*\)'/\1/")
 DATA         = $(wildcard sql/*--*.sql)
@@ -76,7 +82,7 @@ REGRESS_OPTS = --inputdir=test
 # to your extention.
 #
 #MODULES         = $(patsubst %.c,%,$(wildcard src/*.c))
-PG_CPPFLAGS     = -g -fPIC -I$(DB2_HOME)/include -I./include
+PG_CPPFLAGS     = -fPIC -I$(DB2_HOME)/include -I./include
 SHLIB_LINK      = -fPIC -L$(DB2_HOME)/lib64 -L$(DB2_HOME)/bin  -ldb2
 PG_CONFIG      ?= pg_config
 PGXS           := $(shell $(PG_CONFIG) --pgxs)

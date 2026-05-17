@@ -1,12 +1,6 @@
 #include <string.h>
 #include <ctype.h>
-#include <sqlcli1.h>
-#include <postgres_ext.h>
 #include "db2_fdw.h"
-
-/** external variables */
-extern void   db2Debug4            (const char* message, ...);
-extern void   db2Debug5            (const char* message, ...);
 
 /** local prototypes */
 SQLSMALLINT   c2param              (SQLSMALLINT fparamType);
@@ -14,7 +8,6 @@ char*         param2name           (SQLSMALLINT fparamType);
 SQLSMALLINT   param2c              (SQLSMALLINT fcType);
 short         c2dbType             (short fcType);
 char*         c2name               (short fcType);
-void          parse2num_struct     (const char* s, SQL_NUMERIC_STRUCT* ns);
 
 /** c2param
  *   Find db2's c-Type (SQL_) from a fParamType (SQL_C_).
@@ -80,89 +73,24 @@ char* param2name(SQLSMALLINT fparamType){
  */
 SQLSMALLINT c2param (SQLSMALLINT fcType) {
   SQLSMALLINT fparamType = SQL_C_CHAR;
-  db2Debug4("> c2param(fcType: %d)",fcType);
+  db2Entry4("(fcType: %d)",fcType);
   switch (fcType) {
     case SQL_BLOB:
       fparamType = SQL_C_BLOB_LOCATOR;
-      db2Debug5("  SQL_BLOB => SQL_C_LOCATOR");
+      db2Debug5("SQL_BLOB => SQL_C_LOCATOR");
       break;
     case SQL_CLOB:
       fparamType = SQL_C_CLOB_LOCATOR;
-      db2Debug5("  SQL_COB => SQL_C_CLOB_LOCATOR");
+      db2Debug5("SQL_COB => SQL_C_CLOB_LOCATOR");
       break;
     default:
       /* all other columns are converted to strings */
       fparamType = SQL_C_CHAR;
-      db2Debug5("  %s => SQL_C_CHAR",c2name(fcType));
+      db2Debug5("%s => SQL_C_CHAR",c2name(fcType));
       break;
   }
-  db2Debug4("< c2param - fparamType: %d)",fparamType);
+  db2Exit4(": %d",fparamType);
   return fparamType;
-}
-
-/** parse2num_struct 
- *    Parsing a string containing a numeric value to a NUM_STRUCT
- *    to be used in a query.
- */
-void parse2num_struct(const char* s, SQL_NUMERIC_STRUCT* ns) {
-  const         char* dot      = strstr(s,".");
-  unsigned long long  mag      = 0;
-           long long  fracPart = 0; 
-           long long  scaled   = 0;
-           long int   intPart  = 0;
-                int   negative = 0;
-                int   fracLen  = 0;
-  db2Debug4("> parse2num_struct( '%s')",s);
-  // Simple, minimal parser: handles optional leading '-' and '.'; no thousands sep.
-  memset(ns, 0, sizeof(*ns));
-  ns->precision = 18;  // set to your target
-  ns->scale     = 3;   // e.g., DECIMAL(18,3)
-
-  if (*s == '-') { negative = 1; s++; }
-
-  // split integer.fraction
-
-  if (dot) {
-    // integer
-    for (const char* p = s; p < dot; ++p) { 
-      if (!isdigit((unsigned char)*p)) 
-        abort(); 
-      intPart = intPart*10 + (*p - '0'); 
-    }
-    // fraction (trim/round to scale as needed)
-    for (const char* p = dot+1; *p && fracLen < ns->scale; ++p, ++fracLen) {
-      if (!isdigit((unsigned char)*p))
-        abort();
-      fracPart = fracPart*10 + (*p - '0');
-    }
-    // pad fraction if shorter than scale
-    for (; fracLen < ns->scale; ++fracLen) 
-      fracPart *= 10;
-  } else {
-    for (const char* p = s; *p; ++p) {
-      if (!isdigit((unsigned char)*p))
-        abort();
-      intPart = intPart*10 + (*p - '0'); 
-    }
-  }
-
-  // combine into scaled integer: value = intPart * 10^scale + fracPart
-  scaled = intPart;
-  for (int i = 0; i < ns->scale; ++i)
-    scaled *= 10;
-  scaled += fracPart;
-  if (negative)
-    scaled = -scaled;
-  ns->sign = (scaled < 0) ? 0 : 1;   // per ODBC: 1 = positive, 0 = negative
-  mag = (scaled < 0) ? (unsigned long long)(-scaled) : (unsigned long long)scaled;
-
-  // Fill little-endian 16-byte bcd-ish buffer; DB2 reads the integer bytes.
-  // Store as binary integer magnitude; DB2 accepts this layout for SQL_NUMERIC_STRUCT.
-  for (int i = 0; i < SQL_MAX_NUMERIC_LEN; ++i) {
-    ns->val[i] = (SQLCHAR)(mag & 0xFF);
-    mag >>= 8;
-  }
-  db2Debug4("< parse2num_struct");
 }
 
 /** c2dbType

@@ -1,8 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <sqlcli1.h>
-#include <postgres_ext.h>
 #include "db2_fdw.h"
 #include "ParamDesc.h"
 
@@ -13,81 +11,81 @@ extern char         db2Message[ERRBUFSIZE];/* contains DB2 error messages, set b
 extern int          err_code;              /* error code, set by db2CheckErr()                              */
 
 /** external prototypes */
-extern void*        db2alloc             (const char* type, size_t size);
-extern void         db2free              (void* p);
-extern void         db2Debug1            (const char* message, ...);
-extern void         db2Debug2            (const char* message, ...);
-extern void         db2Debug3            (const char* message, ...);
 extern SQLRETURN    db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 extern void         db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern SQLSMALLINT  param2c              (SQLSMALLINT fcType);
-extern void         parse2num_struct     (const char* s, SQL_NUMERIC_STRUCT* ns);
 extern char*        c2name               (short fcType);
-extern void         db2BindParameter     (DB2Session* session, const DB2Table* db2Table, ParamDesc* param, SQLLEN* indicators, int param_count, int col_num);
+extern void         db2BindParameter     (DB2Session* session, ParamDesc* param, SQLLEN* indicators, int param_count, int col_num);
 
 /** internal prototypes */
-int                 db2ExecuteQuery      (DB2Session* session, const DB2Table* db2Table, ParamDesc* paramList);
+int                 db2ExecuteQuery      (DB2Session* session, ParamDesc* paramList);
 
-/** db2ExecuteQuery
- *   Execute a prepared statement and fetches the first result row.
- *   The parameters ("bind variables") are filled from paramList.
- *   Returns the count of processed rows.
- *   This can be called several times for a prepared SQL statement.
+/* db2ExecuteQuery
+ * Execute a prepared statement and fetches the first result row.
+ * The parameters ("bind variables") are filled from paramList.
+ * Returns the count of processed rows.
+ * This can be called several times for a prepared SQL statement.
  */
-int db2ExecuteQuery (DB2Session* session, const DB2Table* db2Table, ParamDesc* paramList) {
+int db2ExecuteQuery (DB2Session* session, ParamDesc* paramList) {
   SQLLEN*     indicators   = NULL;
   ParamDesc*  param        = NULL;
   SQLRETURN   rc           = 0;
-  SQLINTEGER  rowcount_val = 0;
   SQLSMALLINT outlen       = 0;
   SQLCHAR     cname[256]   = {0};  /* 256 is usually plenty; see note below */
   int         rowcount     = 0;
   int         param_count  = 0;
+  int         indicator_count = 0;
   
-  db2Debug1("> db2ExecureQuery");
+  db2Entry1();
   for (param = paramList; param != NULL; param = param->next) {
     ++param_count;
   }
-  db2Debug2("  paramcount: %d",param_count);
-  /* allocate a temporary array of indicators */
-  indicators = db2alloc ("indicators", param_count * sizeof (SQLLEN));
+  db2Debug2("paramcount: %d",param_count);
+  /*
+   * Allocate a temporary array of indicators.
+   *
+   * Note: we intentionally use 1-based indexing below (indicator[1..param_count])
+   * to match the parameter numbering passed to SQLBindParameter. Therefore we
+   * must allocate param_count + 1 entries.
+   */
+  indicator_count = param_count + 1;
+  indicators = db2alloc(indicator_count * sizeof(SQLLEN), "indicators[%d]", indicator_count);
 
   /* bind the parameters */
   param_count = 0;
   for (param = paramList; param; param = param->next) {
     ++param_count;
-    /** colnum in param and param_count are 0 based, and select/update/delete statements need to be 0 based */
-    db2BindParameter(session, db2Table, param, &indicators[param_count], param_count, param_count);
+    db2BindParameter(session, param, &indicators[param_count], param_count, param_count);
   }
   /* execute the query and get the first result row */
-  db2Debug2("  session->stmtp->hsql: %d",session->stmtp->hsql);
+  db2Debug2("session->stmtp->hsql: %d",session->stmtp->hsql);
   rc = SQLGetCursorName(session->stmtp->hsql, cname, (SQLSMALLINT)sizeof(cname), &outlen); 
   rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
   if (rc != SQL_SUCCESS) {
     db2Error_d(FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: SQLGetCusorName failed to obtain cursor name", db2Message);
   }
-  db2Debug2("  cursor name: '%s'", cname);
+  db2Debug2("cursor name: '%s'", cname);
   rc = SQLExecute (session->stmtp->hsql);
   rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
   if (rc != SQL_SUCCESS && rc != SQL_NO_DATA) {
     /* use the correct SQLSTATE for serialization failures */
     db2Error_d(err_code == 8177 ? FDW_SERIALIZATION_FAILURE : FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: SQLExecute failed to execute remote query", db2Message);
   }
-  db2free(indicators);
+  db2free(indicators, "indicators[%d]", indicator_count);
   if (rc == SQL_NO_DATA) {
-    db2Debug3("  SQL_NO_DATA");
-    db2Debug1("< db2ExecureQuery - returns: 0");
-    return 0;
-  }
+    db2Debug3("SQL_NO_DATA");
+  } else {
+    SQLINTEGER  rowcount_val = 0;
 
-  /* get the number of processed rows (important for DML) */
-  rc = SQLRowCount(session->stmtp->hsql, &rowcount_val);
-  rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
-  if (rc != SQL_SUCCESS) {
-    db2Error_d ( FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: SQLRowCount failed to get number of affected rows", db2Message);
+    /* get the number of processed rows (important for DML) */
+    rc = SQLRowCount(session->stmtp->hsql, &rowcount_val);
+    rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
+    if (rc != SQL_SUCCESS) {
+      db2Error_d ( FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: SQLRowCount failed to get number of affected rows", db2Message);
+    }
+    db2Debug2("rowcount_val: %lld", rowcount_val);
+    rowcount = (int) rowcount_val;
   }
-  db2Debug2("  rowcount_val: %lld", rowcount_val);
-  rowcount = (int) rowcount_val;
-  db2Debug1("< db2ExecureQuery - returns: %d",rowcount);
+  db2Exit1(": %d",rowcount);
   return rowcount;
 }

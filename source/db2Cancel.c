@@ -1,5 +1,3 @@
-#include <sqlcli1.h>
-#include <postgres_ext.h>
 #include "db2_fdw.h"
 
 /** global variables */
@@ -8,7 +6,6 @@
 extern DB2EnvEntry* rootenvEntry;          /* contains DB2 error messages, set by db2CheckErr()             */
 
 /** external prototypes */
-extern void      db2Debug1            (const char* message, ...);
 
 /** local prototypes */
 void             db2Cancel            (void);
@@ -17,11 +14,11 @@ void             db2Cancel            (void);
  *   Cancel all running DB2 queries.
  */
 void db2Cancel (void) {
-  DB2EnvEntry*  envp  ;
-  DB2ConnEntry* connp ;
-  HdlEntry*     entryp;
+  DB2EnvEntry*  envp   = NULL;
+  DB2ConnEntry* connp  = NULL;
+  HdlEntry*     entryp = NULL;
 
-  db2Debug1("> db2Cancel");
+  db2Entry1();
   /* send a cancel request for all servers ignoring errors */
   for (envp = rootenvEntry; envp != NULL; envp = envp->right) {
     for (connp = envp->connlist; connp != NULL; connp = connp->right) {
@@ -32,5 +29,5 @@ void db2Cancel (void) {
       }
     }
   }
-  db2Debug1("< db2Cancel");
+  db2Exit1();
 }

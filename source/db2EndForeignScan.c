@@ -1,32 +1,29 @@
 #include <postgres.h>
 #include <nodes/makefuncs.h>
-#include <nodes/pathnodes.h>
 #include <optimizer/optimizer.h>
 #include <access/heapam.h>
 #include "db2_fdw.h"
 #include "DB2FdwState.h"
 
 /** external prototypes */
-extern void            db2CloseStatement         (DB2Session* session);
-extern void            db2free                   (void* p);
-extern void            db2Debug1                 (const char* message, ...);
+extern void         db2CloseStatement         (DB2Session* session);
 
 /** local prototypes */
 void db2EndForeignScan(ForeignScanState* node);
 
-/** db2EndForeignScan
- *   Close the currently active DB2 statement.
+/* db2EndForeignScan
+ * Close the currently active DB2 statement.
  */
 void db2EndForeignScan (ForeignScanState* node) {
   DB2FdwState* fdw_state = (DB2FdwState*) node->fdw_state;
 
-  db2Debug1("> db2EndForeignScan");
+  db2Entry1();
   /* release the DB2 session */
   db2CloseStatement(fdw_state->session);
   // check fdw_state->session for dangling references that need to be freed
-  db2free(fdw_state->session);
+  db2free(fdw_state->session,"fdw_state->session");
   fdw_state->session = NULL;
   // check fdw_state for dangling references that need to be freed
-  db2free(fdw_state);
-  db2Debug1("< db2EndForeignScan");
+  db2free(fdw_state,"fdw_state");
+  db2Exit1();
 }
