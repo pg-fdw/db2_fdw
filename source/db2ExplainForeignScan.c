@@ -32,7 +32,7 @@ void db2ExplainForeignScan (ForeignScanState* node, ExplainState* es) {
 static void db2Explain (void* fdw, ExplainState* es) {
   FILE*        fp;
   char         path[1035];
-  char         execution_cmd[300];
+  StringInfoData execution_cmd;
   DB2FdwState* fdw_state = (DB2FdwState*) fdw;
   int          count     = 0;
   int          qlength   = strlen(fdw_state->query);
@@ -56,26 +56,47 @@ static void db2Explain (void* fdw, ExplainState* es) {
   }
   *dest = '\0';
 
-  memset(execution_cmd,0x00,sizeof(execution_cmd));
+  initStringInfo(&execution_cmd);
   if (es->verbose) {
-    if (strlen(fdw_state->user)){
-      snprintf(execution_cmd,sizeof(execution_cmd),"db2expln -t -d %s -u %s %s -q \"%s\" ",fdw_state->dbserver,fdw_state->user,fdw_state->password,tempQuery);
+    if (strlen(fdw_state->user)) {
+      appendStringInfo(&execution_cmd,
+                       "db2expln -t -d %s -u %s %s -q \"%s\" ",
+                       fdw_state->dbserver,
+                       fdw_state->user,
+                       fdw_state->password,
+                       tempQuery);
     } else {
-      snprintf(execution_cmd,sizeof(execution_cmd),"db2expln -t -d %s -q \"%s\" ",fdw_state->dbserver,tempQuery);
+      appendStringInfo(&execution_cmd,
+                       "db2expln -t -d %s -q \"%s\" ",
+                       fdw_state->dbserver,
+                       tempQuery);
     }
   } else {
-    if (strlen(fdw_state->user)){
-      snprintf(execution_cmd,sizeof(execution_cmd),"db2expln -t -d %s -u %s %s -q \"%s\" |grep -E \"Estimated Cost|Estimated Cardinality\" ",fdw_state->dbserver,fdw_state->user,fdw_state->password,tempQuery);
+    if (strlen(fdw_state->user)) {
+      appendStringInfo(&execution_cmd,
+                       "db2expln -t -d %s -u %s %s -q \"%s\" |grep -E \"Estimated Cost|Estimated Cardinality\" ",
+                       fdw_state->dbserver,
+                       fdw_state->user,
+                       fdw_state->password,
+                       tempQuery);
     } else {
-      snprintf(execution_cmd,sizeof(execution_cmd),"db2expln -t -d %s -q \"%s\" |grep -E \"Estimated Cost|Estimated Cardinality\" ",fdw_state->dbserver,tempQuery);
+      appendStringInfo(&execution_cmd,
+                       "db2expln -t -d %s -q \"%s\" |grep -E \"Estimated Cost|Estimated Cardinality\" ",
+                       fdw_state->dbserver,
+                       tempQuery);
     }
   }
-  db2Debug2("execution_cmd: '%s'",execution_cmd);
+  db2Debug2("execution_cmd: '%s'", execution_cmd.data);
   /* Open the command for reading. */
-  fp = popen(execution_cmd, "r");
+  fp = popen(execution_cmd.data, "r");
   if (fp == NULL) {
-    elog (ERROR, "db2_fdw: Failed to run command");
-    exit(1);
+    int save_errno = errno;
+    db2free(tempQuery,"tempQuery");
+    pfree(execution_cmd.data);
+    ereport(ERROR,
+            (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION),
+             errmsg("db2_fdw: failed to run db2expln"),
+             errdetail("popen() failed: %s", strerror(save_errno))));
   }
 
   /* Read the output a line at a time - output it. */
@@ -86,5 +107,6 @@ static void db2Explain (void* fdw, ExplainState* es) {
   /* close */
   pclose(fp);
   db2free(tempQuery,"tempQuery");
+  pfree(execution_cmd.data);
   db2Exit1();
 }

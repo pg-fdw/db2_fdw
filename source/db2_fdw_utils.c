@@ -221,8 +221,8 @@ void convertTuple (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* res
     db2Debug5("res->pgtype   : %d"  ,res->pgtype  );
     db2Debug5("res->pgtypmod : %d"  ,res->pgtypmod);
     db2Debug5("res->val      : %s"  ,res->val     );
-    db2Debug5("res->val_len  : %d"  ,res->val_len );
-    db2Debug5("res->val_null : %d"  ,res->val_null);
+    db2Debug5("res->val_len  : %ld"  ,(long) res->val_len );
+    db2Debug5("res->val_null : %ld"  ,(long) res->val_null);
 
     if (res->val_null >= 0) {
       short db2Type = 0;

@@ -73,7 +73,6 @@ DB2FdwOption valid_options[] = {
 #if PG_VERSION_NUM >= 140000
   {OPT_BATCH_SIZE       , ForeignServerRelationId     , false},
   {OPT_BATCH_SIZE       , ForeignTableRelationId      , false},
-  {OPT_BATCH_SIZE       , AttributeRelationId         , false},
 #endif
   {OPT_NO_ENCODING_ERROR, ForeignDataWrapperRelationId, false},
   {OPT_NO_ENCODING_ERROR, ForeignTableRelationId      , false},

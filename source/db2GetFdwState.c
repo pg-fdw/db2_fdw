@@ -16,14 +16,14 @@
 extern char*        guessNlsLang  (char* nls_lang);
 extern bool         optionIsTrue  (const char* value);
 extern DB2Session*  db2GetSession (const char* connectstring, char* user, char* password, char* jwt_token, const char* nls_lang, int curlevel);
-extern DB2Table*    db2Describe   (DB2Session* session, char* schema, char* table, char* pgname, long max_long, char* noencerr, char* batchsz);
+extern DB2Table*    db2Describe   (DB2Session* session, char* schema, char* table, char* pgname, char* noencerr, char* batchsz);
 extern char*        db2CopyText   (const char* string, int size, int quote);
 extern char*        c2name        (short fcType);
 
 /** local prototypes */
        DB2FdwState*             db2GetFdwState            (Oid foreigntableid, double* sample_percent, bool describe);
        DB2FdwDirectModifyState* db2GetFdwDirectModifyState(Oid foreigntableid, double* sample_percent, bool describe);
-static DB2Table*                describeForeignTable      (Oid foreigntableid, char* schema, char* table, char* pgname, long max_long, char* noencerr, char* batchsz);
+static DB2Table*                describeForeignTable      (Oid foreigntableid, char* schema, char* table, char* pgname, char* noencerr, char* batchsz);
 static void                     getColumnData             (DB2Table* db2Table, Oid foreigntableid);
 static void                     getOptions                (Oid foreigntableid, List** options);
 
@@ -41,13 +41,11 @@ DB2FdwState* db2GetFdwState (Oid foreigntableid, double* sample_percent, bool de
   ListCell*    cell        = NULL;
   char*        schema      = NULL;
   char*        table       = NULL;
-  char*        maxlong     = NULL;
   char*        sample      = NULL;
   char*        prefetch    = NULL;
   char*        fetchsz     = NULL;
   char*        noencerr    = NULL;
   char*        batchsz     = NULL;
-  long         max_long    = 0;
 
   db2Entry1();
   /* Get all relevant options from the foreign table, the user mapping, the foreign server and the foreign data wrapper. */
@@ -62,7 +60,6 @@ DB2FdwState* db2GetFdwState (Oid foreigntableid, double* sample_percent, bool de
     fdwState->jwt_token = (strcmp (def->defname, OPT_JWT_TOKEN)         == 0) ? STRVAL(def->arg) : fdwState->jwt_token;
     schema              = (strcmp (def->defname, OPT_SCHEMA)            == 0) ? STRVAL(def->arg) : schema;
     table               = (strcmp (def->defname, OPT_TABLE)             == 0) ? STRVAL(def->arg) : table;
-    maxlong             = (strcmp (def->defname, OPT_MAX_LONG)          == 0) ? STRVAL(def->arg) : maxlong;
     sample              = (strcmp (def->defname, OPT_SAMPLE)            == 0) ? STRVAL(def->arg) : sample;
     prefetch            = (strcmp (def->defname, OPT_PREFETCH)          == 0) ? STRVAL(def->arg) : prefetch;
     fetchsz             = (strcmp (def->defname, OPT_FETCHSZ)           == 0) ? STRVAL(def->arg) : fetchsz;
@@ -70,13 +67,10 @@ DB2FdwState* db2GetFdwState (Oid foreigntableid, double* sample_percent, bool de
     batchsz             = (strcmp (def->defname, OPT_BATCH_SIZE)        == 0) ? STRVAL(def->arg) : batchsz;
   }
 
-  /* convert "max_long" option to number or use default */
-  max_long = (maxlong == NULL) ? DEFAULT_MAX_LONG : strtol (maxlong, NULL, 0);
-
   /* convert "sample_percent" to double */
   if (sample_percent != NULL) {
     if (sample == NULL)
-      *sample_percent = 100.0;
+      *sample_percent = DEFAULT_SAMPLE_PERCENT;
     else
       *sample_percent = strtod (sample, NULL);
   }
@@ -95,12 +89,12 @@ DB2FdwState* db2GetFdwState (Oid foreigntableid, double* sample_percent, bool de
   fdwState->nls_lang = guessNlsLang (fdwState->nls_lang);
 
   if (describe) {
-    fdwState->db2Table = describeForeignTable(foreigntableid, schema, table, pgtablename, max_long, noencerr, batchsz);
+    fdwState->db2Table = describeForeignTable(foreigntableid, schema, table, pgtablename, noencerr, batchsz);
     if (fdwState->db2Table == NULL) {
       /* connect to DB2 database */
       fdwState->session = db2GetSession (fdwState->dbserver, fdwState->user, fdwState->password, fdwState->jwt_token, fdwState->nls_lang, GetCurrentTransactionNestLevel () );
       /* get remote table description */
-      fdwState->db2Table = db2Describe (fdwState->session, schema, table, pgtablename, max_long, noencerr, batchsz);
+      fdwState->db2Table = db2Describe (fdwState->session, schema, table, pgtablename, noencerr, batchsz);
       /* add PostgreSQL data to table description */
       getColumnData (fdwState->db2Table, foreigntableid);
     }
@@ -123,13 +117,11 @@ DB2FdwDirectModifyState* db2GetFdwDirectModifyState (Oid foreigntableid, double*
   ListCell*    cell        = NULL;
   char*        schema      = NULL;
   char*        table       = NULL;
-  char*        maxlong     = NULL;
   char*        sample      = NULL;
   char*        prefetch    = NULL;
   char*        fetchsz     = NULL;
   char*        noencerr    = NULL;
   char*        batchsz     = NULL;
-  long         max_long    = 0;
 
   db2Entry1();
   /* Get all relevant options from the foreign table, the user mapping, the foreign server and the foreign data wrapper. */
@@ -144,7 +136,6 @@ DB2FdwDirectModifyState* db2GetFdwDirectModifyState (Oid foreigntableid, double*
     fdwState->jwt_token = (strcmp (def->defname, OPT_JWT_TOKEN)         == 0) ? STRVAL(def->arg) : fdwState->jwt_token;
     schema              = (strcmp (def->defname, OPT_SCHEMA)            == 0) ? STRVAL(def->arg) : schema;
     table               = (strcmp (def->defname, OPT_TABLE)             == 0) ? STRVAL(def->arg) : table;
-    maxlong             = (strcmp (def->defname, OPT_MAX_LONG)          == 0) ? STRVAL(def->arg) : maxlong;
     sample              = (strcmp (def->defname, OPT_SAMPLE)            == 0) ? STRVAL(def->arg) : sample;
     prefetch            = (strcmp (def->defname, OPT_PREFETCH)          == 0) ? STRVAL(def->arg) : prefetch;
     fetchsz             = (strcmp (def->defname, OPT_FETCHSZ)           == 0) ? STRVAL(def->arg) : fetchsz;
@@ -152,13 +143,10 @@ DB2FdwDirectModifyState* db2GetFdwDirectModifyState (Oid foreigntableid, double*
     batchsz             = (strcmp (def->defname, OPT_BATCH_SIZE)        == 0) ? STRVAL(def->arg) : batchsz;
   }
 
-  /* convert "max_long" option to number or use default */
-  max_long = (maxlong == NULL) ? DEFAULT_MAX_LONG : strtol (maxlong, NULL, 0);
-
   /* convert "sample_percent" to double */
   if (sample_percent != NULL) {
     if (sample == NULL)
-      *sample_percent = 100.0;
+      *sample_percent = DEFAULT_SAMPLE_PERCENT;
     else
       *sample_percent = strtod (sample, NULL);
   }
@@ -177,7 +165,7 @@ DB2FdwDirectModifyState* db2GetFdwDirectModifyState (Oid foreigntableid, double*
   fdwState->nls_lang = guessNlsLang (fdwState->nls_lang);
 
   if (describe) {
-    fdwState->db2Table = describeForeignTable(foreigntableid, schema, table, pgtablename, max_long, noencerr, batchsz);
+    fdwState->db2Table = describeForeignTable(foreigntableid, schema, table, pgtablename, noencerr, batchsz);
   }
   fdwState->session  = db2GetSession (fdwState->dbserver, fdwState->user, fdwState->password, fdwState->jwt_token, fdwState->nls_lang, GetCurrentTransactionNestLevel () );
 
@@ -186,7 +174,7 @@ DB2FdwDirectModifyState* db2GetFdwDirectModifyState (Oid foreigntableid, double*
 }
 
 
-static DB2Table* describeForeignTable (Oid foreigntableid, char* schema, char* table, char* pgname, long max_long, char* noencerr, char* batchsz) {
+static DB2Table* describeForeignTable (Oid foreigntableid, char* schema, char* table, char* pgname, char* noencerr, char* batchsz) {
   DB2Table* db2Table = NULL;
   char*     qtable    = NULL;
   char*     qschema   = NULL;

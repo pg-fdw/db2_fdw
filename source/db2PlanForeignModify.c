@@ -17,6 +17,7 @@ extern List*        serializePlanData         (DB2FdwState* fdwState);
 /** local prototypes */
        List*        db2PlanForeignModify(PlannerInfo* root, ModifyTable* plan, Index resultRelation, int subplan_index);
 static DB2FdwState* copyPlanData        (DB2FdwState* orig);
+static ParamDesc*   reverseParamList    (ParamDesc* head);
        void         addParam            (ParamDesc** paramList, DB2Column* db2col, int colnum, int txts);
        void         checkDataType       (short db2type, int scale, Oid pgtype, const char* tablename, const char* colname);
 
@@ -296,12 +297,38 @@ List* db2PlanForeignModify (PlannerInfo* root, ModifyTable* plan, Index resultRe
       appendStringInfo (&sql, "?");
     }
   }
+
+  /*
+   * addParam() and the output-param builder above currently prepend to
+   * fdwState->paramList.
+   *
+   * db2ExecuteQuery() binds parameters in list traversal order (1..N). If we
+   * leave the list in prepended order, the bound parameter values won't match
+   * the order of '?' placeholders in the generated SQL, leading to wrong DML
+   * execution and hard-to-debug runtime failures.
+   */
+  fdwState->paramList = reverseParamList(fdwState->paramList);
+
   fdwState->query = sql.data;
   db2Debug2("fdwState->query: '%s'", fdwState->query);
   /* return a serialized form of the plan state */
   result = serializePlanData (fdwState);
   db2Exit1(": %x", result);
   return result;
+}
+
+static ParamDesc* reverseParamList(ParamDesc* head) {
+  ParamDesc* prev = NULL;
+  ParamDesc* cur  = head;
+
+  while (cur) {
+    ParamDesc* next = cur->next;
+    cur->next = prev;
+    prev = cur;
+    cur = next;
+  }
+
+  return prev;
 }
 
 /** copyPlanData

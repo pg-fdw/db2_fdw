@@ -15,7 +15,7 @@ extern DB2FdwState* db2GetFdwState            (Oid foreigntableid, double* sampl
 extern int          db2IsStatementOpen        (DB2Session* session);
 extern void         db2PrepareQuery           (DB2Session* session, const char *query, DB2ResultColumn* resultList, unsigned long prefetch, int fetchsize);
 extern int          db2ExecuteQuery           (DB2Session* session, ParamDesc* paramList);
-extern int          db2FetchNext              (DB2Session* session);
+extern int          db2FetchNext              (DB2Session* session, DB2ResultColumn* resultList);
 extern void         checkDataType             (short db2type, int scale, Oid pgtype, const char* tablename, const char* colname);
 extern short        c2dbType                  (short fcType);
 extern void         convertTuple              (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls);
@@ -101,7 +101,7 @@ static int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple* rows
   db2Debug3("loop through query results");
   /* loop through query results */
   fdw_state->rowcount = -1;
-  while (db2IsStatementOpen (fdw_state->session) ? db2FetchNext (fdw_state->session) : (db2PrepareQuery (fdw_state->session, fdw_state->query, fdw_state->resultList, fdw_state->prefetch, fdw_state->fetch_size), db2ExecuteQuery (fdw_state->session, fdw_state->paramList))) {
+  while (db2IsStatementOpen (fdw_state->session) ? db2FetchNext (fdw_state->session, fdw_state->resultList) : (db2PrepareQuery (fdw_state->session, fdw_state->query, fdw_state->resultList, fdw_state->prefetch, fdw_state->fetch_size), db2ExecuteQuery (fdw_state->session, fdw_state->paramList))) {
     /* allow user to interrupt ANALYZE */
     #if PG_VERSION_NUM >= 180000
     vacuum_delay_point (true);

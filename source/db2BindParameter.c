@@ -12,7 +12,6 @@ extern char         db2Message[ERRBUFSIZE];/* contains DB2 error messages, set b
 extern SQLRETURN    db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 extern void         db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern SQLSMALLINT  param2c              (SQLSMALLINT fcType);
-extern void         parse2num_struct     (const char* s, SQL_NUMERIC_STRUCT* ns);
 extern char*        c2name               (short fcType);
 
 /** internal prototypes */
@@ -105,21 +104,23 @@ void db2BindParameter (DB2Session* session, ParamDesc* param, SQLLEN* indicator,
           case SQL_REAL:
           case SQL_DOUBLE:
           case SQL_DECFLOAT: {
-            SQL_NUMERIC_STRUCT* num = NULL;
-            if (param->value != NULL) {
-              num = db2alloc(sizeof(SQL_NUMERIC_STRUCT), "SQL_NUMERIC_STRUCT num ");
-              parse2num_struct(param->value, num);
-              db2Debug2("num: '%s'",*num);
-            }
+            /*
+             * Bind numeric values as strings.
+             * The previous SQL_C_NUMERIC + SQL_NUMERIC_STRUCT path relied on parse2num_struct(), which hard-coded precision/scale and could
+             * trigger DB2 CLI0111E / SQLSTATE 22003 for values that don't match the target column's precision/scale.
+             */
+            *indicator = (SQLLEN) ((param->value == NULL) ? SQL_NULL_DATA : SQL_NTS);
+            db2Debug2("param_ind       : %d",*indicator);
+
             rc = SQLBindParameter( session->stmtp->hsql
                                  , col_num
                                  , SQL_PARAM_INPUT
-                                 , SQL_C_NUMERIC
+                                 , SQL_C_CHAR
                                  , param->colType
-                                 , num->precision
-                                 , num->scale
-                                 , num
-                                 , sizeof(*num)
+                                 , param->colSize
+                                 , 0
+                                 , (SQLPOINTER) param->value
+                                 , 0
                                  , indicator
                                  );
           }

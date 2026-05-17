@@ -14,7 +14,6 @@ extern int          err_code;              /* error code, set by db2CheckErr()  
 extern SQLRETURN    db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 extern void         db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern SQLSMALLINT  param2c              (SQLSMALLINT fcType);
-extern void         parse2num_struct     (const char* s, SQL_NUMERIC_STRUCT* ns);
 extern char*        c2name               (short fcType);
 extern void         db2BindParameter     (DB2Session* session, ParamDesc* param, SQLLEN* indicators, int param_count, int col_num);
 
@@ -35,14 +34,22 @@ int db2ExecuteQuery (DB2Session* session, ParamDesc* paramList) {
   SQLCHAR     cname[256]   = {0};  /* 256 is usually plenty; see note below */
   int         rowcount     = 0;
   int         param_count  = 0;
+  int         indicator_count = 0;
   
   db2Entry1();
   for (param = paramList; param != NULL; param = param->next) {
     ++param_count;
   }
   db2Debug2("paramcount: %d",param_count);
-  /* allocate a temporary array of indicators */
-  indicators = db2alloc (param_count * sizeof (SQLLEN),"indicators[%d]",param_count);
+  /*
+   * Allocate a temporary array of indicators.
+   *
+   * Note: we intentionally use 1-based indexing below (indicator[1..param_count])
+   * to match the parameter numbering passed to SQLBindParameter. Therefore we
+   * must allocate param_count + 1 entries.
+   */
+  indicator_count = param_count + 1;
+  indicators = db2alloc(indicator_count * sizeof(SQLLEN), "indicators[%d]", indicator_count);
 
   /* bind the parameters */
   param_count = 0;
@@ -64,7 +71,7 @@ int db2ExecuteQuery (DB2Session* session, ParamDesc* paramList) {
     /* use the correct SQLSTATE for serialization failures */
     db2Error_d(err_code == 8177 ? FDW_SERIALIZATION_FAILURE : FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: SQLExecute failed to execute remote query", db2Message);
   }
-  db2free(indicators,"indicators[%d]",param_count);
+  db2free(indicators, "indicators[%d]", indicator_count);
   if (rc == SQL_NO_DATA) {
     db2Debug3("SQL_NO_DATA");
   } else {

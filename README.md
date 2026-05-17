@@ -170,20 +170,33 @@ Foreign server options
   This can be in any of the forms that DB2 supports as long as your
   DB2 client is configured accordingly.
 
+- **batch_size** (optional, default 100)
+
+  In future enhancements batch_size will be used to operate cunks of rows of that size in batch mode.
+  Usage in LOAD and INSERT BATCH scenarios is envisaged.
+
+- **no_encoding_error** (optional, "ON", "OFF", "YES", "NO", "TRUE", "FALSE")
+  
+  If this option is set to ON, YES, TRUE errors are generated on encoding problems.
+  By default these errors are suppressed.
+
 User mapping options
 --------------------
 
-- **user** (required)
+- **user** (optional - mutual exclusive to jwt_password, one use is required)
 
   The DB2 user name for the session.
   Set this to an empty string for *external authentication* if you don't
   want to store DB2 credentials in the PostgreSQL database (one simple way
   is to use an *external password store*).
 
-- **password** (required)
+- **password** (optional - mutual exclusive to jwt_password, one use is required)
 
   The password for the DB2 user.
 
+- **jwt_token** (optional - mutual exclusive to user&password, one use is required)
+
+  The password for the DB2 user.
 Foreign table options
 ---------------------
 
@@ -209,15 +222,12 @@ Foreign table options
   occurs in DB2's system catalog, so normally consist of uppercase letters
   only.
 
-- **max_long** (optional, defaults to "32767")
+- **max_long** (optional, now deprecated - no longer used)
 
   The maximal length of any LONG or LONG RAW columns in the DB2 table.
   Possible values are integers between 1 and 1073741823 (the maximal size of a
   `bytea` in PostgreSQL).  This amount of memory will be allocated at least
   twice, so large values will consume a lot of memory.
-  If **max_long** is less than the length of the longest value retrieved,
-  you will receive the error message `ORA-01406: fetched column value was
-  truncated`.
 
 - **readonly** (optional, defaults to "false")
 
@@ -228,7 +238,7 @@ Foreign table options
   on tables that you do not wish to be changed, to be prepared for an upgrade
   to PostgreSQL 9.3 or later.
 
-- **sample_percent** (optional, defaults to "100")
+- **sample_percent** (optional, defaults to "100.0")
 
   This option only influences ANALYZE processing and can be useful to
   ANALYZE very large tables in a reasonable time.
@@ -241,15 +251,34 @@ Foreign table options
   ANALYZE will fail with ORA-00933 for tables defined with DB2 queries and
   may fail with ORA-01446 for tables defined with complex DB2 views.
 
-- **prefetch** (optional, defaults to "200")
+- **prefetch** (aka SQL_ATTR_PREFETCH_NROWS optional, defaults to "100")
 
   Sets the number of rows that will be fetched with a single round-trip between
   PostgreSQL and DB2 during a foreign table scan.  This is implemented using
-  DB2 row prefetching.  The value must be between 0 and 10240, where a value
+  DB2 row prefetching.  The value must be between 0 and 1024, where a value
   of zero disables prefetching.
 
   Higher values can speed up performance, but will use more memory on the
   PostgreSQL server.
+
+- **fetch_size** (optional, fix 1)
+
+  In future enhancements fetch_size will be used to enable fetching of that number of rows at once.
+  Currently any number is ignored and 1 is used as a fix value, until the logic to cope with a larger result that one is implemnted.
+
+- **batch_size** (optional, default 100)
+
+  In future enhancements batch_size will be used to operate cunks of rows of that size in batch mode.
+  Usage in LOAD and INSERT BATCH scenarios is envisaged.
+  A value defined on a table will override the value provided on the server, just for that table.
+
+- **no_encoding_error** (optional, "ON", "OFF", "YES", "NO", "TRUE", "FALSE")
+  
+  If this option is set to ON, YES, TRUE errors are generated on encoding problems.
+  By default these errors are suppressed.
+  Providing this on a table level sets all columns to this value, diffenent from the system wide setting given
+  explicitly or implicitly on the server.
+
 
 Column options (from PostgreSQL 9.2 on)
 ---------------------------------------
@@ -260,6 +289,48 @@ Column options (from PostgreSQL 9.2 on)
   is considered a primary key column.
   For UPDATE and DELETE to work, you must set this option on all columns
   that belong to the table's primary key.
+
+- **db2type** (required)
+
+  On import the SQL value of the datatype is stored, identifying the DB2 datatype to db2_fdw.
+  It is required to re-construct the table description internally for db2_fdw.
+
+- **db2size** (required)
+
+  On import the length of the column as defined in the DB2 catalog is stored.
+  It is required to re-construct the table description internally for db2_fdw.
+
+- **db2bytes** (required)
+
+  On import the number of bytes derived from the datatype, encoding as provided by DB2 is stored.
+  It is required to re-construct the table description internally for db2_fdw.
+
+- **db2chars** (required)
+
+  On import the number of characters derived from the datatype, encoding as provided by DB2 is stored.
+  It is required to re-construct the table description internally for db2_fdw.
+
+- **db2scale** (required)
+
+  On import the scale of a decimal value as provided by DB2 is stored.
+  It is required to re-construct the table description internally for db2_fdw.
+
+- **db2null** (required)
+
+  The nullable characteristic (0 = NULLABLE, 1 = NOT NULL) as provided by DB2 is stored.
+  It is required to re-construct the table description internally for db2_fdw.
+
+- **db2ccsid** (required)
+
+  On import the ccsid of the encoding as provided by DB2 is stored.
+  It is required to re-construct the table description internally for db2_fdw.
+
+- **no_encoding_error** (optional, "ON", "OFF", "YES", "NO", "TRUE", "FALSE")
+  
+  If this option is set to ON, YES, TRUE errors are generated on encoding problems.
+  By default these errors are suppressed.
+  Providing this on a column level sets this columns to this value, diffenent from the system wide setting given
+  explicitly or implicitly on the server, or the table wide settings given on the table level.
 
 4 Usage
 =======
@@ -300,6 +371,13 @@ and NULL values will be returned.
 If you want to UPDATE or DELETE, make sure that the `key` option is set on all
 columns that belong to the table's primary key.  Failure to do so will result
 in errors.
+
+If the remote table does not have a key defined you may alter the foreign table
+manually for defining a column key:
+
+    ALTER FOREIGN TABLE <schema>.<tablename>
+      ALTER COLUMN <columnname> OPTIONS (ADD key 'true');
+
 
 Data types
 ----------

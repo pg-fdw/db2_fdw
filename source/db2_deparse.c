@@ -204,13 +204,29 @@ bool is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr) {
   bool             fResult = false;
 
   db2Entry1();
+  /*
+   * baserel->fdw_private is expected to be initialized by the FDW planning
+   * callbacks.  If it is missing, we must not dereference it (planner-time
+   * crashes have been observed here for upper relations).
+   */
+  if (fpinfo == NULL) {
+    db2Exit1(": %s", "false");
+    return false;
+  }
   // Check that the expression consists of nodes that are safe to execute remotely.
   glob_cxt.root       = root;
   glob_cxt.foreignrel = baserel;
   /* For an upper relation, use relids from its underneath scan relation, because the upperrel's own relids currently aren't set to anything
    * meaningful by the core code.  For other relation, use their own relids.
    */
-  glob_cxt.relids   = (IS_UPPER_REL(baserel)) ? fpinfo->outerrel->relids : baserel->relids;
+  if (IS_UPPER_REL(baserel)) {
+    if (fpinfo->outerrel != NULL && fpinfo->outerrel->relids != NULL)
+      glob_cxt.relids = fpinfo->outerrel->relids;
+    else
+      glob_cxt.relids = baserel->relids;
+  } else {
+    glob_cxt.relids = baserel->relids;
+  }
   loc_cxt.collation = InvalidOid;
   loc_cxt.state     = FDW_COLLATE_NONE;
   if (foreign_expr_walker((Node*) expr, &glob_cxt, &loc_cxt, NULL)) {
@@ -988,13 +1004,28 @@ static void appendLimitClause(deparse_expr_cxt* context) {
   /* Make sure any constants in the exprs are printed portably */
   nestlevel = set_transmission_modes();
 
-  if (root->parse->limitCount) {
-    appendStringInfoString(buf, " LIMIT ");
-    deparseExprInt((Expr*) root->parse->limitCount, context);
-  }
+  /*
+   * DB2 does not support the Postgres syntax "LIMIT <n> OFFSET <m>".
+   * Use DB2 pagination syntax instead:
+   *   - "FETCH FIRST <n> ROWS ONLY"               (limit)
+   *   - "OFFSET <m> ROWS"                         (offset)
+   *   - "OFFSET <m> ROWS FETCH NEXT <n> ROWS ONLY" (limit+offset)
+   */
+
   if (root->parse->limitOffset) {
     appendStringInfoString(buf, " OFFSET ");
     deparseExprInt((Expr*) root->parse->limitOffset, context);
+    appendStringInfoString(buf, " ROWS");
+  }
+
+  if (root->parse->limitCount) {
+    if (root->parse->limitOffset)
+      appendStringInfoString(buf, " FETCH NEXT ");
+    else
+      appendStringInfoString(buf, " FETCH FIRST ");
+
+    deparseExprInt((Expr*) root->parse->limitCount, context);
+    appendStringInfoString(buf, " ROWS ONLY");
   }
   reset_transmission_modes(nestlevel);
   db2Debug5("  clause: %s", context->buf->data);
@@ -1406,14 +1437,24 @@ static void deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_att
     // For a join or upper relation the input tlist gives the list of columns required to be fetched from the foreign server.
     deparseExplicitTargetList(tlist, false, retrieved_attrs, context);
   } else {
-    // For a base relation fpinfo->attrs_used gives the list of columns* required to be fetched from the foreign server.
-    RangeTblEntry *rte = planner_rt_fetch(foreignrel->relid, root);
+    /*
+     * For base relations, prefer the caller-provided tlist (fdw_scan_tlist) when
+     * present.  This ensures the remote SELECT list includes any resjunk Vars
+     * needed locally (e.g., for EPQ recheck quals), avoiding result-column list
+     * mismatches.
+     */
+    if (tlist != NIL) {
+      deparseExplicitTargetList(tlist, false, retrieved_attrs, context);
+    } else {
+      // Fallback: use fpinfo->attrs_used.
+      RangeTblEntry *rte = planner_rt_fetch(foreignrel->relid, root);
 
-    // Core code already has some lock on each rel being planned, so we can use NoLock here.
-    Relation	rel = table_open(rte->relid, NoLock);
+      // Core code already has some lock on each rel being planned, so we can use NoLock here.
+      Relation	rel = table_open(rte->relid, NoLock);
 
-    deparseTargetList(buf, rte, foreignrel->relid, rel, false, fpinfo->attrs_used, false, retrieved_attrs);
-    table_close(rel, NoLock);
+      deparseTargetList(buf, rte, foreignrel->relid, rel, false, fpinfo->attrs_used, false, retrieved_attrs);
+      table_close(rel, NoLock);
+    }
   }
   db2Exit1(": %s", buf->data);
 }
