@@ -50,6 +50,7 @@
 #define DEFAULT_MAX_LONG            32767
 #define DEFAULT_PREFETCH            100
 #define DEFAULT_FETCHSZ             1
+#define DEFAULT_SAMPLE_PERCENT      100.0
 #define FIXED_FETCH_SIZE
 #define DEFAULT_BATCHSZ             100
 #define TABLE_NAME_LEN              129
