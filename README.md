@@ -290,37 +290,37 @@ Column options (from PostgreSQL 9.2 on)
   For UPDATE and DELETE to work, you must set this option on all columns
   that belong to the table's primary key.
 
-- **db2type** ()
+- **db2type** (required)
 
   On import the SQL value of the datatype is stored, identifying the DB2 datatype to db2_fdw.
   It is required to re-construct the table description internally for db2_fdw.
 
-- **db2size** ()
+- **db2size** (required)
 
   On import the length of the column as defined in the DB2 catalog is stored.
   It is required to re-construct the table description internally for db2_fdw.
 
-- **db2bytes** ()
+- **db2bytes** (required)
 
   On import the number of bytes derived from the datatype, encoding as provided by DB2 is stored.
   It is required to re-construct the table description internally for db2_fdw.
 
-- **db2chars** ()
+- **db2chars** (required)
 
   On import the number of characters derived from the datatype, encoding as provided by DB2 is stored.
   It is required to re-construct the table description internally for db2_fdw.
 
-- **db2scale** ()
+- **db2scale** (required)
 
   On import the scale of a decimal value as provided by DB2 is stored.
   It is required to re-construct the table description internally for db2_fdw.
 
-- **db2null** ()
+- **db2null** (required)
 
   The nullable characteristic (0 = NULLABLE, 1 = NOT NULL) as provided by DB2 is stored.
   It is required to re-construct the table description internally for db2_fdw.
 
-- **db2ccsid** ()
+- **db2ccsid** (required)
 
   On import the ccsid of the encoding as provided by DB2 is stored.
   It is required to re-construct the table description internally for db2_fdw.
@@ -371,6 +371,13 @@ and NULL values will be returned.
 If you want to UPDATE or DELETE, make sure that the `key` option is set on all
 columns that belong to the table's primary key.  Failure to do so will result
 in errors.
+
+If the remote table does not have a key defined you may alter the foreign table
+manually for defining a column key:
+
+    ALTER FOREIGN TABLE <schema>.<tablename>
+      ALTER COLUMN <columnname> OPTIONS (ADD key 'true');
+
 
 Data types
 ----------
