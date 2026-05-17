@@ -328,7 +328,7 @@ FDW options: (schema 'DB2INST1', "table" 'SALES')
 explain (analyze,verbose) select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=4.438..34.250 rows=41.00 loops=1)
+ Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=4.273..34.474 rows=41.00 loops=1)
    Output: a.empno, a.firstnme, a.midinit, a.lastname, a.workdept, a.phoneno, a.hiredate, a.job, a.edlevel, a.sex, a.birthdate, a.salary, a.bonus, a.comm, b.sales_date, b.sales_person, b.region, b.sales
    DB2 query: SELECT r1."EMPNO", r1."FIRSTNME", r1."MIDINIT", r1."LASTNAME", r1."WORKDEPT", r1."PHONENO", r1."HIREDATE", r1."JOB", r1."EDLEVEL", r1."SEX", r1."BIRTHDATE", r1."SALARY", r1."BONUS", r1."COMM", r2."SALES_DATE", r2."SALES_PERSON", r2."REGION", r2."SALES" FROM ("DB2INST1"."EMPLOYEE" r1 INNER JOIN "DB2INST1"."SALES" r2 ON (((r1."LASTNAME" = r2."SALES_PERSON"))))
    DB2 plan: 
@@ -418,8 +418,8 @@ explain (analyze,verbose) select * from sample.employee a, sample.sales b where 
    DB2 plan: 
  Planning:
    Buffers: shared hit=106
- Planning Time: 5.038 ms
- Execution Time: 36.439 ms
+ Planning Time: 4.967 ms
+ Execution Time: 36.629 ms
 (92 rows)
 
 select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
@@ -554,7 +554,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
                                                                  QUERY PLAN                                                                 
 --------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=3.258..3.344 rows=1.00 loops=1)
+ Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=3.646..3.913 rows=1.00 loops=1)
    Output: (min(salary)), (max(salary)), (avg(salary)), (sum(((salary + comm) + bonus))), (count(*))
    DB2 query: SELECT MIN("SALARY"), MAX("SALARY"), AVG("SALARY"), SUM((("SALARY" + "COMM") + "BONUS")), COUNT(*) FROM "DB2INST1"."EMPLOYEE"
    DB2 plan: 
@@ -623,8 +623,8 @@ explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary 
    DB2 plan: 
  Planning:
    Buffers: shared hit=20
- Planning Time: 4.241 ms
- Execution Time: 4.535 ms
+ Planning Time: 13.537 ms
+ Execution Time: 6.703 ms
 (71 rows)
 
 select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
@@ -637,7 +637,7 @@ select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) fr
 explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
                                                                                    QUERY PLAN                                                                                    
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=2.729..3.355 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=2.830..3.457 rows=3.00 loops=1)
    Output: empno, firstnme, lastname, ((salary + bonus) + comm)
    DB2 query: SELECT "EMPNO", "FIRSTNME", "LASTNAME", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" > 43840.01)) AND (("LASTNAME" LIKE 'L%' ESCAPE '\'))
    DB2 plan: 
@@ -706,8 +706,8 @@ explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm
    DB2 plan: 
  Planning:
    Buffers: shared hit=3
- Planning Time: 3.236 ms
- Execution Time: 4.581 ms
+ Planning Time: 5.221 ms
+ Execution Time: 4.697 ms
 (71 rows)
 
 select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
@@ -946,7 +946,7 @@ SELECT count(*) FROM sample.employee;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee WHERE workdept IN ('A00','B01','E21') AND salary BETWEEN 40000 AND 70000 AND (lastname LIKE 'L%' OR lastname LIKE 'G%');
                                                                                                                                  QUERY PLAN                                                                                                                                 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..127.26 rows=1 width=90) (actual time=4.343..5.054 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..127.26 rows=1 width=90) (actual time=3.859..4.593 rows=3.00 loops=1)
    Output: empno, lastname, salary, workdept
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY", "WORKDEPT" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" >= 40000)) AND (("SALARY" <= 70000)) AND (("WORKDEPT"  IN ('A00', 'B01', 'E21'))) AND ((("LASTNAME" LIKE 'L%' ESCAPE '\') OR ("LASTNAME" LIKE 'G%' ESCAPE '\')))
    DB2 plan: 
@@ -1022,8 +1022,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee WH
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 8.318 ms
- Execution Time: 6.574 ms
+ Planning Time: 4.428 ms
+ Execution Time: 5.784 ms
 (78 rows)
 
 SELECT empno, lastname, salary FROM sample.employee WHERE workdept IN ('A00','B01','E21') AND salary BETWEEN 40000 AND 70000 AND (lastname LIKE 'L%' OR lastname LIKE 'G%') ORDER BY empno;
@@ -1056,7 +1056,7 @@ FROM sample.employee;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..101.11 rows=5 width=90) (actual time=2.016..2.781 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..101.11 rows=5 width=90) (actual time=1.978..2.682 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" FETCH FIRST 5 ROWS ONLY
    DB2 plan: 
@@ -1118,8 +1118,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LI
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.544 ms
- Execution Time: 3.833 ms
+ Planning Time: 2.362 ms
+ Execution Time: 3.729 ms
 (64 rows)
 
 SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
@@ -1135,7 +1135,7 @@ SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.05..101.16 rows=5 width=90) (actual time=2.590..3.293 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.05..101.16 rows=5 width=90) (actual time=2.462..3.180 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY
    DB2 plan: 
@@ -1199,8 +1199,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LI
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.408 ms
- Execution Time: 4.365 ms
+ Planning Time: 2.385 ms
+ Execution Time: 4.263 ms
 (66 rows)
 
 SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
@@ -1216,7 +1216,7 @@ SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
                                                                                   QUERY PLAN                                                                                  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.06..101.19 rows=5 width=90) (actual time=2.783..3.474 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.06..101.19 rows=5 width=90) (actual time=2.671..3.373 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" ORDER BY "SALARY" DESC NULLS FIRST, "EMPNO" ASC NULLS LAST OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY
    DB2 plan: 
@@ -1302,8 +1302,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee OR
    DB2 plan: 
  Planning:
    Buffers: shared hit=12
- Planning Time: 2.802 ms
- Execution Time: 4.529 ms
+ Planning Time: 2.803 ms
+ Execution Time: 4.423 ms
 (88 rows)
 
 SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
@@ -1330,7 +1330,7 @@ PREPARE
 EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=4.606..4.678 rows=1.00 loops=1)
+ Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=4.188..4.262 rows=1.00 loops=1)
    Output: actno, actkwd, actdesc
    DB2 query: SELECT "ACTNO", "ACTKWD", "ACTDESC" FROM "DB2INST1"."ACT" WHERE (("ACTNO" = 10))
    DB2 plan: 
@@ -1403,8 +1403,8 @@ EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.443 ms
- Execution Time: 5.135 ms
+ Planning Time: 1.429 ms
+ Execution Time: 4.744 ms
 (75 rows)
 
 EXECUTE act_by_no(10);
@@ -1443,6 +1443,89 @@ select * from sample.uaci_rtdeployment;
 
 --
 -- END of TC013
+--
+-- running tc014.sql
+\i ./test/sql/tc014.sql
+--
+-- TC014: INSERT
+--
+\d+ sample.remotetable
+                                                                                                Foreign table "sample.remotetable"
+ Column |              Type              | Collation | Nullable | Default |                                                  FDW options                                                  | Storage  | Stats target | Description 
+--------+--------------------------------+-----------+----------+---------+---------------------------------------------------------------------------------------------------------------+----------+--------------+-------------
+ col1   | integer                        |           | not null |         | (db2type '4', db2size '10', db2bytes '4', db2chars '10', db2scale '0', db2null '0', db2ccsid '0', key 'true') | plain    |              | 
+ col2   | character varying(99)          |           | not null |         | (db2type '12', db2size '99', db2bytes '99', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')         | extended |              | 
+ col3   | character varying(99)          |           | not null |         | (db2type '12', db2size '99', db2bytes '99', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')         | extended |              | 
+ col4   | character varying(99)          |           |          |         | (db2type '12', db2size '99', db2bytes '99', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')         | extended |              | 
+ col5   | character varying(1000)        |           |          |         | (db2type '12', db2size '1000', db2bytes '1000', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')     | extended |              | 
+ col6   | character varying(255)         |           |          |         | (db2type '12', db2size '255', db2bytes '255', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')       | extended |              | 
+ col7   | character varying(255)         |           |          |         | (db2type '12', db2size '255', db2bytes '255', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')       | extended |              | 
+ col8   | date                           |           |          |         | (db2type '91', db2size '10', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')             | plain    |              | 
+ col9   | time(0) without time zone      |           |          |         | (db2type '92', db2size '8', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')              | plain    |              | 
+ col10  | date                           |           |          |         | (db2type '91', db2size '10', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')             | plain    |              | 
+ col11  | time(0) without time zone      |           |          |         | (db2type '92', db2size '8', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')              | plain    |              | 
+ col12  | integer                        |           |          |         | (db2type '4', db2size '10', db2bytes '4', db2chars '10', db2scale '0', db2null '1', db2ccsid '0')             | plain    |              | 
+ col13  | character(2)                   |           | not null |         | (db2type '1', db2size '2', db2bytes '2', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')            | extended |              | 
+ col14  | character(2)                   |           |          |         | (db2type '1', db2size '2', db2bytes '2', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')            | extended |              | 
+ col15  | character(3)                   |           |          |         | (db2type '1', db2size '3', db2bytes '3', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')            | extended |              | 
+ col16  | character varying(99)          |           |          |         | (db2type '12', db2size '99', db2bytes '99', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')         | extended |              | 
+ col17  | character(3)                   |           |          |         | (db2type '1', db2size '3', db2bytes '3', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')            | extended |              | 
+ col18  | character(2)                   |           |          |         | (db2type '1', db2size '2', db2bytes '2', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')            | extended |              | 
+ col19  | character varying(99)          |           |          |         | (db2type '12', db2size '99', db2bytes '99', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')         | extended |              | 
+ col20  | character varying(99)          |           |          |         | (db2type '12', db2size '99', db2bytes '99', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')         | extended |              | 
+ col21  | character varying(99)          |           |          |         | (db2type '12', db2size '99', db2bytes '99', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')         | extended |              | 
+ col22  | character varying(99)          |           |          |         | (db2type '12', db2size '99', db2bytes '99', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')         | extended |              | 
+ col23  | character varying(99)          |           |          |         | (db2type '12', db2size '99', db2bytes '99', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')         | extended |              | 
+ col24  | timestamp(6) without time zone |           | not null |         | (db2type '93', db2size '26', db2bytes '16', db2chars '26', db2scale '6', db2null '0', db2ccsid '0')           | plain    |              | 
+ col25  | character varying(256)         |           | not null |         | (db2type '12', db2size '256', db2bytes '256', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')       | extended |              | 
+ col26  | character varying(255)         |           |          |         | (db2type '12', db2size '255', db2bytes '255', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')       | extended |              | 
+ col27  | character varying(999)         |           |          |         | (db2type '12', db2size '999', db2bytes '999', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')       | extended |              | 
+ col28  | character(3)                   |           |          |         | (db2type '1', db2size '3', db2bytes '3', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')            | extended |              | 
+Not-null constraints:
+    "remotetable_col1_not_null" NOT NULL "col1"
+    "remotetable_col2_not_null" NOT NULL "col2"
+    "remotetable_col3_not_null" NOT NULL "col3"
+    "remotetable_col13_not_null" NOT NULL "col13"
+    "remotetable_col24_not_null" NOT NULL "col24"
+    "remotetable_col25_not_null" NOT NULL "col25"
+Server: sample
+FDW options: (schema 'DB2INST1', "table" 'REMOTETABLE')
+
+SELECT * FROM sample.remotetable;
+  col1  |   col2   |   col3   |   col4   |  col5  |  col6  |   col7   |    col8    |   col9   |   col10    |  col11   | col12 | col13 | col14  | col15  | col16  | col17  | col18  | col19  | col20  | col21  | col22  | col23  |          col24          |  col25   | col26  | col27  | col28  
+--------+----------+----------+----------+--------+--------+----------+------------+----------+------------+----------+-------+-------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+-------------------------+----------+--------+--------+--------
+ 581928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988 | sometext | [NULL] | [NULL] | [NULL]
+ 681928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   998 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988 | sometext | [NULL] | [NULL] | [NULL]
+(2 rows)
+
+INSERT INTO sample.remotetable (col1, col2, col3, col4, col7, col8, col9, col10, col11, col12, col13, col24, col25) 
+VALUES  ( 581927,
+          'sometext',
+          'sometext',
+          'sometext',
+          'sometext',
+          current_date,
+          current_time,
+          current_date,
+          current_time,
+          999,
+          'AA',
+          current_timestamp,
+          'sometext'
+          );
+INSERT 0 1
+SELECT * FROM sample.remotetable;
+  col1  |   col2   |   col3   |   col4   |  col5  |  col6  |   col7   |    col8    |   col9   |   col10    |  col11   | col12 | col13 | col14  | col15  | col16  | col17  | col18  | col19  | col20  | col21  | col22  | col23  |           col24            |  col25   | col26  | col27  | col28  
+--------+----------+----------+----------+--------+--------+----------+------------+----------+------------+----------+-------+-------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+----------------------------+----------+--------+--------+--------
+ 581927 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2026-05-17 | 10:13:05 | 2026-05-17 | 10:13:05 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2026-05-17 10:13:04.938175 | sometext | [NULL] | [NULL] | [NULL]
+ 581928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988    | sometext | [NULL] | [NULL] | [NULL]
+ 681928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   998 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988    | sometext | [NULL] | [NULL] | [NULL]
+(3 rows)
+
+DELETE FROM sample.remotetable where col1 = 581927;
+DELETE 1
+--
+-- END of TC014
 --
 -- testcases ended
 -- starting cleanup
