@@ -33,6 +33,20 @@ int db2FetchNext (DB2Session* session, DB2ResultColumn* resultList) {
   if (session->stmtp == NULL) {
     db2Error (FDW_ERROR, "db2FetchNext internal error: statement handle is NULL");
   }
+
+  /*
+   * Some DB2 CLI / ODBC driver setups update only the lower 32 bits of the
+   * SQLLEN indicator. If the previous row was NULL, stale high bits can make a
+   * later non-NULL value still look negative. Reset before each fetch.
+   */
+  for (res = resultList; res; res = res->next) {
+    res->val_null = 0;
+    res->val_len = 0;
+    if (res->val != NULL && res->val_size > 0) {
+      res->val[0] = '\0';
+    }
+  }
+
   /* fetch the next result row */
   rc = SQLFetch (session->stmtp->hsql);
   rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
