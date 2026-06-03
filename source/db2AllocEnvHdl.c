@@ -69,7 +69,7 @@ DB2EnvEntry* db2AllocEnvHdl(const char* nls_lang){
 }
 
 /* setDB2Environment
- * Set environment variables do that DB2 works as we want.
+ * Set environment variables so that DB2 works as we want.
  *
  * NLS_LANG sets the language and client encoding
  * NLS_NCHAR is unset so that N* data types are converted to the
