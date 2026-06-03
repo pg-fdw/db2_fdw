@@ -84,46 +84,42 @@ DB2EnvEntry* db2AllocEnvHdl(const char* nls_lang){
  * NLS_CALENDAR
  */
 static void setDB2Environment (char* nls_lang) {
+  char* env_nls_lang = NULL;
   db2Entry4();
-  if (putenv (nls_lang) != 0) {
-    db2free (nls_lang,"nls_lang");
+  env_nls_lang = strdup(nls_lang);
+  if (env_nls_lang == NULL) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Out of memory while setting environment variable NLS_LANG.");
+  }
+  if (putenv (env_nls_lang) != 0) {
+    db2free (env_nls_lang, "env_nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_LANG cannot be set.");
   }
   /* other environment variables that control DB2 formats */
   if (putenv ("NLS_DATE_LANGUAGE=AMERICAN") != 0) {
-    db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_DATE_LANGUAGE cannot be set.");
   }
   if (putenv ("NLS_DATE_FORMAT=YYYY-MM-DD HH24:MI:SS BC") != 0) {
-    db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_DATE_FORMAT cannot be set.");
   }
   if (putenv ("NLS_TIMESTAMP_FORMAT=YYYY-MM-DD HH24:MI:SS.FF9 BC") != 0) {
-    db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIMESTAMP_FORMAT cannot be set.");
   }
   if (putenv ("NLS_TIMESTAMP_TZ_FORMAT=YYYY-MM-DD HH24:MI:SS.FF9TZH:TZM BC") != 0) {
-    db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIMESTAMP_TZ_FORMAT cannot be set.");
   }
   if (putenv ("NLS_TIME_FORMAT=HH24:MI:SS.FF9 BC") != 0) {
-    db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIME_FORMAT cannot be set.");
   }
   if (putenv ("NLS_TIME_TZ_FORMAT=HH24:MI:SS.FF9TZH:TZM BC") != 0) {
-    db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIME_TZ_FORMAT cannot be set.");
   }
   if (putenv ("NLS_NUMERIC_CHARACTERS=.,") != 0) {
-    db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_NUMERIC_CHARACTERS cannot be set.");
   }
   if (putenv ("NLS_CALENDAR=") != 0) {
-    db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_CALENDAR cannot be set.");
   }
   if (putenv ("NLS_NCHAR=") != 0) {
-    db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_NCHAR cannot be set.");
   }
   db2Exit4();
@@ -131,34 +127,34 @@ static void setDB2Environment (char* nls_lang) {
 
 /* insertenvEntry */
 static DB2EnvEntry* insertenvEntry(DB2EnvEntry* start, const char* nlslang, SQLHENV henv) { 
-  DB2EnvEntry* step = NULL;
-  DB2EnvEntry* new  = NULL;
+  DB2EnvEntry* step      = NULL;
+  DB2EnvEntry* newEntry  = NULL;
 
   db2Entry2("(start: %x, nlslang: '%s', henv: %d)",start, nlslang, henv);
   /* allocate a  new DB2EnvEntry and initialize it*/
-  new = malloc(sizeof(DB2EnvEntry));
-  if (new  == NULL) {
+  newEntry = malloc(sizeof(DB2EnvEntry));
+  if (newEntry  == NULL) {
     db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %zu bytes of memory", sizeof (DB2EnvEntry));
   }
-  new->nls_lang = strdup(nlslang);  // important to use strdup since env will survive multiple PG scopes, and so needs nls_lang
-  if (new->nls_lang == NULL) {
-    free(new);
-    db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %zu bytes of memory", (int)strlen(nlslang) + 1);
+  newEntry->nls_lang = strdup(nlslang);  // important to use strdup since env will survive multiple PG scopes, and so needs nls_lang
+  if (newEntry->nls_lang == NULL) {
+    free(newEntry);
+    db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %zu bytes of memory", strlen(nlslang) + 1);
   }
-  new->henv     = henv;
-  new->connlist = NULL;
-  new->left     = NULL;
-  new->right    = NULL;
+  newEntry->henv     = henv;
+  newEntry->connlist = NULL;
+  newEntry->left     = NULL;
+  newEntry->right    = NULL;
 
   // adding the first element to the list is done outside of this function
   if (start != NULL) {
     // scroll forward to the last element of the list
     for (step = start; step->right != NULL; step = step->right){ }
-    step->right = new;
-    new->left  = step;
-    new->right = NULL;
+    step->right = newEntry;
+    newEntry->left  = step;
+    newEntry->right = NULL;
   }
-  db2Debug3("new: %x ->henv: %d, ->connlist: %x, ->left: %x, ->right: %x, ->nls_lang: '%s'",new,new->henv,new->connlist,new->left,new->right,new->nls_lang);
-  db2Exit2(": %x", new);
-  return new; 
+  db2Debug3("newEntry: %x ->henv: %d, ->connlist: %x, ->left: %x, ->right: %x, ->nls_lang: '%s'",newEntry,newEntry->henv,newEntry->connlist,newEntry->left,newEntry->right,newEntry->nls_lang);
+  db2Exit2(": %x", newEntry);
+  return newEntry; 
 }
