@@ -28,7 +28,7 @@ DB2EnvEntry* db2AllocEnvHdl(const char* nls_lang){
   db2Entry1();
   /* create persistent copy of "nls_lang" */
   if ((nlscopy = db2strdup (nls_lang,"nls_lang")) == NULL)
-    db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %d bytes of memory", strlen (nls_lang) + 1);
+    db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %zu bytes of memory", strlen (nls_lang) + 1);
 
   /* set DB2 environment */
   setDB2Environment (nlscopy);
