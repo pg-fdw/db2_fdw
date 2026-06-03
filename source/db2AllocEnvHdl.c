@@ -110,7 +110,7 @@ static void setDB2Environment (char* nls_lang) {
     db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIME_FORMAT cannot be set.");
   }
-  if (putenv ("NLS_TIME_TZ_FORMAT= HH24:MI:SS.FF9TZH:TZM BC") != 0) {
+  if (putenv ("NLS_TIME_TZ_FORMAT=HH24:MI:SS.FF9TZH:TZM BC") != 0) {
     db2free (nls_lang,"nls_lang");
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIME_TZ_FORMAT cannot be set.");
   }
@@ -138,15 +138,19 @@ static DB2EnvEntry* insertenvEntry(DB2EnvEntry* start, const char* nlslang, SQLH
   /* allocate a  new DB2EnvEntry and initialize it*/
   new = malloc(sizeof(DB2EnvEntry));
   if (new  == NULL) {
-    db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %d bytes of memory", sizeof (DB2EnvEntry));
+    db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %zu bytes of memory", sizeof (DB2EnvEntry));
   }
   new->nls_lang = strdup(nlslang);  // important to use strdup since env will survive multiple PG scopes, and so needs nls_lang
+  if (new->nls_lang == NULL) {
+    free(new);
+    db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %zu bytes of memory", (int)strlen(nlslang) + 1);
+  }
   new->henv     = henv;
   new->connlist = NULL;
   new->left     = NULL;
   new->right    = NULL;
 
-  // adding the first element to the list is done outside of this fuunction
+  // adding the first element to the list is done outside of this function
   if (start != NULL) {
     // scroll forward to the last element of the list
     for (step = start; step->right != NULL; step = step->right){ }
