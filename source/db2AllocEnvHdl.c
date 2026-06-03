@@ -84,42 +84,44 @@ DB2EnvEntry* db2AllocEnvHdl(const char* nls_lang){
  * NLS_CALENDAR
  */
 static void setDB2Environment (char* nls_lang) {
-  char* env_nls_lang = NULL;
+  char* eq = NULL;
   db2Entry4();
-  env_nls_lang = strdup(nls_lang);
-  if (env_nls_lang == NULL) {
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Out of memory while setting environment variable NLS_LANG.");
+  eq = strchr(nls_lang, '=');
+  if (eq == NULL) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_LANG is malformed.");
   }
-  if (putenv (env_nls_lang) != 0) {
-    db2free (env_nls_lang, "env_nls_lang");
+  *eq = '\0';
+  if (setenv (nls_lang, eq + 1, 1) != 0) {
+    *eq = '=';
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_LANG cannot be set.");
   }
+  *eq = '=';
   /* other environment variables that control DB2 formats */
-  if (putenv ("NLS_DATE_LANGUAGE=AMERICAN") != 0) {
+  if (setenv ("NLS_DATE_LANGUAGE", "AMERICAN", 1) != 0) {
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_DATE_LANGUAGE cannot be set.");
   }
-  if (putenv ("NLS_DATE_FORMAT=YYYY-MM-DD HH24:MI:SS BC") != 0) {
+  if (setenv ("NLS_DATE_FORMAT", "YYYY-MM-DD HH24:MI:SS BC", 1) != 0) {
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_DATE_FORMAT cannot be set.");
   }
-  if (putenv ("NLS_TIMESTAMP_FORMAT=YYYY-MM-DD HH24:MI:SS.FF9 BC") != 0) {
+  if (setenv ("NLS_TIMESTAMP_FORMAT", "YYYY-MM-DD HH24:MI:SS.FF9 BC", 1) != 0) {
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIMESTAMP_FORMAT cannot be set.");
   }
-  if (putenv ("NLS_TIMESTAMP_TZ_FORMAT=YYYY-MM-DD HH24:MI:SS.FF9TZH:TZM BC") != 0) {
+  if (setenv ("NLS_TIMESTAMP_TZ_FORMAT", "YYYY-MM-DD HH24:MI:SS.FF9TZH:TZM BC", 1) != 0) {
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIMESTAMP_TZ_FORMAT cannot be set.");
   }
-  if (putenv ("NLS_TIME_FORMAT=HH24:MI:SS.FF9 BC") != 0) {
+  if (setenv ("NLS_TIME_FORMAT", "HH24:MI:SS.FF9 BC", 1) != 0) {
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIME_FORMAT cannot be set.");
   }
-  if (putenv ("NLS_TIME_TZ_FORMAT=HH24:MI:SS.FF9TZH:TZM BC") != 0) {
+  if (setenv ("NLS_TIME_TZ_FORMAT", "HH24:MI:SS.FF9TZH:TZM BC", 1) != 0) {
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIME_TZ_FORMAT cannot be set.");
   }
-  if (putenv ("NLS_NUMERIC_CHARACTERS=.,") != 0) {
+  if (setenv ("NLS_NUMERIC_CHARACTERS", ".,", 1) != 0) {
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_NUMERIC_CHARACTERS cannot be set.");
   }
-  if (putenv ("NLS_CALENDAR=") != 0) {
+  if (setenv ("NLS_CALENDAR", "", 1) != 0) {
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_CALENDAR cannot be set.");
   }
-  if (putenv ("NLS_NCHAR=") != 0) {
+  if (setenv ("NLS_NCHAR", "", 1) != 0) {
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_NCHAR cannot be set.");
   }
   db2Exit4();
