@@ -628,6 +628,9 @@ static void getUsedColumns (Expr* expr, RelOptInfo* foreignrel, DB2ResultColumn*
       case T_PlaceHolderVar:
         getUsedColumns (((PlaceHolderVar*) expr)->phexpr, foreignrel, resCol);
       break;
+      case T_SortGroupClause:
+        //nop
+      break;
       case T_SQLValueFunction:
         //nop
       break;                                /* contains no column references */
