@@ -37,62 +37,63 @@ IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO sample;
 IMPORT FOREIGN SCHEMA
 -- list imported tables
 \detr+ sample.*
-                                        List of foreign tables
- Schema |       Table       | Server |                   FDW options                    | Description 
---------+-------------------+--------+--------------------------------------------------+-------------
- sample | act               | sample | (schema 'DB2INST1', "table" 'ACT')               | [NULL]
- sample | bintypes          | sample | (schema 'DB2INST1', "table" 'BINTYPES')          | [NULL]
- sample | catalog           | sample | (schema 'DB2INST1', "table" 'CATALOG')           | [NULL]
- sample | cl_sched          | sample | (schema 'DB2INST1', "table" 'CL_SCHED')          | [NULL]
- sample | customer          | sample | (schema 'DB2INST1', "table" 'CUSTOMER')          | [NULL]
- sample | department        | sample | (schema 'DB2INST1', "table" 'DEPARTMENT')        | [NULL]
- sample | emp_photo         | sample | (schema 'DB2INST1', "table" 'EMP_PHOTO')         | [NULL]
- sample | emp_resume        | sample | (schema 'DB2INST1', "table" 'EMP_RESUME')        | [NULL]
- sample | employee          | sample | (schema 'DB2INST1', "table" 'EMPLOYEE')          | [NULL]
- sample | empmdc            | sample | (schema 'DB2INST1', "table" 'EMPMDC')            | [NULL]
- sample | empprojact        | sample | (schema 'DB2INST1', "table" 'EMPPROJACT')        | [NULL]
- sample | in_tray           | sample | (schema 'DB2INST1', "table" 'IN_TRAY')           | [NULL]
- sample | inventory         | sample | (schema 'DB2INST1', "table" 'INVENTORY')         | [NULL]
- sample | iot_gre_space     | sample | (schema 'DB2INST1', "table" 'IOT_GRE_SPACE')     | [NULL]
- sample | numerictypes      | sample | (schema 'DB2INST1', "table" 'NUMERICTYPES')      | [NULL]
- sample | org               | sample | (schema 'DB2INST1', "table" 'ORG')               | [NULL]
- sample | product           | sample | (schema 'DB2INST1', "table" 'PRODUCT')           | [NULL]
- sample | productsupplier   | sample | (schema 'DB2INST1', "table" 'PRODUCTSUPPLIER')   | [NULL]
- sample | projact           | sample | (schema 'DB2INST1', "table" 'PROJACT')           | [NULL]
- sample | project           | sample | (schema 'DB2INST1', "table" 'PROJECT')           | [NULL]
- sample | purchaseorder     | sample | (schema 'DB2INST1', "table" 'PURCHASEORDER')     | [NULL]
- sample | remotetable       | sample | (schema 'DB2INST1', "table" 'REMOTETABLE')       | [NULL]
- sample | sales             | sample | (schema 'DB2INST1', "table" 'SALES')             | [NULL]
- sample | staff             | sample | (schema 'DB2INST1', "table" 'STAFF')             | [NULL]
- sample | staffg            | sample | (schema 'DB2INST1', "table" 'STAFFG')            | [NULL]
- sample | suppliers         | sample | (schema 'DB2INST1', "table" 'SUPPLIERS')         | [NULL]
- sample | tbcfileentry      | sample | (schema 'DB2INST1', "table" 'TBCFILEENTRY')      | [NULL]
- sample | test_hidden       | sample | (schema 'DB2INST1', "table" 'TEST_HIDDEN')       | [NULL]
- sample | testbigint        | sample | (schema 'DB2INST1', "table" 'TESTBIGINT')        | [NULL]
- sample | timetypes         | sample | (schema 'DB2INST1', "table" 'TIMETYPES')         | [NULL]
- sample | tm2acct           | sample | (schema 'DB2INST1', "table" 'TM2ACCT')           | [NULL]
- sample | uaci_rtdeployment | sample | (schema 'DB2INST1', "table" 'UACI_RTDEPLOYMENT') | [NULL]
- sample | vact              | sample | (schema 'DB2INST1', "table" 'VACT')              | [NULL]
- sample | vastrde1          | sample | (schema 'DB2INST1', "table" 'VASTRDE1')          | [NULL]
- sample | vastrde2          | sample | (schema 'DB2INST1', "table" 'VASTRDE2')          | [NULL]
- sample | vdepmg1           | sample | (schema 'DB2INST1', "table" 'VDEPMG1')           | [NULL]
- sample | vdept             | sample | (schema 'DB2INST1', "table" 'VDEPT')             | [NULL]
- sample | vemp              | sample | (schema 'DB2INST1', "table" 'VEMP')              | [NULL]
- sample | vempdpt1          | sample | (schema 'DB2INST1', "table" 'VEMPDPT1')          | [NULL]
- sample | vemplp            | sample | (schema 'DB2INST1', "table" 'VEMPLP')            | [NULL]
- sample | vempprojact       | sample | (schema 'DB2INST1', "table" 'VEMPPROJACT')       | [NULL]
- sample | vforpla           | sample | (schema 'DB2INST1', "table" 'VFORPLA')           | [NULL]
- sample | vhdept            | sample | (schema 'DB2INST1', "table" 'VHDEPT')            | [NULL]
- sample | vm2acct           | sample | (schema 'DB2INST1', "table" 'VM2ACCT')           | [NULL]
- sample | vphone            | sample | (schema 'DB2INST1', "table" 'VPHONE')            | [NULL]
- sample | vproj             | sample | (schema 'DB2INST1', "table" 'VPROJ')             | [NULL]
- sample | vprojact          | sample | (schema 'DB2INST1', "table" 'VPROJACT')          | [NULL]
- sample | vprojre1          | sample | (schema 'DB2INST1', "table" 'VPROJRE1')          | [NULL]
- sample | vpstrde1          | sample | (schema 'DB2INST1', "table" 'VPSTRDE1')          | [NULL]
- sample | vpstrde2          | sample | (schema 'DB2INST1', "table" 'VPSTRDE2')          | [NULL]
- sample | vstafac1          | sample | (schema 'DB2INST1', "table" 'VSTAFAC1')          | [NULL]
- sample | vstafac2          | sample | (schema 'DB2INST1', "table" 'VSTAFAC2')          | [NULL]
-(52 rows)
+                                          List of foreign tables
+ Schema |        Table        | Server |                    FDW options                     | Description 
+--------+---------------------+--------+----------------------------------------------------+-------------
+ sample | act                 | sample | (schema 'DB2INST1', "table" 'ACT')                 | [NULL]
+ sample | bintypes            | sample | (schema 'DB2INST1', "table" 'BINTYPES')            | [NULL]
+ sample | catalog             | sample | (schema 'DB2INST1', "table" 'CATALOG')             | [NULL]
+ sample | cl_sched            | sample | (schema 'DB2INST1', "table" 'CL_SCHED')            | [NULL]
+ sample | customer            | sample | (schema 'DB2INST1', "table" 'CUSTOMER')            | [NULL]
+ sample | department          | sample | (schema 'DB2INST1', "table" 'DEPARTMENT')          | [NULL]
+ sample | emp_photo           | sample | (schema 'DB2INST1', "table" 'EMP_PHOTO')           | [NULL]
+ sample | emp_resume          | sample | (schema 'DB2INST1', "table" 'EMP_RESUME')          | [NULL]
+ sample | employee            | sample | (schema 'DB2INST1', "table" 'EMPLOYEE')            | [NULL]
+ sample | empmdc              | sample | (schema 'DB2INST1', "table" 'EMPMDC')              | [NULL]
+ sample | empprojact          | sample | (schema 'DB2INST1', "table" 'EMPPROJACT')          | [NULL]
+ sample | in_tray             | sample | (schema 'DB2INST1', "table" 'IN_TRAY')             | [NULL]
+ sample | inventory           | sample | (schema 'DB2INST1', "table" 'INVENTORY')           | [NULL]
+ sample | iot_gre_space       | sample | (schema 'DB2INST1', "table" 'IOT_GRE_SPACE')       | [NULL]
+ sample | numerictypes        | sample | (schema 'DB2INST1', "table" 'NUMERICTYPES')        | [NULL]
+ sample | org                 | sample | (schema 'DB2INST1', "table" 'ORG')                 | [NULL]
+ sample | product             | sample | (schema 'DB2INST1', "table" 'PRODUCT')             | [NULL]
+ sample | productsupplier     | sample | (schema 'DB2INST1', "table" 'PRODUCTSUPPLIER')     | [NULL]
+ sample | projact             | sample | (schema 'DB2INST1', "table" 'PROJACT')             | [NULL]
+ sample | project             | sample | (schema 'DB2INST1', "table" 'PROJECT')             | [NULL]
+ sample | purchaseorder       | sample | (schema 'DB2INST1', "table" 'PURCHASEORDER')       | [NULL]
+ sample | remotetable         | sample | (schema 'DB2INST1', "table" 'REMOTETABLE')         | [NULL]
+ sample | sales               | sample | (schema 'DB2INST1', "table" 'SALES')               | [NULL]
+ sample | staff               | sample | (schema 'DB2INST1', "table" 'STAFF')               | [NULL]
+ sample | staffg              | sample | (schema 'DB2INST1', "table" 'STAFFG')              | [NULL]
+ sample | suppliers           | sample | (schema 'DB2INST1', "table" 'SUPPLIERS')           | [NULL]
+ sample | tbcfileentry        | sample | (schema 'DB2INST1', "table" 'TBCFILEENTRY')        | [NULL]
+ sample | tbcfileentry_sample | sample | (schema 'DB2INST1', "table" 'TBCFILEENTRY_SAMPLE') | [NULL]
+ sample | test_hidden         | sample | (schema 'DB2INST1', "table" 'TEST_HIDDEN')         | [NULL]
+ sample | testbigint          | sample | (schema 'DB2INST1', "table" 'TESTBIGINT')          | [NULL]
+ sample | timetypes           | sample | (schema 'DB2INST1', "table" 'TIMETYPES')           | [NULL]
+ sample | tm2acct             | sample | (schema 'DB2INST1', "table" 'TM2ACCT')             | [NULL]
+ sample | uaci_rtdeployment   | sample | (schema 'DB2INST1', "table" 'UACI_RTDEPLOYMENT')   | [NULL]
+ sample | vact                | sample | (schema 'DB2INST1', "table" 'VACT')                | [NULL]
+ sample | vastrde1            | sample | (schema 'DB2INST1', "table" 'VASTRDE1')            | [NULL]
+ sample | vastrde2            | sample | (schema 'DB2INST1', "table" 'VASTRDE2')            | [NULL]
+ sample | vdepmg1             | sample | (schema 'DB2INST1', "table" 'VDEPMG1')             | [NULL]
+ sample | vdept               | sample | (schema 'DB2INST1', "table" 'VDEPT')               | [NULL]
+ sample | vemp                | sample | (schema 'DB2INST1', "table" 'VEMP')                | [NULL]
+ sample | vempdpt1            | sample | (schema 'DB2INST1', "table" 'VEMPDPT1')            | [NULL]
+ sample | vemplp              | sample | (schema 'DB2INST1', "table" 'VEMPLP')              | [NULL]
+ sample | vempprojact         | sample | (schema 'DB2INST1', "table" 'VEMPPROJACT')         | [NULL]
+ sample | vforpla             | sample | (schema 'DB2INST1', "table" 'VFORPLA')             | [NULL]
+ sample | vhdept              | sample | (schema 'DB2INST1', "table" 'VHDEPT')              | [NULL]
+ sample | vm2acct             | sample | (schema 'DB2INST1', "table" 'VM2ACCT')             | [NULL]
+ sample | vphone              | sample | (schema 'DB2INST1', "table" 'VPHONE')              | [NULL]
+ sample | vproj               | sample | (schema 'DB2INST1', "table" 'VPROJ')               | [NULL]
+ sample | vprojact            | sample | (schema 'DB2INST1', "table" 'VPROJACT')            | [NULL]
+ sample | vprojre1            | sample | (schema 'DB2INST1', "table" 'VPROJRE1')            | [NULL]
+ sample | vpstrde1            | sample | (schema 'DB2INST1', "table" 'VPSTRDE1')            | [NULL]
+ sample | vpstrde2            | sample | (schema 'DB2INST1', "table" 'VPSTRDE2')            | [NULL]
+ sample | vstafac1            | sample | (schema 'DB2INST1', "table" 'VSTAFAC1')            | [NULL]
+ sample | vstafac2            | sample | (schema 'DB2INST1', "table" 'VSTAFAC2')            | [NULL]
+(53 rows)
 
 set log_min_messages=debug5;
 SET
@@ -177,6 +178,7 @@ INSERT 0 1
 SELECT * FROM sample.org;
  deptnumb |    deptname    | manager | division  |   location    
 ----------+----------------+---------+-----------+---------------
+       84 | Mountain       |     290 | Western   | Denver
        10 | Head Office    |     160 | Corporate | New York
        15 | New England    |      50 | Eastern   | Boston
        20 | Mid Atlantic   |      10 | Eastern   | Washington
@@ -184,7 +186,6 @@ SELECT * FROM sample.org;
        42 | Great Lakes    |     100 | Midwest   | Chicago
        51 | Plains         |     140 | Midwest   | Dallas
        66 | Pacific        |     270 | Western   | San Francisco
-       84 | Mountain       |     290 | Western   | Denver
 (8 rows)
 
 --
@@ -329,7 +330,7 @@ FDW options: (schema 'DB2INST1', "table" 'SALES')
 explain (analyze,verbose) select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=4.076..32.522 rows=41.00 loops=1)
+ Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=5.216..33.825 rows=41.00 loops=1)
    Output: a.empno, a.firstnme, a.midinit, a.lastname, a.workdept, a.phoneno, a.hiredate, a.job, a.edlevel, a.sex, a.birthdate, a.salary, a.bonus, a.comm, b.sales_date, b.sales_person, b.region, b.sales
    DB2 query: SELECT r1."EMPNO", r1."FIRSTNME", r1."MIDINIT", r1."LASTNAME", r1."WORKDEPT", r1."PHONENO", r1."HIREDATE", r1."JOB", r1."EDLEVEL", r1."SEX", r1."BIRTHDATE", r1."SALARY", r1."BONUS", r1."COMM", r2."SALES_DATE", r2."SALES_PERSON", r2."REGION", r2."SALES" FROM ("DB2INST1"."EMPLOYEE" r1 INNER JOIN "DB2INST1"."SALES" r2 ON (((r1."LASTNAME" = r2."SALES_PERSON"))))
    DB2 plan: 
@@ -419,8 +420,8 @@ explain (analyze,verbose) select * from sample.employee a, sample.sales b where 
    DB2 plan: 
  Planning:
    Buffers: shared hit=106
- Planning Time: 4.798 ms
- Execution Time: 34.551 ms
+ Planning Time: 4.855 ms
+ Execution Time: 35.887 ms
 (92 rows)
 
 select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
@@ -506,6 +507,7 @@ Access method: heap
 select * from sample.orgcopy;
  deptnumb |    deptname    | manager | division  |   location    
 ----------+----------------+---------+-----------+---------------
+       84 | Mountain       |     290 | Western   | Denver
        10 | Head Office    |     160 | Corporate | New York
        15 | New England    |      50 | Eastern   | Boston
        20 | Mid Atlantic   |      10 | Eastern   | Washington
@@ -513,7 +515,6 @@ select * from sample.orgcopy;
        42 | Great Lakes    |     100 | Midwest   | Chicago
        51 | Plains         |     140 | Midwest   | Dallas
        66 | Pacific        |     270 | Western   | San Francisco
-       84 | Mountain       |     290 | Western   | Denver
 (8 rows)
 
 drop table sample.orgcopy;
@@ -555,7 +556,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
                                                                  QUERY PLAN                                                                 
 --------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=2.646..2.711 rows=1.00 loops=1)
+ Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=2.536..2.603 rows=1.00 loops=1)
    Output: (min(salary)), (max(salary)), (avg(salary)), (sum(((salary + comm) + bonus))), (count(*))
    DB2 query: SELECT MIN("SALARY"), MAX("SALARY"), AVG("SALARY"), SUM((("SALARY" + "COMM") + "BONUS")), COUNT(*) FROM "DB2INST1"."EMPLOYEE"
    DB2 plan: 
@@ -624,8 +625,8 @@ explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary 
    DB2 plan: 
  Planning:
    Buffers: shared hit=20
- Planning Time: 3.324 ms
- Execution Time: 3.868 ms
+ Planning Time: 3.294 ms
+ Execution Time: 3.743 ms
 (71 rows)
 
 select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
@@ -638,7 +639,7 @@ select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) fr
 explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
                                                                                    QUERY PLAN                                                                                    
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=3.460..5.559 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=2.481..3.093 rows=3.00 loops=1)
    Output: empno, firstnme, lastname, ((salary + bonus) + comm)
    DB2 query: SELECT "EMPNO", "FIRSTNME", "LASTNAME", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" > 43840.01)) AND (("LASTNAME" LIKE 'L%' ESCAPE '\'))
    DB2 plan: 
@@ -707,8 +708,8 @@ explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm
    DB2 plan: 
  Planning:
    Buffers: shared hit=3
- Planning Time: 5.797 ms
- Execution Time: 7.551 ms
+ Planning Time: 3.185 ms
+ Execution Time: 4.288 ms
 (71 rows)
 
 select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
@@ -947,7 +948,7 @@ SELECT count(*) FROM sample.employee;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee WHERE workdept IN ('A00','B01','E21') AND salary BETWEEN 40000 AND 70000 AND (lastname LIKE 'L%' OR lastname LIKE 'G%');
                                                                                                                                  QUERY PLAN                                                                                                                                 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..127.26 rows=1 width=90) (actual time=3.390..3.831 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..127.26 rows=1 width=90) (actual time=3.311..3.792 rows=3.00 loops=1)
    Output: empno, lastname, salary, workdept
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY", "WORKDEPT" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" >= 40000)) AND (("SALARY" <= 70000)) AND (("WORKDEPT"  IN ('A00', 'B01', 'E21'))) AND ((("LASTNAME" LIKE 'L%' ESCAPE '\') OR ("LASTNAME" LIKE 'G%' ESCAPE '\')))
    DB2 plan: 
@@ -1023,8 +1024,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee WH
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.917 ms
- Execution Time: 4.910 ms
+ Planning Time: 3.968 ms
+ Execution Time: 4.874 ms
 (78 rows)
 
 SELECT empno, lastname, salary FROM sample.employee WHERE workdept IN ('A00','B01','E21') AND salary BETWEEN 40000 AND 70000 AND (lastname LIKE 'L%' OR lastname LIKE 'G%') ORDER BY empno;
@@ -1057,7 +1058,7 @@ FROM sample.employee;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..101.11 rows=5 width=90) (actual time=1.976..2.659 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..101.11 rows=5 width=90) (actual time=1.936..2.673 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" FETCH FIRST 5 ROWS ONLY
    DB2 plan: 
@@ -1119,8 +1120,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LI
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.282 ms
- Execution Time: 3.669 ms
+ Planning Time: 3.393 ms
+ Execution Time: 4.370 ms
 (64 rows)
 
 SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
@@ -1136,7 +1137,7 @@ SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.05..101.16 rows=5 width=90) (actual time=2.339..3.016 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.05..101.16 rows=5 width=90) (actual time=2.275..2.952 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY
    DB2 plan: 
@@ -1200,8 +1201,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LI
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.337 ms
- Execution Time: 4.062 ms
+ Planning Time: 2.277 ms
+ Execution Time: 4.006 ms
 (66 rows)
 
 SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
@@ -1217,7 +1218,7 @@ SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
                                                                                   QUERY PLAN                                                                                  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.06..101.19 rows=5 width=90) (actual time=2.426..3.141 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.06..101.19 rows=5 width=90) (actual time=2.458..3.169 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" ORDER BY "SALARY" DESC NULLS FIRST, "EMPNO" ASC NULLS LAST OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY
    DB2 plan: 
@@ -1303,8 +1304,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee OR
    DB2 plan: 
  Planning:
    Buffers: shared hit=12
- Planning Time: 2.684 ms
- Execution Time: 4.151 ms
+ Planning Time: 2.665 ms
+ Execution Time: 4.177 ms
 (88 rows)
 
 SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
@@ -1331,7 +1332,7 @@ PREPARE
 EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=3.876..3.941 rows=1.00 loops=1)
+ Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=1.623..1.690 rows=1.00 loops=1)
    Output: actno, actkwd, actdesc
    DB2 query: SELECT "ACTNO", "ACTKWD", "ACTDESC" FROM "DB2INST1"."ACT" WHERE (("ACTNO" = 10))
    DB2 plan: 
@@ -1404,8 +1405,8 @@ EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 1.282 ms
- Execution Time: 4.401 ms
+ Planning Time: 1.308 ms
+ Execution Time: 2.143 ms
 (75 rows)
 
 EXECUTE act_by_no(10);
@@ -1518,9 +1519,9 @@ INSERT 0 1
 SELECT * FROM sample.remotetable;
   col1  |   col2   |   col3   |   col4   |  col5  |  col6  |   col7   |    col8    |   col9   |   col10    |  col11   | col12 | col13 | col14  | col15  | col16  | col17  | col18  | col19  | col20  | col21  | col22  | col23  |           col24            |  col25   | col26  | col27  | col28  
 --------+----------+----------+----------+--------+--------+----------+------------+----------+------------+----------+-------+-------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+----------------------------+----------+--------+--------+--------
- 581927 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2026-07-12 | 10:35:38 | 2026-07-12 | 10:35:38 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2026-07-12 10:35:38.495913 | sometext | [NULL] | [NULL] | [NULL]
  581928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988    | sometext | [NULL] | [NULL] | [NULL]
  681928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   998 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988    | sometext | [NULL] | [NULL] | [NULL]
+ 581927 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2026-07-12 | 10:47:52 | 2026-07-12 | 10:47:52 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2026-07-12 10:47:52.450657 | sometext | [NULL] | [NULL] | [NULL]
 (3 rows)
 
 DELETE FROM sample.remotetable where col1 = 581927;
@@ -1557,47 +1558,93 @@ Not-null constraints:
 Server: sample
 FDW options: (schema 'DB2INST1', "table" 'TBCFILEENTRY')
 
-CREATE FOREIGN TABLE sample.tbcfileentry_sample (
-  tbcfientid   bigint                         not null, 
-  filename     character varying(255)         not null, 
-  filepath     text                           not null, 
-  filesize     bigint                                 , 
-  filetype     character varying(100)                 , 
-  checksum     character varying(64)                  , 
-  owner        character varying(100)                 , 
-  created_at   timestamp(6) without time zone not null, 
-  modified_at  timestamp(6) without time zone         , 
-  status       smallint                       not null, 
-  description  text                                    
-) SERVER sample OPTIONS (
-  table '(SELECT * FROM DB2INST1.TBCFILEENTRY TABLESAMPLE SYSTEM (10))'
-);
-CREATE FOREIGN TABLE
+\d+ sample.tbcfileentry_sample
+                                                                                                Foreign table "sample.tbcfileentry_sample"
+   Column    |              Type              | Collation | Nullable | Default |                                                   FDW options                                                    | Storage  | Stats target | Description 
+-------------+--------------------------------+-----------+----------+---------+------------------------------------------------------------------------------------------------------------------+----------+--------------+-------------
+ tbcfientid  | bigint                         |           | not null |         | (db2type '-5', db2size '19', db2bytes '8', db2chars '19', db2scale '0', db2null '0', db2ccsid '0')               | plain    |              | 
+ filename    | character varying(255)         |           | not null |         | (db2type '12', db2size '255', db2bytes '255', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')          | extended |              | 
+ filepath    | text                           |           | not null |         | (db2type '-99', db2size '1048576', db2bytes '1048576', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208') | extended |              | 
+ filesize    | bigint                         |           |          |         | (db2type '-5', db2size '19', db2bytes '8', db2chars '19', db2scale '0', db2null '1', db2ccsid '0')               | plain    |              | 
+ filetype    | character varying(100)         |           |          |         | (db2type '12', db2size '100', db2bytes '100', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')          | extended |              | 
+ checksum    | character varying(64)          |           |          |         | (db2type '12', db2size '64', db2bytes '64', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')            | extended |              | 
+ owner       | character varying(100)         |           |          |         | (db2type '12', db2size '100', db2bytes '100', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')          | extended |              | 
+ created_at  | timestamp(6) without time zone |           | not null |         | (db2type '93', db2size '26', db2bytes '16', db2chars '26', db2scale '6', db2null '0', db2ccsid '0')              | plain    |              | 
+ modified_at | timestamp(6) without time zone |           |          |         | (db2type '93', db2size '26', db2bytes '16', db2chars '26', db2scale '6', db2null '1', db2ccsid '0')              | plain    |              | 
+ status      | smallint                       |           | not null |         | (db2type '5', db2size '5', db2bytes '2', db2chars '5', db2scale '0', db2null '0', db2ccsid '0')                  | plain    |              | 
+ description | text                           |           |          |         | (db2type '-99', db2size '1048576', db2bytes '1048576', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208') | extended |              | 
+Not-null constraints:
+    "tbcfileentry_sample_tbcfientid_not_null" NOT NULL "tbcfientid"
+    "tbcfileentry_sample_filename_not_null" NOT NULL "filename"
+    "tbcfileentry_sample_filepath_not_null" NOT NULL "filepath"
+    "tbcfileentry_sample_created_at_not_null" NOT NULL "created_at"
+    "tbcfileentry_sample_status_not_null" NOT NULL "status"
+Server: sample
+FDW options: (schema 'DB2INST1', "table" 'TBCFILEENTRY_SAMPLE')
+
 EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry_sample;
-psql:test/sql/tc015.sql:23: FEHLER:  error executing query: SQLExecute failed to execute remote query
-DETAIL:  SQLSTATE = 42S02  SQLCODE = -204
-line=69
-file=source/db2ExecuteQuery.c
-DIAG_COLUMN_NUMBER=-2
-DIAG_ROW_NUMBER=-1
-[IBM][CLI Driver][DB2/LINUXX8664] SQL0204N  "SAMPLE.(SELECT * FROM DB2INST1.TBCFILEENTRY TABLESAMPLE SYSTEM (10))" is an undefined name.  SQLSTATE=42704
+                                                                                            QUERY PLAN                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on sample.tbcfileentry_sample  (cost=100.00..124.74 rows=67 width=1196) (actual time=6.248..731.712 rows=825.00 loops=1)
+   Output: tbcfientid, filename, filepath, filesize, filetype, checksum, owner, created_at, modified_at, status, description
+   DB2 query: SELECT "TBCFIENTID", "FILENAME", "FILEPATH", "FILESIZE", "FILETYPE", "CHECKSUM", "OWNER", "CREATED_AT", "MODIFIED_AT", "STATUS", "DESCRIPTION" FROM "DB2INST1"."TBCFILEENTRY_SAMPLE"
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 11.5, 5622-044 (c) Copyright IBM Corp. 1991, 2019
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 12.1, 5622-044 (c) Copyright IBM Corp. 1991, 2022
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: ******************** DYNAMIC ***************************************
+   DB2 plan: 
+   DB2 plan: ==================== STATEMENT ==========================================
+   DB2 plan: 
+   DB2 plan:     Isolation Level          = Cursor Stability
+   DB2 plan:     Blocking                 = Block Unambiguous Cursors
+   DB2 plan:     Query Optimization Class = 5
+   DB2 plan: 
+   DB2 plan:     Partition Parallel       = No
+   DB2 plan:     Intra-Partition Parallel = No
+   DB2 plan: 
+   DB2 plan:     SQL Path                 = "SYSIBM", "SYSFUN", "SYSPROC", "SYSIBMADM", 
+   DB2 plan:                                    "SYSHADOOP", "DB2INST1"
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: Statement:
+   DB2 plan:   
+   DB2 plan:   SELECT "TBCFIENTID" , "FILENAME" , "FILEPATH" , "FILESIZE" , 
+   DB2 plan:           "FILETYPE" , "CHECKSUM" , "OWNER" , "CREATED_AT" , 
+   DB2 plan:           "MODIFIED_AT" , "STATUS" , "DESCRIPTION" 
+   DB2 plan:   FROM "DB2INST1" ."TBCFILEENTRY_SAMPLE" 
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: compiledInTenantID = 0
+   DB2 plan: 
+   DB2 plan: Section Code Page = 1208
+   DB2 plan: 
+   DB2 plan: Estimated Cost = 29,834015
+   DB2 plan: Estimated Cardinality = 1000,000000
+   DB2 plan: 
+   DB2 plan: Return Data to Application
+   DB2 plan: |  #Columns = 11
+   DB2 plan: 
+   DB2 plan: End of section
+   DB2 plan: 
+   DB2 plan: 
+ Planning:
+   Buffers: shared hit=81
+ Planning Time: 2.718 ms
+ Execution Time: 733.802 ms
+(52 rows)
 
-
-EXPLAIN (analyze,verbose) SELECT PERCENTILE_CONT(0.5)
-       WITHIN GROUP (ORDER BY tbcfientid)
-FROM (
-    SELECT tbcfientid
-    FROM sample.tbcfileentry
-);
-psql:test/sql/tc015.sql:30: FEHLER:  error executing query: SQLExecute failed to execute remote query
-DETAIL:  SQLSTATE = 42601  SQLCODE = -104
-line=69
-file=source/db2ExecuteQuery.c
-DIAG_COLUMN_NUMBER=-2
-DIAG_ROW_NUMBER=-1
-[IBM][CLI Driver][DB2/LINUXX8664] SQL0104N  An unexpected token "." was found following "ECT  FROM "DB2INST1"".  Expected tokens may include:  "FROM".  SQLSTATE=42601
-
-
+--EXPLAIN (analyze,verbose) SELECT PERCENTILE_CONT(0.5)
+--       WITHIN GROUP (ORDER BY tbcfientid)
+--FROM (
+--    SELECT tbcfientid
+--    FROM sample.tbcfileentry
+--);
 --
 -- END of TC015
 --
