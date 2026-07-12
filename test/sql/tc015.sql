@@ -1,6 +1,8 @@
 --
 -- TC015: TABLESAMPLE and PERCENTILE
 --
+\d+ sample.tbcfileentry
+
 \d+ sample.tbcfileentry_sample
 
 EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry_sample;
