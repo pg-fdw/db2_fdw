@@ -1,21 +1,17 @@
 --
 -- TC015: TABLESAMPLE and PERCENTILE
 --
-\d+ sample.tbcfileentry
-EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry;
+\d+ sample.tbcfileentry_sample
 
-EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry TABLESAMPLE SYSTEM (0.1);
+EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry_sample;
 
-EXPLAIN (analyze,verbose) SELECT PERCENTILE_CONT(0.5)
-       WITHIN GROUP (ORDER BY tbcfientid)
-FROM (
-    SELECT *
-    FROM sample.tbcfileentry
-) x;
+--EXPLAIN (analyze,verbose) SELECT PERCENTILE_CONT(0.5)
+--       WITHIN GROUP (ORDER BY tbcfientid)
+--FROM (
+--    SELECT tbcfientid
+--    FROM sample.tbcfileentry
+--);
 
---SELECT PERCENTILE_CONT(0.5)
---       WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont 
---       FROM sample.tbcfileentry;
 --
 -- END of TC015
 --

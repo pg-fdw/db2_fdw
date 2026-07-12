@@ -421,23 +421,7 @@ on a foreign table, you will receive this error:
 
 **Workarounds:**
 
-1. **Use the table option with a query containing TABLESAMPLE:**
-
-   You can embed the TABLESAMPLE clause in the table definition:
-
-   ```sql
-   CREATE FOREIGN TABLE sampled_data (
-     empno      CHAR(6),
-     firstnme   VARCHAR(12),
-     lastname   VARCHAR(15)
-   ) SERVER sample OPTIONS (
-     table '(SELECT * FROM DB2INST1.EMPLOYEE TABLESAMPLE SYSTEM (10))'
-   );
-   ```
-
-   DB2 11.1+ supports both SYSTEM (block-level) and BERNOULLI (row-level) sampling methods.
-
-2. **Create a DB2 view with TABLESAMPLE:**
+**Create a DB2 view with TABLESAMPLE:**
 
    ```sql
    -- On the DB2 server:
@@ -450,11 +434,6 @@ on a foreign table, you will receive this error:
    ) SERVER sample OPTIONS (schema 'DB2INST1', table 'EMPLOYEE_SAMPLE');
    ```
 
-3. **Use the sample_percent option for ANALYZE operations:**
-
-   The existing `sample_percent` foreign table option is designed for ANALYZE operations
-   and uses DB2's SAMPLE BLOCK clause internally. This does not provide TABLESAMPLE
-   functionality for regular queries but is useful for statistics gathering.
 
 WHERE conditions and ORDER BY clauses
 -------------------------------------
