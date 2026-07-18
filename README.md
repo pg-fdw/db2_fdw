@@ -410,6 +410,31 @@ These conversions are automatically handled by db2_fdw:
 
 This part is still under development. Restrictions will arise in further testing.
 
+TABLESAMPLE clause
+------------------
+
+PostgreSQL's TABLESAMPLE clause is not directly supported on foreign tables due to
+a parser-level restriction in PostgreSQL core. When you attempt to use TABLESAMPLE
+on a foreign table, you will receive this error:
+
+    ERROR: TABLESAMPLE clause can only be applied to tables and materialized views
+
+**Workarounds:**
+
+**Create a DB2 view with TABLESAMPLE:**
+
+   ```sql
+   -- On the DB2 server:
+   CREATE VIEW EMPLOYEE_SAMPLE AS
+   SELECT * FROM DB2INST1.EMPLOYEE TABLESAMPLE SYSTEM (10);
+
+   -- Then map it as a foreign table in PostgreSQL:
+   CREATE FOREIGN TABLE employee_sample (
+     ...
+   ) SERVER sample OPTIONS (schema 'DB2INST1', table 'EMPLOYEE_SAMPLE');
+   ```
+
+
 WHERE conditions and ORDER BY clauses
 -------------------------------------
 
