@@ -4,3 +4,4 @@ test.bash
 *.bc
 .vscode/
 rpms
+CLAUDE.md
