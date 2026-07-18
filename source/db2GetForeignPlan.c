@@ -480,6 +480,9 @@ static void getUsedColumns (Expr* expr, RelOptInfo* foreignrel, DB2ResultColumn*
           copyCol2Result(resCol,col);
         } else {
           db2Debug4("count aggref->args: %d",list_length(aggref->args));
+          foreach (cell, aggref->aggdirectargs) {
+            getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
+          }
           foreach (cell, aggref->args) {
             getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
           }
@@ -488,6 +491,33 @@ static void getUsedColumns (Expr* expr, RelOptInfo* foreignrel, DB2ResultColumn*
           }
           foreach (cell, aggref->aggdistinct) {
             getUsedColumns ((Expr*) lfirst (cell), foreignrel, resCol);
+          }
+          /* The above borrows its column definition (DB2 type, size, ...) from whichever Var
+           * was found first in the aggregate's arguments/ORDER BY/DISTINCT list, via
+           * copyCol2Result(). That's correct as long as the aggregate's own PostgreSQL return
+           * type matches that Var's type (true for MIN/MAX, and for PERCENTILE_DISC, which
+           * always returns the type of its sort key). It's wrong whenever the aggregate
+           * promotes/changes the type -- e.g. AVG()/SUM() turning an integer column into
+           * numeric, or PERCENTILE_CONT() always returning double precision regardless of its
+           * sort key's type. In that mismatched case, DB2 sends back a DECFLOAT-formatted value
+           * that doesn't fit the borrowed column's layout, which can crash the fetch or corrupt
+           * the result (observed: AVG() over a bigint column segfaulting the backend).
+           *
+           * Re-tag the result column with the aggregate's real return type and route it through
+           * the same safe, generously-sized SQLGetData(SQL_C_CHAR) fetch path already used for
+           * genuine DECIMAL/NUMERIC/DECFLOAT columns (see db2PrepareQuery.c / convertTuple() in
+           * db2_fdw_utils.c, which also normalizes a locale decimal comma to a period for these
+           * types) instead of trusting the borrowed layout.
+           */
+          if (resCol->colName != NULL && resCol->pgtype != aggref->aggtype) {
+            resCol->colType  = -360; // SQL_DECFLOAT
+            resCol->colSize  = 34;   // DB2's maximum DECFLOAT precision
+            resCol->colScale = 0;
+            resCol->colChars = 42;   // precision + sign + '.' + exponent, with headroom
+            resCol->colBytes = 16;
+            resCol->pgtype   = aggref->aggtype;
+            resCol->pgtypmod = -1;
+            resCol->val_size = 64;
           }
         }
       }

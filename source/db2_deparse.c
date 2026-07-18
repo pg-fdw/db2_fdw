@@ -147,6 +147,8 @@ static void         deparseCaseExpr           (CaseExpr*          expr, deparse_
 static void         deparseCoalesceExpr       (CoalesceExpr*      expr, deparse_expr_cxt* ctx);
 static void         deparseFuncExpr           (FuncExpr*          expr, deparse_expr_cxt* ctx);
 static void         deparseAggref             (Aggref*            expr, deparse_expr_cxt* ctx);
+static void         deparseOrderedSetAggref   (Aggref*            expr, const char* db2func, deparse_expr_cxt* ctx);
+static const char*  db2AggregateInfo          (Oid aggfnoid, char aggkind, bool* isOrderedSet);
 static void         deparseCoerceViaIOExpr    (CoerceViaIO*       expr, deparse_expr_cxt* ctx);
 static void         deparseSQLValueFuncExpr   (SQLValueFunction*  expr, deparse_expr_cxt* ctx);
 static void         deparseConst              (Const* node, deparse_expr_cxt* context, int showtype);
@@ -681,7 +683,31 @@ static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_
         // As usual, it must be shippable.
         if (!is_shippable(agg->aggfnoid, ProcedureRelationId, fpinfo))
           return false;
-        // Recurse to input args. aggdirectargs, aggorder and aggdistinct are all present in args, so no need to check their shippability explicitly.
+        // We must also know how to deparse this specific aggregate; otherwise the walker would say it's safe
+        // to push down while deparseAggref silently emits nothing, producing a broken remote query.
+        {
+          bool isOrderedSet = false;
+
+          if (db2AggregateInfo(agg->aggfnoid, agg->aggkind, &isOrderedSet) == NULL)
+            return false;
+          // Ordered-set aggregates (PERCENTILE_CONT/PERCENTILE_DISC) are only pushed down in the simple,
+          // single-column form: one direct argument (the fraction) that is not an array, and exactly one
+          // ORDER BY column.  DB2's WITHIN GROUP (ORDER BY ...) doesn't support the multi-column or
+          // array-fraction variants that PostgreSQL allows.
+          if (isOrderedSet) {
+            if (list_length(agg->aggdirectargs) != 1 || list_length(agg->aggorder) != 1)
+              return false;
+            if (type_is_array(exprType((Node*) linitial(agg->aggdirectargs))))
+              return false;
+          }
+        }
+        // Recurse to direct arguments, if any (used by ordered-set aggregates like PERCENTILE_CONT/PERCENTILE_DISC).
+        foreach(lc, agg->aggdirectargs) {
+          Node* n = (Node*) lfirst(lc);
+          if (!foreign_expr_walker(n, glob_cxt, &inner_cxt, case_arg_cxt))
+            return false;
+        }
+        // Recurse to input args. aggorder and aggdistinct are all present in args, so no need to check their shippability explicitly.
         foreach(lc, agg->args) {
           Node*   n = (Node*) lfirst(lc);
           // If TargetEntry, extract the expression from it
@@ -2868,106 +2894,164 @@ static void deparseSQLValueFuncExpr  (SQLValueFunction*  expr, deparse_expr_cxt*
   db2Exit1(": %s", ctx->buf->data);
 }
 
+/** db2AggregateInfo
+ *   Determine whether the given aggregate (identified by its pg_proc OID and aggkind) is one we know how to
+ *   deparse for DB2, and if so return the DB2 SQL keyword to use for it.
+ *   *isOrderedSet is set to indicate whether it needs WITHIN GROUP (ORDER BY ...) syntax (ordered-set
+ *   aggregates such as PERCENTILE_CONT/PERCENTILE_DISC) rather than plain FUNC(args) syntax.
+ *   Returns NULL if the aggregate is not supported for pushdown.
+ */
+static const char* db2AggregateInfo (Oid aggfnoid, char aggkind, bool* isOrderedSet) {
+  HeapTuple    tuple;
+  const char*  db2func = NULL;
+
+  db2Entry2();
+  *isOrderedSet = false;
+  tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(aggfnoid));
+  if (!HeapTupleIsValid(tuple)) {
+    elog(ERROR, "cache lookup failed for function %u", aggfnoid);
+  } else {
+    Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(tuple);
+    const char*  aggname  = NameStr(procform->proname);
+
+    if (aggkind == AGGKIND_NORMAL) {
+      if      (strcmp(aggname, "count") == 0) db2func = "COUNT";
+      else if (strcmp(aggname, "sum")   == 0) db2func = "SUM";
+      else if (strcmp(aggname, "avg")   == 0) db2func = "AVG";
+      else if (strcmp(aggname, "min")   == 0) db2func = "MIN";
+      else if (strcmp(aggname, "max")   == 0) db2func = "MAX";
+    } else if (aggkind == AGGKIND_ORDERED_SET) {
+      if (strcmp(aggname, "percentile_cont") == 0) {
+        db2func       = "PERCENTILE_CONT";
+        *isOrderedSet = true;
+      } else if (strcmp(aggname, "percentile_disc") == 0) {
+        db2func       = "PERCENTILE_DISC";
+        *isOrderedSet = true;
+      }
+    }
+    db2Debug2("aggref->aggfnoid=%u name=%s aggkind=%c -> %s", aggfnoid, aggname, aggkind, db2func ? db2func : "<unsupported>");
+    ReleaseSysCache(tuple);
+  }
+  db2Exit2(": %s", db2func ? db2func : "<unsupported>");
+  return db2func;
+}
+
+/** deparseOrderedSetAggref
+ *   Deparse an ordered-set aggregate, i.e. PERCENTILE_CONT/PERCENTILE_DISC, using DB2's
+ *   FUNC(direct-arg) WITHIN GROUP (ORDER BY sort-key [ASC|DESC]) syntax.
+ *   Caller (foreign_expr_walker) has already verified there is exactly one direct argument and exactly
+ *   one ORDER BY column.
+ */
+static void deparseOrderedSetAggref (Aggref* expr, const char* db2func, deparse_expr_cxt* ctx) {
+  StringInfoData    directArgBuf;
+  StringInfoData    sortBuf;
+  deparse_expr_cxt  context;
+  SortGroupClause*  srt;
+  TargetEntry*      tle;
+  TypeCacheEntry*   typentry;
+
+  db2Entry1();
+
+  context.root        = ctx->root;
+  context.foreignrel   = ctx->foreignrel;
+  context.scanrel      = ctx->scanrel;
+  context.params_list  = ctx->params_list;
+
+  /* Deparse the single direct argument (e.g. the fraction for PERCENTILE_CONT/PERCENTILE_DISC). */
+  initStringInfo(&directArgBuf);
+  context.buf = &directArgBuf;
+  deparseExprInt((Expr*) linitial(expr->aggdirectargs), &context);
+
+  /* Deparse the single ORDER BY column, along with its sort direction. */
+  srt      = (SortGroupClause*) linitial(expr->aggorder);
+  tle      = get_sortgroupref_tle(srt->tleSortGroupRef, expr->args);
+  typentry = lookup_type_cache(exprType((Node*) tle->expr), TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);
+
+  initStringInfo(&sortBuf);
+  context.buf = &sortBuf;
+  deparseExprInt(tle->expr, &context);
+  appendStringInfoString(&sortBuf, (srt->sortop == typentry->gt_opr) ? " DESC" : " ASC");
+
+  if (directArgBuf.len > 0 && sortBuf.len > 0) {
+    appendStringInfo(ctx->buf, "%s(%s) WITHIN GROUP (ORDER BY %s)", db2func, directArgBuf.data, sortBuf.data);
+  } else {
+    db2Debug2("could not deparse ordered-set aggregate args");
+  }
+  db2free(directArgBuf.data, "directArgBuf.data");
+  db2free(sortBuf.data, "sortBuf.data");
+
+  db2Exit1(": %s", ctx->buf->data);
+}
+
 static void deparseAggref            (Aggref*            expr, deparse_expr_cxt* ctx) {
   db2Entry1();
   if (expr == NULL) {
     db2Debug2("expr is NULL");
   } else {
-    /* Resolve aggregate function name (OID -> pg_proc.proname). */
-    HeapTuple tuple   = SearchSysCache1(PROCOID, ObjectIdGetDatum(expr->aggfnoid));
-    char*     aggname = NULL;
-    char*     nspname = NULL;
-    if (!HeapTupleIsValid(tuple)) {
-      elog(ERROR, "cache lookup failed for function %u", expr->aggfnoid);
+    bool         isOrderedSet = false;
+    const char*  db2func      = db2AggregateInfo(expr->aggfnoid, expr->aggkind, &isOrderedSet);
+
+    if (db2func == NULL) {
+      /* Unknown/unsupported aggregate: don't emit SQL. (foreign_expr_walker should already have refused to push this down.) */
+      db2Debug2("aggregate (fnoid=%u) not supported for DB2 deparse", expr->aggfnoid);
+    } else if (isOrderedSet) {
+      deparseOrderedSetAggref(expr, db2func, ctx);
     } else {
-      Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(tuple);
-      aggname = pstrdup(NameStr(procform->proname));
-      /* Optional: capture schema for debugging/qualification decisions. */
-      if (OidIsValid(procform->pronamespace)) {
-        HeapTuple ntup = SearchSysCache1(NAMESPACEOID, ObjectIdGetDatum(procform->pronamespace));
-        if (HeapTupleIsValid(ntup)) {
-          Form_pg_namespace nspform = (Form_pg_namespace) GETSTRUCT(ntup);
-          nspname = pstrdup(NameStr(nspform->nspname));
-          ReleaseSysCache(ntup);
-        }
+      StringInfoData    result;
+      bool              distinct = (expr->aggdistinct != NIL);
+      bool              ok = true;
+
+      initStringInfo(&result);
+      appendStringInfo(&result, "%s(", db2func);
+      if (distinct) {
+        appendStringInfoString(&result, "DISTINCT ");
       }
-      ReleaseSysCache(tuple);
-    }
-    db2Debug2("aggref->aggfnoid=%u name=%s%s%s", expr->aggfnoid, nspname ? nspname : "", nspname ? "." : "", aggname ? aggname : "<unknown>");
-    /* We only support deparsing simple, standard aggregates for now.
-     * (This can be expanded to ordered-set / FILTER / WITHIN GROUP later.)
-     */
-    if (expr->aggorder != NIL) {
-      db2Debug2("aggregate ORDER BY not supported for pushdown");
-    } else if (aggname != NULL) {
-      const char*    db2func  = NULL;
-      bool           distinct = (expr->aggdistinct != NIL);
-      bool           ok = true;
-   
-      if (strcmp(aggname, "count") == 0) db2func = "COUNT";
-      else if (strcmp(aggname, "sum") == 0) db2func = "SUM";
-      else if (strcmp(aggname, "avg") == 0) db2func = "AVG";
-      else if (strcmp(aggname, "min") == 0) db2func = "MIN";
-      else if (strcmp(aggname, "max") == 0) db2func = "MAX";
-      else {
-        /* Unknown aggregate name: we can still report it (above), but don't emit SQL. */
-        db2Debug2("aggregate '%s' not supported for DB2 deparse", aggname);
-      } 
-      if (db2func != NULL) {
-        StringInfoData    result;
+      if (expr->aggstar) {
+        /* COUNT(*) */
+        appendStringInfoString(&result, "*");
+      } else {
+        ListCell*         lc;
+        bool              first_arg = true;
 
-        initStringInfo(&result);
-        appendStringInfo(&result, "%s(", db2func);
-        if (distinct) {
-          appendStringInfoString(&result, "DISTINCT ");
-        }
-        if (expr->aggstar) {
-          /* COUNT(*) */
-          appendStringInfoString(&result, "*");
-        } else {
-          ListCell*         lc;
-          bool              first_arg = true;
+        foreach (lc, expr->args) {
+          Node*             argnode = (Node*) lfirst(lc);
+          Expr*             argexpr = NULL;
+          StringInfoData    cbuf;
+          deparse_expr_cxt  context;
 
-          foreach (lc, expr->args) {
-            Node*             argnode = (Node*) lfirst(lc);
-            Expr*             argexpr = NULL;
-            StringInfoData    cbuf;
-            deparse_expr_cxt  context;
+          initStringInfo(&cbuf);
+          context.root        = ctx->root;
+          context.buf         = &cbuf;
+          context.foreignrel  = ctx->foreignrel;
+          context.scanrel     = ctx->scanrel;
+          context.params_list = ctx->params_list;
 
-            initStringInfo(&cbuf);
-            context.root        = ctx->root;
-            context.buf         = &cbuf;
-            context.foreignrel  = ctx->foreignrel;
-            context.scanrel     = ctx->scanrel;
-            context.params_list = ctx->params_list;
-
-            if (argnode == NULL) {
-              ok = false;
-              break;
-            }
-            if (argnode->type == T_TargetEntry) {
-              argexpr = ((TargetEntry*) argnode)->expr;
-            } else {
-              argexpr = (Expr*) argnode;
-            }
-            deparseExprInt(argexpr, &context);
-            if (cbuf.len <= 0) {
-              ok = false;
-              break;
-            }
-            appendStringInfo(&result, "%s%s", cbuf.data, first_arg ? "" : ", ");
-            db2free(cbuf.data,"cbuf.data");
-            first_arg = false;
+          if (argnode == NULL) {
+            ok = false;
+            break;
           }
+          if (argnode->type == T_TargetEntry) {
+            argexpr = ((TargetEntry*) argnode)->expr;
+          } else {
+            argexpr = (Expr*) argnode;
+          }
+          deparseExprInt(argexpr, &context);
+          if (cbuf.len <= 0) {
+            ok = false;
+            break;
+          }
+          appendStringInfo(&result, "%s%s", cbuf.data, first_arg ? "" : ", ");
+          db2free(cbuf.data,"cbuf.data");
+          first_arg = false;
         }
-        if (ok) {
-          appendStringInfo(ctx->buf, "%s)",result.data);
-        } else {
-          db2Debug2("parsed aggref so far: %s", result.data);
-          db2Debug2("could not deparse aggregate args");
-        }
-        db2free(result.data,"result.data");
       }
+      if (ok) {
+        appendStringInfo(ctx->buf, "%s)",result.data);
+      } else {
+        db2Debug2("parsed aggref so far: %s", result.data);
+        db2Debug2("could not deparse aggregate args");
+      }
+      db2free(result.data,"result.data");
     }
   }
   db2Exit1(": %s", ctx->buf->data);
