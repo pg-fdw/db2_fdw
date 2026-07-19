@@ -2788,7 +2788,7 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
         foreach (cell, expr->args) {
           arg = deparseExpr (ctx->root, ctx->foreignrel, lfirst (cell), ctx->params_list);
           if (arg != NULL) {
-            appendStringInfo (&buf, "%s%s", (first_arg) ? ", " : "",arg);
+            appendStringInfo (&buf, "%s%s", (first_arg) ? "" : ", ",arg);
             first_arg = false;
             db2free(arg,"arg");
           } else {
