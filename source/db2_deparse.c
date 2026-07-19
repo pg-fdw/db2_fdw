@@ -23,6 +23,7 @@
 
 #include <nodes/pg_list.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/makefuncs.h>
 #include <nodes/plannodes.h>
 #include <nodes/bitmapset.h>
 
@@ -97,7 +98,7 @@ extern bool               is_builtin                (Oid objectId);
 
 /** local prototypes */
 void                appendAsType              (StringInfoData* dest, Oid type);
-List*               build_tlist_to_deparse    (RelOptInfo* foreignrel);
+List*               build_tlist_to_deparse    (PlannerInfo* root, RelOptInfo* foreignrel);
 void                classifyConditions        (PlannerInfo* root, RelOptInfo* baserel, List* input_conds, List** remote_conds, List** local_conds);
 void                deparseSelectStmtForRel   (StringInfo buf, PlannerInfo* root, RelOptInfo* rel,List* tlist, List* remote_conds, List* pathkeys, bool has_final_sort, bool has_limit, bool is_subquery, List** retrieved_attrs, List** params_list);
 char*               deparseWhereConditions    (PlannerInfo* root, RelOptInfo* rel);
@@ -1370,13 +1371,39 @@ static void get_relation_column_alias_ids(Var* node, RelOptInfo* foreignrel, int
   db2Exit1();
 }
 
+/* Returns true if node is a call to PostgreSQL's translate(text, text, text), the only base-relation
+ * target-list expression build_tlist_to_deparse() will keep intact (instead of flattening to its
+ * underlying Var) so that DB2 computes it instead of a local projection. Scoped to this single function
+ * because deparseFuncExpr()'s translate() case is known to preserve the source column's DB2 layout
+ * (text in, text out), unlike e.g. numeric-promoting expressions (see the Aggref DECFLOAT re-tagging
+ * below getUsedColumns()'s T_Aggref case in db2GetForeignPlan.c for what goes wrong otherwise).
+ */
+static bool is_translate_func_expr(Node* node) {
+  FuncExpr* fe;
+  char*     fname;
+  bool      result;
+
+  if (!IsA(node, FuncExpr))
+    return false;
+
+  fe = (FuncExpr*) node;
+  if (list_length(fe->args) != 3 || get_func_namespace(fe->funcid) != PG_CATALOG_NAMESPACE)
+    return false;
+
+  fname  = get_func_name(fe->funcid);
+  result = (fname != NULL && strcmp(fname, "translate") == 0);
+  if (fname)
+    pfree(fname);
+  return result;
+}
+
 /* Build the targetlist for given relation to be deparsed as SELECT clause.
  *
  * The output targetlist contains the columns that need to be fetched from the foreign server for the given relation.
  * If foreignrel is an upper relation, then the output targetlist can also contain expressions to be evaluated on
  * foreign server.
  */
-List* build_tlist_to_deparse(RelOptInfo* foreignrel) {
+List* build_tlist_to_deparse(PlannerInfo* root, RelOptInfo* foreignrel) {
   List*         tlist   = NIL;
   DB2FdwState*  fpinfo  = (DB2FdwState*) foreignrel->fdw_private;
 
@@ -1386,11 +1413,27 @@ List* build_tlist_to_deparse(RelOptInfo* foreignrel) {
     tlist = fpinfo->grouped_tlist;
     db2Debug2("using fpinfo->grouped_tlist");
   } else {
-    ListCell* lc  = NULL;
+    ListCell* lc              = NULL;
+    List*     exprs_to_flatten = NIL;
 
     /* We require columns specified in foreignrel->reltarget->exprs and those required for evaluating the local conditions. */
     db2Debug2("using foreignrel->reltarget->exprs");
-    tlist = add_to_flat_tlist(tlist, pull_var_clause((Node*) foreignrel->reltarget->exprs, PVC_RECURSE_PLACEHOLDERS));
+
+    /* translate() calls are kept as full expressions (instead of being flattened to their underlying
+     * Var below) so the remote SELECT list computes them on DB2, avoiding a local projection.
+     */
+    foreach(lc, foreignrel->reltarget->exprs) {
+      Node* node = (Node*) lfirst(lc);
+
+      if (is_translate_func_expr(node) && is_foreign_expr(root, foreignrel, (Expr*) node)) {
+        if (tlist_member((Expr*) node, tlist) == NULL)
+          tlist = lappend(tlist, makeTargetEntry((Expr*) node, list_length(tlist) + 1, NULL, false));
+      } else {
+        exprs_to_flatten = lappend(exprs_to_flatten, node);
+      }
+    }
+    tlist = add_to_flat_tlist(tlist, pull_var_clause((Node*) exprs_to_flatten, PVC_RECURSE_PLACEHOLDERS));
+
     foreach(lc, fpinfo->local_conds) {
       RestrictInfo* rinfo = lfirst_node(RestrictInfo, lc);
       tlist = add_to_flat_tlist(tlist, pull_var_clause((Node*) rinfo->clause, PVC_RECURSE_PLACEHOLDERS));

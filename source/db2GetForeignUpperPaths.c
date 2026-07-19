@@ -23,7 +23,7 @@
 #endif
 
 /** external prototypes */
-extern List*              build_tlist_to_deparse    (RelOptInfo* foreignrel);
+extern List*              build_tlist_to_deparse    (PlannerInfo* root, RelOptInfo* foreignrel);
 extern char*              deparseExpr               (PlannerInfo* root, RelOptInfo* foreignrel, Expr* expr, List** params);
 extern bool               is_shippable              (Oid objectId, Oid classId, DB2FdwState* fpinfo);
 extern bool               is_foreign_param          (PlannerInfo *root, RelOptInfo *baserel, Expr *expr);
@@ -922,7 +922,7 @@ void estimate_path_cost_size(PlannerInfo* root, RelOptInfo* foreignrel, List* pa
     classifyConditions(root, foreignrel, param_join_conds, &remote_param_join_conds, &local_param_join_conds);
 
     /* Build the list of columns to be fetched from the foreign server. */
-    fdw_scan_tlist = (IS_JOIN_REL(foreignrel) || IS_UPPER_REL(foreignrel)) ? build_tlist_to_deparse(foreignrel) : NIL;
+    fdw_scan_tlist = (IS_JOIN_REL(foreignrel) || IS_UPPER_REL(foreignrel)) ? build_tlist_to_deparse(root, foreignrel) : NIL;
 
     /* The complete list of remote conditions includes everything from baserestrictinfo plus any extra join_conds relevant to this
      * particular path.

@@ -3,6 +3,7 @@
 #include <catalog/pg_namespace.h>
 #include <catalog/pg_proc.h>
 #include <catalog/pg_type.h>
+#include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/planmain.h>
@@ -27,7 +28,7 @@ enum FdwPathPrivateIndex {
 /** external prototypes */
 extern bool   is_foreign_expr         (PlannerInfo* root, RelOptInfo* baserel, Expr* expr);
 extern void   deparseSelectStmtForRel (StringInfo buf, PlannerInfo* root, RelOptInfo* rel, List* tlist, List* remote_conds, List* pathkeys, bool has_final_sort, bool has_limit, bool is_subquery, List** retrieved_attrs, List** params_list);
-extern List*  build_tlist_to_deparse  (RelOptInfo* foreignrel);
+extern List*  build_tlist_to_deparse  (PlannerInfo* root, RelOptInfo* foreignrel);
 extern List*  serializePlanData       (DB2FdwState* fdw_state);
 
 /** local prototypes */
@@ -77,7 +78,7 @@ ForeignScan* db2GetForeignPlan(PlannerInfo* root, RelOptInfo* foreignrel, Oid fo
    * only referenced inside expressions (e.g. salary + bonus + comm), which can
    * lead to setrefs.c errors like "variable not found in subplan target list".
    */
-  ptlist     = build_tlist_to_deparse(foreignrel);
+  ptlist     = build_tlist_to_deparse(root, foreignrel);
   ptlist_len = list_length(ptlist);
 
   if (IS_SIMPLE_REL(foreignrel)) {
@@ -157,38 +158,56 @@ ForeignScan* db2GetForeignPlan(PlannerInfo* root, RelOptInfo* foreignrel, Oid fo
        */
       fpinfo->resultList = NULL;
       db2Debug3("size of tlist: %d", ptlist_len);
-      foreach (cell, ptlist) {
-        DB2ResultColumn* scan = NULL;
-        bool             dup  = false;
+      {
+        Bitmapset* seen_var_pgattnums = NULL;
 
-        resCol = (DB2ResultColumn*) db2alloc(sizeof(DB2ResultColumn), "resCol");
-        getUsedColumns((Expr*) lfirst(cell), foreignrel, resCol);
+        foreach (cell, ptlist) {
+          bool             dup        = false;
+          Expr*            entry_expr = (Expr*) lfirst(cell);
+          bool             is_plain_var;
 
-        if (resCol->colName == NULL || resCol->pgattnum > fpinfo->db2Table->npgcols) {
-          db2free(resCol, "resCol");
-          continue;
-        }
+          if (IsA(entry_expr, TargetEntry))
+            entry_expr = ((TargetEntry*) entry_expr)->expr;
+          is_plain_var = IsA(entry_expr, Var);
 
-        /* De-duplicate by pgattnum (same base relation). */
-        for (scan = fpinfo->resultList; scan; scan = scan->next) {
-          if (scan->pgattnum == resCol->pgattnum) {
-            dup = true;
-            break;
+          resCol = (DB2ResultColumn*) db2alloc(sizeof(DB2ResultColumn), "resCol");
+          getUsedColumns((Expr*) lfirst(cell), foreignrel, resCol);
+
+          if (resCol->colName == NULL || resCol->pgattnum > fpinfo->db2Table->npgcols) {
+            db2free(resCol, "resCol");
+            continue;
           }
-        }
-        if (dup) {
-          db2free(resCol, "resCol");
-          continue;
-        }
 
-        resCol->resnum = ++resnum;
-        resCol->next = NULL;
-        if (fpinfo->resultList == NULL) {
-          fpinfo->resultList = resCol;
-          tail = resCol;
-        } else {
-          tail->next = resCol;
-          tail = resCol;
+          /* De-duplicate plain Var references (including whole-row refs) by pgattnum: two
+           * Var references to the same column really are the same remote result. An entry
+           * wrapping the Var in an expression (e.g. translate()) is a distinct SELECT-list
+           * item computed by DB2 that merely borrows the Var's column layout for fetching, so
+           * it must get its own resultList entry -- and must never be used to shadow a later
+           * plain Var reference to that same column -- otherwise fpinfo->resultList would have
+           * fewer entries than the remote query's SELECT list and every subsequent column
+           * would be fetched into the wrong position. Hence seen_var_pgattnums only ever
+           * records (and is only ever checked for) plain Var entries.
+           */
+          if (is_plain_var) {
+            if (bms_is_member(resCol->pgattnum, seen_var_pgattnums))
+              dup = true;
+            else
+              seen_var_pgattnums = bms_add_member(seen_var_pgattnums, resCol->pgattnum);
+          }
+          if (dup) {
+            db2free(resCol, "resCol");
+            continue;
+          }
+
+          resCol->resnum = ++resnum;
+          resCol->next = NULL;
+          if (fpinfo->resultList == NULL) {
+            fpinfo->resultList = resCol;
+            tail = resCol;
+          } else {
+            tail->next = resCol;
+            tail = resCol;
+          }
         }
       }
 
