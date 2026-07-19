@@ -2762,7 +2762,7 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
       ||  strcmp (opername, "sin")          == 0 || strcmp (opername, "sqrt")         == 0 || strcmp (opername, "strpos")           == 0
       ||  strcmp (opername, "substr")       == 0 || strcmp (opername, "tan")          == 0 || strcmp (opername, "to_char")          == 0
       ||  strcmp (opername, "to_date")      == 0 || strcmp (opername, "to_number")    == 0 || strcmp (opername, "to_timestamp")     == 0
-      ||  strcmp (opername, "translate")    == 0 || strcmp (opername, "trunc")        == 0 || strcmp (opername, "upper")            == 0
+      ||  strcmp (opername, "trunc")        == 0 || strcmp (opername, "upper")        == 0
       || (strcmp (opername, "substring")    == 0 && list_length (expr->args) == 3)) {
         ListCell*      cell;
         char*          arg       = NULL;
@@ -2803,6 +2803,23 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
           appendStringInfo(ctx->buf,"%s",buf.data);
         }
         db2free(buf.data,"buf.data");
+      } else if (strcmp (opername, "translate") == 0) {
+        /* PostgreSQL's translate(string, from, to) takes "from" before "to", but DB2's
+         * TRANSLATE(expression, to-string, from-string) takes them in the opposite order.
+         * Forwarding the arguments as-is would silently swap the substitution direction.
+         */
+        char* string = deparseExpr (ctx->root, ctx->foreignrel, linitial (expr->args), ctx->params_list);
+        char* from   = deparseExpr (ctx->root, ctx->foreignrel, lsecond  (expr->args), ctx->params_list);
+        char* to     = deparseExpr (ctx->root, ctx->foreignrel, lthird   (expr->args), ctx->params_list);
+
+        if (string == NULL || from == NULL || to == NULL) {
+          db2Debug2("T_FuncExpr: function %s that we cannot render for DB2", opername);
+        } else {
+          appendStringInfo (ctx->buf, "TRANSLATE(%s, %s, %s)", string, to, from);
+        }
+        db2free (string,"string");
+        db2free (from,"from");
+        db2free (to,"to");
       } else if (strcmp (opername, "date_part") == 0) {
         char* left = NULL;
 
