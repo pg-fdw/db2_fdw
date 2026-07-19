@@ -330,7 +330,7 @@ FDW options: (schema 'DB2INST1', "table" 'SALES')
 explain (analyze,verbose) select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=4.057..32.838 rows=41.00 loops=1)
+ Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=4.066..33.339 rows=41.00 loops=1)
    Output: a.empno, a.firstnme, a.midinit, a.lastname, a.workdept, a.phoneno, a.hiredate, a.job, a.edlevel, a.sex, a.birthdate, a.salary, a.bonus, a.comm, b.sales_date, b.sales_person, b.region, b.sales
    DB2 query: SELECT r1."EMPNO", r1."FIRSTNME", r1."MIDINIT", r1."LASTNAME", r1."WORKDEPT", r1."PHONENO", r1."HIREDATE", r1."JOB", r1."EDLEVEL", r1."SEX", r1."BIRTHDATE", r1."SALARY", r1."BONUS", r1."COMM", r2."SALES_DATE", r2."SALES_PERSON", r2."REGION", r2."SALES" FROM ("DB2INST1"."EMPLOYEE" r1 INNER JOIN "DB2INST1"."SALES" r2 ON (((r1."LASTNAME" = r2."SALES_PERSON"))))
    DB2 plan: 
@@ -420,8 +420,8 @@ explain (analyze,verbose) select * from sample.employee a, sample.sales b where 
    DB2 plan: 
  Planning:
    Buffers: shared hit=106
- Planning Time: 4.855 ms
- Execution Time: 34.894 ms
+ Planning Time: 4.845 ms
+ Execution Time: 35.439 ms
 (92 rows)
 
 select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
@@ -556,7 +556,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
                                                                  QUERY PLAN                                                                 
 --------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=2.608..2.675 rows=1.00 loops=1)
+ Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=2.684..2.753 rows=1.00 loops=1)
    Output: (min(salary)), (max(salary)), (avg(salary)), (sum(((salary + comm) + bonus))), (count(*))
    DB2 query: SELECT MIN("SALARY"), MAX("SALARY"), AVG("SALARY"), SUM((("SALARY" + "COMM") + "BONUS")), COUNT(*) FROM "DB2INST1"."EMPLOYEE"
    DB2 plan: 
@@ -625,8 +625,8 @@ explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary 
    DB2 plan: 
  Planning:
    Buffers: shared hit=20
- Planning Time: 3.399 ms
- Execution Time: 3.811 ms
+ Planning Time: 3.357 ms
+ Execution Time: 3.884 ms
 (71 rows)
 
 select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
@@ -639,7 +639,7 @@ select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) fr
 explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
                                                                                    QUERY PLAN                                                                                    
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=2.536..3.209 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=2.489..3.077 rows=3.00 loops=1)
    Output: empno, firstnme, lastname, ((salary + bonus) + comm)
    DB2 query: SELECT "EMPNO", "FIRSTNME", "LASTNAME", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" > 43840.01)) AND (("LASTNAME" LIKE 'L%' ESCAPE '\'))
    DB2 plan: 
@@ -708,8 +708,8 @@ explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm
    DB2 plan: 
  Planning:
    Buffers: shared hit=3
- Planning Time: 3.318 ms
- Execution Time: 4.404 ms
+ Planning Time: 3.150 ms
+ Execution Time: 4.264 ms
 (71 rows)
 
 select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
@@ -721,7 +721,7 @@ select empno, firstnme,lastname, salary + bonus + comm from sample.employee wher
 (3 rows)
 
 --
--- END of TC004
+-- END of TC005
 --
 -- running tc006.sql
 \i ./test/sql/tc006.sql
@@ -948,7 +948,7 @@ SELECT count(*) FROM sample.employee;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee WHERE workdept IN ('A00','B01','E21') AND salary BETWEEN 40000 AND 70000 AND (lastname LIKE 'L%' OR lastname LIKE 'G%');
                                                                                                                                  QUERY PLAN                                                                                                                                 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..127.26 rows=1 width=90) (actual time=3.546..3.999 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..127.26 rows=1 width=90) (actual time=3.767..4.225 rows=3.00 loops=1)
    Output: empno, lastname, salary, workdept
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY", "WORKDEPT" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" >= 40000)) AND (("SALARY" <= 70000)) AND (("WORKDEPT"  IN ('A00', 'B01', 'E21'))) AND ((("LASTNAME" LIKE 'L%' ESCAPE '\') OR ("LASTNAME" LIKE 'G%' ESCAPE '\')))
    DB2 plan: 
@@ -1024,8 +1024,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee WH
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.947 ms
- Execution Time: 5.094 ms
+ Planning Time: 4.394 ms
+ Execution Time: 5.429 ms
 (78 rows)
 
 SELECT empno, lastname, salary FROM sample.employee WHERE workdept IN ('A00','B01','E21') AND salary BETWEEN 40000 AND 70000 AND (lastname LIKE 'L%' OR lastname LIKE 'G%') ORDER BY empno;
@@ -1058,7 +1058,7 @@ FROM sample.employee;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..101.11 rows=5 width=90) (actual time=1.787..2.479 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..101.11 rows=5 width=90) (actual time=1.904..2.584 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" FETCH FIRST 5 ROWS ONLY
    DB2 plan: 
@@ -1120,8 +1120,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LI
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.314 ms
- Execution Time: 3.522 ms
+ Planning Time: 2.189 ms
+ Execution Time: 3.714 ms
 (64 rows)
 
 SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
@@ -1137,7 +1137,7 @@ SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.05..101.16 rows=5 width=90) (actual time=2.279..2.968 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.05..101.16 rows=5 width=90) (actual time=2.281..2.948 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY
    DB2 plan: 
@@ -1201,8 +1201,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LI
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.396 ms
- Execution Time: 4.007 ms
+ Planning Time: 2.319 ms
+ Execution Time: 3.962 ms
 (66 rows)
 
 SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
@@ -1218,7 +1218,7 @@ SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
                                                                                   QUERY PLAN                                                                                  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.06..101.19 rows=5 width=90) (actual time=2.404..3.109 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.06..101.19 rows=5 width=90) (actual time=2.650..3.381 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" ORDER BY "SALARY" DESC NULLS FIRST, "EMPNO" ASC NULLS LAST OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY
    DB2 plan: 
@@ -1304,8 +1304,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee OR
    DB2 plan: 
  Planning:
    Buffers: shared hit=12
- Planning Time: 2.715 ms
- Execution Time: 4.140 ms
+ Planning Time: 2.728 ms
+ Execution Time: 4.397 ms
 (88 rows)
 
 SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
@@ -1332,7 +1332,7 @@ PREPARE
 EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=3.763..3.839 rows=1.00 loops=1)
+ Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=3.708..3.779 rows=1.00 loops=1)
    Output: actno, actkwd, actdesc
    DB2 query: SELECT "ACTNO", "ACTKWD", "ACTDESC" FROM "DB2INST1"."ACT" WHERE (("ACTNO" = 10))
    DB2 plan: 
@@ -1405,8 +1405,8 @@ EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 1.584 ms
- Execution Time: 4.290 ms
+ Planning Time: 1.275 ms
+ Execution Time: 4.225 ms
 (75 rows)
 
 EXECUTE act_by_no(10);
@@ -1517,11 +1517,11 @@ VALUES  ( 581927,
           );
 INSERT 0 1
 SELECT * FROM sample.remotetable;
-  col1  |   col2   |   col3   |   col4   |  col5  |  col6  |   col7   |    col8    |   col9   |   col10    |  col11   | col12 | col13 | col14  | col15  | col16  | col17  | col18  | col19  | col20  | col21  | col22  | col23  |           col24            |  col25   | col26  | col27  | col28  
---------+----------+----------+----------+--------+--------+----------+------------+----------+------------+----------+-------+-------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+----------------------------+----------+--------+--------+--------
- 581927 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2026-07-18 | 12:12:48 | 2026-07-18 | 12:12:48 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2026-07-18 12:12:48.173967 | sometext | [NULL] | [NULL] | [NULL]
- 581928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988    | sometext | [NULL] | [NULL] | [NULL]
- 681928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   998 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988    | sometext | [NULL] | [NULL] | [NULL]
+  col1  |   col2   |   col3   |   col4   |  col5  |  col6  |   col7   |    col8    |   col9   |   col10    |  col11   | col12 | col13 | col14  | col15  | col16  | col17  | col18  | col19  | col20  | col21  | col22  | col23  |           col24           |  col25   | col26  | col27  | col28  
+--------+----------+----------+----------+--------+--------+----------+------------+----------+------------+----------+-------+-------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+---------------------------+----------+--------+--------+--------
+ 581927 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2026-07-19 | 11:20:32 | 2026-07-19 | 11:20:32 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2026-07-19 11:20:32.07643 | sometext | [NULL] | [NULL] | [NULL]
+ 581928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988   | sometext | [NULL] | [NULL] | [NULL]
+ 681928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   998 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988   | sometext | [NULL] | [NULL] | [NULL]
 (3 rows)
 
 DELETE FROM sample.remotetable where col1 = 581927;
@@ -1585,7 +1585,7 @@ FDW options: (schema 'DB2INST1', "table" 'TBCFILEENTRY_SAMPLE')
 EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry_sample;
                                                                                             QUERY PLAN                                                                                             
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.tbcfileentry_sample  (cost=100.00..124.74 rows=67 width=1196) (actual time=8.529..999.388 rows=1155.00 loops=1)
+ Foreign Scan on sample.tbcfileentry_sample  (cost=100.00..124.74 rows=67 width=1196) (actual time=8.808..1095.848 rows=1188.00 loops=1)
    Output: tbcfientid, filename, filepath, filesize, filetype, checksum, owner, created_at, modified_at, status, description
    DB2 query: SELECT "TBCFIENTID", "FILENAME", "FILEPATH", "FILESIZE", "FILETYPE", "CHECKSUM", "OWNER", "CREATED_AT", "MODIFIED_AT", "STATUS", "DESCRIPTION" FROM "DB2INST1"."TBCFILEENTRY_SAMPLE"
    DB2 plan: 
@@ -1635,8 +1635,8 @@ EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry_sample;
    DB2 plan: 
  Planning:
    Buffers: shared hit=81
- Planning Time: 2.729 ms
- Execution Time: 1001.571 ms
+ Planning Time: 2.752 ms
+ Execution Time: 1098.007 ms
 (52 rows)
 
 EXPLAIN (verbose) SELECT PERCENTILE_CONT(0.5)
@@ -1734,6 +1734,150 @@ SELECT PERCENTILE_DISC(0.5)
 
 --
 -- END of TC015
+--
+-- running tc016.sql
+\i ./test/sql/tc016.sql
+--
+-- TC016: test between
+--
+\d+ sample.employee;
+                                                                                               Foreign table "sample.employee"
+  Column   |         Type          | Collation | Nullable | Default |                                                  FDW options                                                   | Storage  | Stats target | Description 
+-----------+-----------------------+-----------+----------+---------+----------------------------------------------------------------------------------------------------------------+----------+--------------+-------------
+ empno     | character(6)          |           | not null |         | (db2type '1', db2size '6', db2bytes '6', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208', key 'true') | extended |              | 
+ firstnme  | character varying(12) |           | not null |         | (db2type '12', db2size '12', db2bytes '12', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')          | extended |              | 
+ midinit   | character(1)          |           |          |         | (db2type '1', db2size '1', db2bytes '1', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ lastname  | character varying(15) |           | not null |         | (db2type '12', db2size '15', db2bytes '15', db2chars '0', db2scale '0', db2null '0', db2ccsid '1208')          | extended |              | 
+ workdept  | character(3)          |           |          |         | (db2type '1', db2size '3', db2bytes '3', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ phoneno   | character(4)          |           |          |         | (db2type '1', db2size '4', db2bytes '4', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ hiredate  | date                  |           |          |         | (db2type '91', db2size '10', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')              | plain    |              | 
+ job       | character(8)          |           |          |         | (db2type '1', db2size '8', db2bytes '8', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ edlevel   | smallint              |           | not null |         | (db2type '5', db2size '5', db2bytes '2', db2chars '5', db2scale '0', db2null '0', db2ccsid '0')                | plain    |              | 
+ sex       | character(1)          |           |          |         | (db2type '1', db2size '1', db2bytes '1', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208')             | extended |              | 
+ birthdate | date                  |           |          |         | (db2type '91', db2size '10', db2bytes '6', db2chars '0', db2scale '0', db2null '1', db2ccsid '0')              | plain    |              | 
+ salary    | numeric(9,2)          |           |          |         | (db2type '3', db2size '9', db2bytes '11', db2chars '9', db2scale '2', db2null '1', db2ccsid '0')               | main     |              | 
+ bonus     | numeric(9,2)          |           |          |         | (db2type '3', db2size '9', db2bytes '11', db2chars '9', db2scale '2', db2null '1', db2ccsid '0')               | main     |              | 
+ comm      | numeric(9,2)          |           |          |         | (db2type '3', db2size '9', db2bytes '11', db2chars '9', db2scale '2', db2null '1', db2ccsid '0')               | main     |              | 
+Not-null constraints:
+    "employee_empno_not_null" NOT NULL "empno"
+    "employee_firstnme_not_null" NOT NULL "firstnme"
+    "employee_lastname_not_null" NOT NULL "lastname"
+    "employee_edlevel_not_null" NOT NULL "edlevel"
+Server: sample
+FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
+
+explain (analyze,verbose) select * from sample.employee where lastname between 'LUTZ' and 'LEE' order by lastname;
+                                                                                                                                         QUERY PLAN                                                                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on sample.employee  (cost=100.00..114.56 rows=1 width=258) (actual time=2.652..2.652 rows=0.00 loops=1)
+   Output: empno, firstnme, midinit, lastname, workdept, phoneno, hiredate, job, edlevel, sex, birthdate, salary, bonus, comm
+   DB2 query: SELECT "EMPNO", "FIRSTNME", "MIDINIT", "LASTNAME", "WORKDEPT", "PHONENO", "HIREDATE", "JOB", "EDLEVEL", "SEX", "BIRTHDATE", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("LASTNAME" >= 'LUTZ')) AND (("LASTNAME" <= 'LEE')) ORDER BY "LASTNAME" ASC NULLS LAST
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 11.5, 5622-044 (c) Copyright IBM Corp. 1991, 2019
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 12.1, 5622-044 (c) Copyright IBM Corp. 1991, 2022
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: ******************** DYNAMIC ***************************************
+   DB2 plan: 
+   DB2 plan: ==================== STATEMENT ==========================================
+   DB2 plan: 
+   DB2 plan:     Isolation Level          = Cursor Stability
+   DB2 plan:     Blocking                 = Block Unambiguous Cursors
+   DB2 plan:     Query Optimization Class = 5
+   DB2 plan: 
+   DB2 plan:     Partition Parallel       = No
+   DB2 plan:     Intra-Partition Parallel = No
+   DB2 plan: 
+   DB2 plan:     SQL Path                 = "SYSIBM", "SYSFUN", "SYSPROC", "SYSIBMADM", 
+   DB2 plan:                                    "SYSHADOOP", "DB2INST1"
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: Statement:
+   DB2 plan:   
+   DB2 plan:   SELECT "EMPNO" , "FIRSTNME" , "MIDINIT" , "LASTNAME" , "WORKDEPT" ,
+   DB2 plan:           "PHONENO" , "HIREDATE" , "JOB" , "EDLEVEL" , "SEX" , 
+   DB2 plan:           "BIRTHDATE" , "SALARY" , "BONUS" , "COMM" 
+   DB2 plan:   FROM "DB2INST1" ."EMPLOYEE" 
+   DB2 plan:   WHERE (("LASTNAME" >='LUTZ' ))AND (("LASTNAME" <='LEE' ))
+   DB2 plan:   ORDER BY "LASTNAME" ASC NULLS LAST
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: compiledInTenantID = 0
+   DB2 plan: 
+   DB2 plan: Section Code Page = 1208
+   DB2 plan: 
+   DB2 plan: Estimated Cost = 0,000038
+   DB2 plan: Estimated Cardinality = 0,000000
+   DB2 plan: 
+   DB2 plan: Table Constructor
+   DB2 plan: |  N-Rows
+   DB2 plan: Residual Predicate(s)
+   DB2 plan: |  #Predicates = 1
+   DB2 plan: Return Data to Application
+   DB2 plan: |  #Columns = 14
+   DB2 plan: 
+   DB2 plan: End of section
+   DB2 plan: 
+   DB2 plan: 
+ Planning Time: 4.300 ms
+ Execution Time: 4.269 ms
+(56 rows)
+
+select * from sample.employee where lastname between 'LEE' and 'LUTZ' order by lastname;
+ empno  | firstnme | midinit | lastname  | workdept | phoneno |  hiredate  |   job    | edlevel | sex | birthdate  |  salary  | bonus  |  comm   
+--------+----------+---------+-----------+----------+---------+------------+----------+---------+-----+------------+----------+--------+---------
+ 000330 | WING     |         | LEE       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 | 500.00 | 2030.00
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 1988-05-16 | SALESREP |      19 | M   | 1959-11-05 | 66500.00 | 900.00 | 3720.00
+ 000220 | JENNIFER | K       | LUTZ      | D11      | 0672    | 1998-08-29 | DESIGNER |      18 | F   | 1978-03-19 | 49840.00 | 600.00 | 2387.00
+(3 rows)
+
+--
+explain select * from sample.employee where salary between 10000.00 and 60000.00 order by salary;
+                                                                                                                                         QUERY PLAN                                                                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on employee  (cost=100.00..114.56 rows=1 width=258)
+   DB2 query: SELECT "EMPNO", "FIRSTNME", "MIDINIT", "LASTNAME", "WORKDEPT", "PHONENO", "HIREDATE", "JOB", "EDLEVEL", "SEX", "BIRTHDATE", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" >= 10000.00)) AND (("SALARY" <= 60000.00)) ORDER BY "SALARY" ASC NULLS LAST
+   DB2 plan: Estimated Cost = 6,819019
+   DB2 plan: Estimated Cardinality = 26,381359
+(4 rows)
+
+select * from sample.employee where salary between 10000.00 and 60000.00 order by salary;
+ empno  | firstnme  | midinit |  lastname  | workdept | phoneno |  hiredate  |   job    | edlevel | sex | birthdate  |  salary  |  bonus  |  comm   
+--------+-----------+---------+------------+----------+---------+------------+----------+---------+-----+------------+----------+---------+---------
+ 200340 | ROY       | R       | ALONZO     | E21      | 5698    | 1997-07-05 | FIELDREP |      16 | M   | 1956-05-17 | 31840.00 |  500.00 | 1907.00
+ 000290 | JOHN      | R       | PARKER     | E11      | 4502    | 2006-05-30 | OPERATOR |      12 | M   | 1985-07-09 | 35340.00 |  300.00 | 1227.00
+ 200330 | HELENA    |         | WONG       | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | F   | 1971-07-18 | 35370.00 |  500.00 | 2030.00
+ 000310 | MAUDE     | F       | SETRIGHT   | E11      | 3332    | 1994-09-12 | OPERATOR |      12 | F   | 1961-04-21 | 35900.00 |  300.00 | 1272.00
+ 200310 | MICHELLE  | F       | SPRINGER   | E11      | 3332    | 1994-09-12 | OPERATOR |      12 | F   | 1961-04-21 | 35900.00 |  300.00 | 1272.00
+ 000280 | ETHEL     | R       | SCHNEIDER  | E11      | 8997    | 1997-03-24 | OPERATOR |      17 | F   | 1976-03-28 | 36250.00 |  500.00 | 2100.00
+ 000270 | MARIA     | L       | PEREZ      | D21      | 9001    | 2006-09-30 | CLERK    |      15 | F   | 2003-05-26 | 37380.00 |  500.00 | 2190.00
+ 000300 | PHILIP    | X       | SMITH      | E11      | 2095    | 2002-06-19 | OPERATOR |      14 | M   | 1976-10-27 | 37750.00 |  400.00 | 1420.00
+ 200240 | ROBERT    | M       | MONTEVERDE | D21      | 3780    | 2004-12-05 | CLERK    |      17 | M   | 1984-03-31 | 37760.00 |  600.00 | 2301.00
+ 200120 | GREG      |         | ORLANDO    | A00      | 2167    | 2002-05-05 | CLERK    |      14 | M   | 1972-10-18 | 39250.00 |  600.00 | 2340.00
+ 000320 | RAMLAL    | V       | MEHTA      | E21      | 9990    | 1995-07-07 | FIELDREP |      16 | M   | 1962-08-11 | 39950.00 |  400.00 | 1596.00
+ 000230 | JAMES     | J       | JEFFERSON  | D21      | 2094    | 1996-11-21 | CLERK    |      14 | M   | 1980-05-30 | 42180.00 |  400.00 | 1774.00
+ 000340 | JASON     | R       | GOUNOT     | E21      | 5698    | 1977-05-05 | FIELDREP |      16 | M   | 1956-05-17 | 43840.00 |  500.00 | 1907.00
+ 000170 | MASATOSHI | J       | YOSHIMURA  | D11      | 2890    | 1999-09-15 | DESIGNER |      16 | M   | 1981-01-05 | 44680.00 |  500.00 | 1974.00
+ 000330 | WING      |         | LEE        | E21      | 2103    | 2006-02-23 | FIELDREP |      14 | M   | 1971-07-18 | 45370.00 |  500.00 | 2030.00
+ 200280 | EILEEN    | R       | SCHWARTZ   | E11      | 8997    | 1997-03-24 | OPERATOR |      17 | F   | 1966-03-28 | 46250.00 |  500.00 | 2100.00
+ 200010 | DIAN      | J       | HEMMINGER  | A00      | 3978    | 1995-01-01 | SALESREP |      18 | F   | 1973-08-14 | 46500.00 | 1000.00 | 4220.00
+ 000260 | SYBIL     | P       | JOHNSON    | D21      | 8953    | 2005-09-11 | CLERK    |      16 | F   | 1976-10-05 | 47250.00 |  300.00 | 1380.00
+ 000240 | SALVATORE | M       | MARINO     | D21      | 3780    | 2004-12-05 | CLERK    |      17 | M   | 2002-03-31 | 48760.00 |  600.00 | 2301.00
+ 000250 | DANIEL    | S       | SMITH      | D21      | 0961    | 1999-10-30 | CLERK    |      15 | M   | 1969-11-12 | 49180.00 |  400.00 | 1534.00
+ 000120 | SEAN      |         | O'CONNELL  | A00      | 2167    | 1993-12-05 | CLERK    |      14 | M   | 1972-10-18 | 49250.00 |  600.00 | 2340.00
+ 000220 | JENNIFER  | K       | LUTZ       | D11      | 0672    | 1998-08-29 | DESIGNER |      18 | F   | 1978-03-19 | 49840.00 |  600.00 | 2387.00
+ 000190 | JAMES     | H       | WALKER     | D11      | 2986    | 2004-07-26 | DESIGNER |      16 | M   | 1982-06-25 | 50450.00 |  400.00 | 1636.00
+ 000180 | MARILYN   | S       | SCOUTTEN   | D11      | 1682    | 2003-07-07 | DESIGNER |      17 | F   | 1979-02-21 | 51340.00 |  500.00 | 1707.00
+ 000150 | BRUCE     |         | ADAMSON    | D11      | 4510    | 2002-02-12 | DESIGNER |      16 | M   | 1977-05-17 | 55280.00 |  500.00 | 2022.00
+ 000200 | DAVID     |         | BROWN      | D11      | 4501    | 2002-03-03 | DESIGNER |      16 | M   | 1971-05-29 | 57740.00 |  600.00 | 2217.00
+(26 rows)
+
+--
+-- END of TC016
 --
 -- testcases ended
 -- starting cleanup

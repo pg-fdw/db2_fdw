@@ -57,6 +57,11 @@ void db2GetForeignPaths(PlannerInfo* root, RelOptInfo* baserel, Oid foreigntable
         case TIMEOID:
         case TIMETZOID:
         case INTERVALOID:
+        case TEXTOID:
+        case CHAROID:
+        case BPCHAROID:
+        case VARCHAROID:
+        case NAMEOID:
           can_pushdown = true;
         break;
         default:

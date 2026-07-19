@@ -161,6 +161,8 @@ static char*        deparseInterval           (Datum datum);
 
 static bool         foreign_expr_walker       (Node *node, foreign_glob_cxt* glob_cxt, foreign_loc_cxt* outer_cxt, foreign_loc_cxt* case_arg_cxt);
 
+static bool         isTranslatableOpExpr      (const char* opername, Oid leftargtype, Oid rightargtype);
+
 static void         get_relation_column_alias_ids(Var* node, RelOptInfo* foreignrel, int* relno, int* colno);
 
 static bool         is_subquery_var           (Var* node, RelOptInfo* foreignrel, int* relno, int* colno);
@@ -264,6 +266,36 @@ bool is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr) {
  * that the given expression is valid.  Note function mutability is not
  * currently considered here.
  */
+/* Returns true if deparseOpExpr() below will actually translate an operator with the given name and argument types into DB2 SQL.
+ * is_foreign_expr()'s shippability check for OpExpr/DistinctExpr must agree with this, since a clause that is deemed shippable
+ * but that deparseOpExpr() then declines to translate would leave an empty "()" in the pushed-down WHERE clause.
+ */
+static bool isTranslatableOpExpr(const char* opername, Oid leftargtype, Oid rightargtype) {
+  bool result;
+
+  db2Entry2();
+  if (leftargtype == INTERVALOID && rightargtype == INTERVALOID) {
+    /* Don't translate operations on two intervals. INTERVAL YEAR TO MONTH and INTERVAL DAY TO SECOND don't mix well. */
+    result = false;
+  } else if (!canHandleType(rightargtype)) {
+    result = false;
+  } else {
+    /* the operators that we can translate. Ordering comparisons (>,<,>=,<=) are pushed down for all handleable
+     * types, including character types, since DB2 supports BETWEEN/ordering comparisons on strings just like
+     * PostgreSQL does; the collation-safety checks in foreign_expr_walker() still guard against cases where
+     * PostgreSQL and DB2 could disagree on string ordering (non-default collations).
+     */
+    result = strcmp (opername, ">")    == 0 || strcmp (opername, "<")    == 0 || strcmp (opername, ">=")   == 0 || strcmp (opername, "<=") == 0
+    ||        (strcmp (opername, "-")    == 0 && rightargtype != DATEOID && rightargtype != TIMESTAMPOID && rightargtype != TIMESTAMPTZOID)
+    ||         strcmp (opername, "=")    == 0 || strcmp (opername, "<>")  == 0 || strcmp (opername, "+")   == 0 ||   strcmp (opername, "*")    == 0
+    ||         strcmp (opername, "~~")   == 0 || strcmp (opername, "!~~") == 0 || strcmp (opername, "~~*") == 0 ||   strcmp (opername, "!~~*") == 0
+    ||         strcmp (opername, "^")    == 0 || strcmp (opername, "%")   == 0 || strcmp (opername, "&")   == 0 ||   strcmp (opername, "|/")   == 0
+    ||         strcmp (opername, "@")  == 0;
+  }
+  db2Exit2(": %s", result ? "true" : "false");
+  return result;
+}
+
 static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_loc_cxt* outer_cxt, foreign_loc_cxt* case_arg_cxt) {
   bool  fResult = true;
 
@@ -457,11 +489,27 @@ static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_
       break;
       case T_OpExpr:
       case T_DistinctExpr: {  /* struct-equivalent to OpExpr */
-        OpExpr*   oe = (OpExpr*) node;
-        
+        OpExpr*     oe = (OpExpr*) node;
+        HeapTuple   opertup;
+        bool        translatable;
+
         // Similarly, only shippable operators can be sent to remote.
         // (If the operator is shippable, we assume its underlying function is too.)
         if (!is_shippable(oe->opno, OperatorRelationId, fpinfo))
+          return false;
+
+        /* Also make sure deparseOpExpr() will actually be able to translate this operator for its argument
+         * types; otherwise the clause would be deemed shippable here but deparse to nothing, corrupting the
+         * pushed-down WHERE clause (see isTranslatableOpExpr()).
+         */
+        opertup = SearchSysCache1(OPEROID, ObjectIdGetDatum(oe->opno));
+        if (!HeapTupleIsValid(opertup))
+          elog(ERROR, "cache lookup failed for operator %u", oe->opno);
+        translatable = isTranslatableOpExpr(((Form_pg_operator) GETSTRUCT(opertup))->oprname.data,
+                                             ((Form_pg_operator) GETSTRUCT(opertup))->oprleft,
+                                             ((Form_pg_operator) GETSTRUCT(opertup))->oprright);
+        ReleaseSysCache(opertup);
+        if (!translatable)
           return false;
 
         // Recurse to input subexpressions.
@@ -2241,74 +2289,53 @@ static void deparseOpExpr            (OpExpr*            expr, deparse_expr_cxt*
   if (schema != PG_CATALOG_NAMESPACE) {
     db2Debug2("schema != PG_CATALOG_NAMESPACE");
   } else {
-    if (!canHandleType (rightargtype)) {
-      db2Debug2("!canHandleType rightargtype(%d)", rightargtype);
+    if (!isTranslatableOpExpr (opername, leftargtype, rightargtype)) {
+      db2Debug2("!isTranslatableOpExpr opername(%s) leftargtype(%d) rightargtype(%d)", opername, leftargtype, rightargtype);
     } else {
-      /** Don't translate operations on two intervals.
-     * INTERVAL YEAR TO MONTH and INTERVAL DAY TO SECOND don't mix well.
-     */
-      if (leftargtype == INTERVALOID && rightargtype == INTERVALOID) {
-        db2Debug2("leftargtype == INTERVALOID && rightargtype == INTERVALOID");
-      } else {
-        /* the operators that we can translate */
-        if ((strcmp (opername, ">")    == 0 && rightargtype != TEXTOID && rightargtype != BPCHAROID    && rightargtype != NAMEOID && rightargtype != CHAROID)
-        ||  (strcmp (opername, "<")    == 0 && rightargtype != TEXTOID && rightargtype != BPCHAROID    && rightargtype != NAMEOID && rightargtype != CHAROID)
-        ||  (strcmp (opername, ">=")   == 0 && rightargtype != TEXTOID && rightargtype != BPCHAROID    && rightargtype != NAMEOID && rightargtype != CHAROID)
-        ||  (strcmp (opername, "<=")   == 0 && rightargtype != TEXTOID && rightargtype != BPCHAROID    && rightargtype != NAMEOID && rightargtype != CHAROID)
-        ||  (strcmp (opername, "-")    == 0 && rightargtype != DATEOID && rightargtype != TIMESTAMPOID && rightargtype != TIMESTAMPTZOID)
-        ||   strcmp (opername, "=")    == 0 || strcmp (opername, "<>")  == 0 || strcmp (opername, "+")   == 0 ||   strcmp (opername, "*")    == 0 
-        ||   strcmp (opername, "~~")   == 0 || strcmp (opername, "!~~") == 0 || strcmp (opername, "~~*") == 0 ||   strcmp (opername, "!~~*") == 0 
-        ||   strcmp (opername, "^")    == 0 || strcmp (opername, "%")   == 0 || strcmp (opername, "&")   == 0 ||   strcmp (opername, "|/")   == 0
-        ||   strcmp (opername, "@")  == 0) {
-          char* left = NULL;
+      char* left = NULL;
 
-          left = deparseExpr (ctx->root, ctx->foreignrel, linitial(expr->args), ctx->params_list);
-          db2Debug2("left: %s", left);
-          if (left != NULL) {
-            if (oprkind == 'b') {
-              /* binary operator */
-              char* right = NULL;
+      left = deparseExpr (ctx->root, ctx->foreignrel, linitial(expr->args), ctx->params_list);
+      db2Debug2("left: %s", left);
+      if (left != NULL) {
+        if (oprkind == 'b') {
+          /* binary operator */
+          char* right = NULL;
 
-              right = deparseExpr (ctx->root, ctx->foreignrel, lsecond(expr->args), ctx->params_list);
-              db2Debug2("right: %s", right);
-              if (right != NULL) {
-                if (strcmp (opername, "~~") == 0) {
-                  appendStringInfo (ctx->buf, "(%s LIKE %s ESCAPE '\\')", left, right);
-                } else if (strcmp (opername, "!~~") == 0) {
-                  appendStringInfo (ctx->buf, "(%s NOT LIKE %s ESCAPE '\\')", left, right);
-                } else if (strcmp (opername, "~~*") == 0) {
-                  appendStringInfo (ctx->buf, "(UPPER(%s) LIKE UPPER(%s) ESCAPE '\\')", left, right);
-                } else if (strcmp (opername, "!~~*") == 0) {
-                  appendStringInfo (ctx->buf, "(UPPER(%s) NOT LIKE UPPER(%s) ESCAPE '\\')", left, right);
-                } else if (strcmp (opername, "^") == 0) {
-                  appendStringInfo (ctx->buf, "POWER(%s, %s)", left, right);
-                } else if (strcmp (opername, "%") == 0) {
-                  appendStringInfo (ctx->buf, "MOD(%s, %s)", left, right);
-                } else if (strcmp (opername, "&") == 0) {
-                  appendStringInfo (ctx->buf, "BITAND(%s, %s)", left, right);
-                } else {
-                  /* the other operators have the same name in DB2 */
-                  appendStringInfo (ctx->buf, "(%s %s %s)", left, opername, right);
-                }
-                db2free(right,"right");
-              }
+          right = deparseExpr (ctx->root, ctx->foreignrel, lsecond(expr->args), ctx->params_list);
+          db2Debug2("right: %s", right);
+          if (right != NULL) {
+            if (strcmp (opername, "~~") == 0) {
+              appendStringInfo (ctx->buf, "(%s LIKE %s ESCAPE '\\')", left, right);
+            } else if (strcmp (opername, "!~~") == 0) {
+              appendStringInfo (ctx->buf, "(%s NOT LIKE %s ESCAPE '\\')", left, right);
+            } else if (strcmp (opername, "~~*") == 0) {
+              appendStringInfo (ctx->buf, "(UPPER(%s) LIKE UPPER(%s) ESCAPE '\\')", left, right);
+            } else if (strcmp (opername, "!~~*") == 0) {
+              appendStringInfo (ctx->buf, "(UPPER(%s) NOT LIKE UPPER(%s) ESCAPE '\\')", left, right);
+            } else if (strcmp (opername, "^") == 0) {
+              appendStringInfo (ctx->buf, "POWER(%s, %s)", left, right);
+            } else if (strcmp (opername, "%") == 0) {
+              appendStringInfo (ctx->buf, "MOD(%s, %s)", left, right);
+            } else if (strcmp (opername, "&") == 0) {
+              appendStringInfo (ctx->buf, "BITAND(%s, %s)", left, right);
             } else {
-              /* unary operator */
-              if (strcmp (opername, "|/") == 0) {
-                appendStringInfo (ctx->buf, "SQRT(%s)", left);
-              } else if (strcmp (opername, "@") == 0) {
-                appendStringInfo (ctx->buf, "ABS(%s)", left);
-              } else {
-                /* unary + or - */
-                appendStringInfo (ctx->buf, "(%s%s)", opername, left);
-              }
+              /* the other operators have the same name in DB2 */
+              appendStringInfo (ctx->buf, "(%s %s %s)", left, opername, right);
             }
-            db2free(left,"left");
+            db2free(right,"right");
           }
         } else {
-          /* cannot translate this operator */
-          db2Debug2("cannot translate this opername: %s", opername);
+          /* unary operator */
+          if (strcmp (opername, "|/") == 0) {
+            appendStringInfo (ctx->buf, "SQRT(%s)", left);
+          } else if (strcmp (opername, "@") == 0) {
+            appendStringInfo (ctx->buf, "ABS(%s)", left);
+          } else {
+            /* unary + or - */
+            appendStringInfo (ctx->buf, "(%s%s)", opername, left);
+          }
         }
+        db2free(left,"left");
       }
     }
   }

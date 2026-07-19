@@ -38,6 +38,8 @@ set log_min_messages=debug5;
 \i ./test/sql/tc014.sql
 -- running tc015.sql
 \i ./test/sql/tc015.sql
+-- running tc016.sql
+\i ./test/sql/tc016.sql
 -- testcases ended
 -- starting cleanup
 \i ./test/sql/tcend.sql

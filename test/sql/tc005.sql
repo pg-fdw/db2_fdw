@@ -8,5 +8,5 @@ select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) fr
 explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
 select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
 --
--- END of TC004
+-- END of TC005
 --
