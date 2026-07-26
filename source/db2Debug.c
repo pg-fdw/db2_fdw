@@ -18,6 +18,7 @@ _Thread_local static int debug_depth = 0;
 /** local prototype */
 void db2Error    (db2error sqlstate, const char* message);
 void db2Error_d  (db2error sqlstate, const char* message, const char* detail, ...) __attribute__ ((format (gnu_printf, 2, 0)));
+void db2Warning_d(const char* message, const char* detail, ...) __attribute__ ((format (gnu_printf, 2, 0)));
 
 /* db2Error_d
  * Report a PostgreSQL error with a detail message.
@@ -30,6 +31,19 @@ void db2Error_d (db2error sqlstate, const char *message, const char *detail, ...
   va_start(arg_marker, detail);
   vsnprintf(cBuffer, sizeof(cBuffer), detail, arg_marker);
   ereport (ERROR, (errcode (to_sqlstate (sqlstate)), errmsg ("%s", message), errdetail ("%s", cBuffer)));
+  va_end  (arg_marker);
+}
+
+/* db2Warning_d
+ * Report a PostgreSQL warning (non-fatal) with a detail message, for use
+ * from DB2-CLI-facing source files that cannot call ereport() directly.
+ */
+void db2Warning_d (const char *message, const char *detail, ...) {
+  char    cBuffer [4000];
+  va_list arg_marker;
+  va_start(arg_marker, detail);
+  vsnprintf(cBuffer, sizeof(cBuffer), detail, arg_marker);
+  ereport (WARNING, (errmsg ("%s", message), errdetail ("%s", cBuffer)));
   va_end  (arg_marker);
 }
 
