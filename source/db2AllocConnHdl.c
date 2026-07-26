@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 #include "db2_fdw.h"
 
 /** external variables */
@@ -10,6 +11,8 @@ extern void      db2Error_d           (db2error sqlstate, const char* message, c
 extern void      db2RegisterCallback  (void* arg);
 extern SQLRETURN db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 extern void      db2FreeEnvHdl        (DB2EnvEntry* envp, const char* nls_lang);
+extern int       guessDb2ClientCodepage(void);
+extern void      db2Warning_d         (const char* message, const char* detail, ...);
 
 /** local prototypes */
        DB2ConnEntry*    db2AllocConnHdl      (DB2EnvEntry* envp,const char* srvname, char* user, char* password, char* jwt_token, const char* nls_lang);
@@ -49,6 +52,22 @@ DB2ConnEntry* db2AllocConnHdl(DB2EnvEntry* envp,const char* srvname, char* user,
       rc = db2CheckErr(rc, envp->henv, SQL_HANDLE_ENV, __LINE__, __FILE__);
       if (rc  != SQL_SUCCESS) {
         db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: SQLAllochHandle failed to allocate hdbc handle", db2Message);
+      }
+
+      /* Pin the CLI connection's client codepage to whatever CCSID matches
+       * PostgreSQL's server_encoding, so DB2 CLI transcodes CHAR/CLOB data
+       * to exactly what PostgreSQL expects instead of an ambient default
+       * codepage picked up from the OS or db2cli.ini. Must be set before
+       * connecting: it has no effect once the connection is established. */
+      {
+        int db2Codepage = guessDb2ClientCodepage();
+        if (db2Codepage > 0) {
+          rc = SQLSetConnectAttr(hdbc, SQL_ATTR_CLIENT_CODEPAGE, (SQLPOINTER)(intptr_t) db2Codepage, SQL_IS_UINTEGER);
+          rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
+          if (rc != SQL_SUCCESS) {
+            db2Warning_d ("could not set DB2 CLI client codepage", "requested CCSID %d: %s", db2Codepage, db2Message);
+          }
+        }
       }
 
       /* Check if JWT token authentication is used */

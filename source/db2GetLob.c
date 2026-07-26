@@ -18,10 +18,11 @@ void                db2GetLob            (DB2Session* session, DB2ResultColumn* 
  * Get the LOB contents and store them in *value and *value_len.
  */
 void db2GetLob (DB2Session* session, DB2ResultColumn* column, char** value, long* value_len) {
-  SQLRETURN      rc  = SQL_SUCCESS;
+  SQLRETURN      rc     = SQL_SUCCESS;
+  SQLRETURN      rawRc  = SQL_SUCCESS;
   SQLLEN         ind = 0;
   SQLCHAR        buf[LOB_CHUNK_SIZE+1];
-  SQLSMALLINT    fcType = (column->colType == DB2_CLOB) ? SQL_C_CHAR : SQL_C_BINARY;
+  SQLSMALLINT    fcType = (column->colType == SQL_CLOB) ? SQL_C_CHAR : SQL_C_BINARY;
   int            extend = 0;
   db2Entry1();
   db2Debug2("column->colName: '%s'",column->colName);
@@ -32,8 +33,12 @@ void db2GetLob (DB2Session* session, DB2ResultColumn* column, char** value, long
   do {
     db2Debug2("value_len: %ld",*value_len);
     db2Debug2("reading %d byte chunck of data",sizeof(buf));
-    rc = SQLGetData(session->stmtp->hsql, column->resnum, fcType, buf, sizeof(buf), &ind);
-    rc = db2CheckErr(rc,session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
+    rawRc = SQLGetData(session->stmtp->hsql, column->resnum, fcType, buf, sizeof(buf), &ind);
+    /* db2CheckErr() maps SQL_SUCCESS_WITH_INFO to SQL_SUCCESS, so the loop
+     * condition below must be evaluated against rawRc, not against its
+     * return value, or a multi-chunk LOB gets silently truncated to the
+     * first LOB_CHUNK_SIZE bytes after just one iteration. */
+    rc = db2CheckErr(rawRc,session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
     if (rc == SQL_ERROR) {
       db2Error_d ( FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: SQLGetData failed to read LOB chunk", db2Message);
     }
@@ -63,8 +68,10 @@ void db2GetLob (DB2Session* session, DB2ResultColumn* column, char** value, long
           db2Debug3("not allocating space since the LOB value is apparently NULL");
         }
       } else {
-        // do not add another 0 termination byte, since we already have one
-        *value = db2realloc (*value_len + extend, *value, "*value");
+        // reserve a byte for the 0 termination again: realloc gives back a
+        // buffer sized to exactly what we ask for, it does not carry over
+        // the spare byte reserved by the first db2alloc call above
+        *value = db2realloc (*value_len + extend + 1, *value, "*value");
       }
       // append the buffer read to the value excluding 0 termination byte
       db2Debug2("*value    : %x", *value);
@@ -78,7 +85,7 @@ void db2GetLob (DB2Session* session, DB2ResultColumn* column, char** value, long
         db2Debug3("skipping value copy, since value is NULL");
       }
     }
-  } while (rc == SQL_SUCCESS_WITH_INFO);
+  } while (rawRc == SQL_SUCCESS_WITH_INFO);
 
   /* string end for CLOBs */
   db2Debug2("*value   : %x" , *value);

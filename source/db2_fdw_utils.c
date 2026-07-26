@@ -42,6 +42,7 @@ extern short        c2dbType                   (short fcType);
 /** local prototypes */
 bool                optionIsTrue               (const char *value);
 char*               guessNlsLang               (char* nls_lang);
+int                 guessDb2ClientCodepage     (void);
 void                exitHook                   (int code, Datum arg);
 void                convertTuple               (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls);
 void                reset_transmission_modes   (int nestlevel);
@@ -179,6 +180,81 @@ char* guessNlsLang (char *nls_lang) {
   }
   db2Exit4(": %s", buf.data);
   return buf.data;
+}
+
+/* guessDb2ClientCodepage
+ * Return the DB2 CCSID matching PostgreSQL's server_encoding, so the DB2
+ * CLI connection's SQL_ATTR_CLIENT_CODEPAGE can be set to it explicitly.
+ *
+ * Without this, DB2 CLI negotiates its client codepage from ambient
+ * OS/db2cli.ini configuration, which has no guaranteed relationship to
+ * server_encoding: CLOB/CHAR data gets transcoded by the CLI driver to
+ * whatever that ambient codepage happens to be, not to what PostgreSQL
+ * actually expects, silently corrupting non-ASCII data on the way in.
+ *
+ * Returns 0 (caller should skip setting the attribute, leaving today's
+ * ambient-codepage behavior in place) if server_encoding has no
+ * confidently-known CCSID equivalent.
+ */
+int guessDb2ClientCodepage (void) {
+  char* server_encoding = NULL;
+  int   ccsid           = 0;
+
+  db2Entry4();
+  server_encoding = db2strdup (GetConfigOption ("server_encoding", false, true),"server_encoding");
+  if (strcmp (server_encoding, "UTF8") == 0)
+    ccsid = 1208;
+  else if (strcmp (server_encoding, "ISO_8859_5") == 0)
+    ccsid = 915;
+  else if (strcmp (server_encoding, "ISO_8859_6") == 0)
+    ccsid = 1089;
+  else if (strcmp (server_encoding, "ISO_8859_7") == 0)
+    ccsid = 813;
+  else if (strcmp (server_encoding, "ISO_8859_8") == 0)
+    ccsid = 916;
+  else if (strcmp (server_encoding, "LATIN1") == 0)
+    ccsid = 819;
+  else if (strcmp (server_encoding, "LATIN2") == 0)
+    ccsid = 912;
+  else if (strcmp (server_encoding, "LATIN3") == 0)
+    ccsid = 913;
+  else if (strcmp (server_encoding, "LATIN4") == 0)
+    ccsid = 914;
+  else if (strcmp (server_encoding, "LATIN5") == 0)
+    ccsid = 920;
+  else if (strcmp (server_encoding, "LATIN9") == 0)
+    ccsid = 923;
+  else if (strcmp (server_encoding, "WIN866") == 0)
+    ccsid = 866;
+  else if (strcmp (server_encoding, "WIN1250") == 0)
+    ccsid = 1250;
+  else if (strcmp (server_encoding, "WIN1251") == 0)
+    ccsid = 1251;
+  else if (strcmp (server_encoding, "WIN1252") == 0)
+    ccsid = 1252;
+  else if (strcmp (server_encoding, "WIN1253") == 0)
+    ccsid = 1253;
+  else if (strcmp (server_encoding, "WIN1254") == 0)
+    ccsid = 1254;
+  else if (strcmp (server_encoding, "WIN1255") == 0)
+    ccsid = 1255;
+  else if (strcmp (server_encoding, "WIN1256") == 0)
+    ccsid = 1256;
+  else if (strcmp (server_encoding, "WIN1257") == 0)
+    ccsid = 1257;
+  else if (strcmp (server_encoding, "WIN1258") == 0)
+    ccsid = 1258;
+  else {
+    ereport (WARNING,(errcode (ERRCODE_WARNING)
+                    ,errmsg ("no known DB2 CCSID for database encoding \"%s\"", server_encoding)
+                    ,errdetail ("The DB2 CLI connection's client codepage will be left at its ambient default, which may not match this encoding.")
+                    ,errhint ("CLOB and character data containing non-ASCII characters may be transcoded incorrectly.")
+                    )
+            );
+  }
+  db2free (server_encoding,"server_encoding");
+  db2Exit4(": %d", ccsid);
+  return ccsid;
 }
 
 /* exitHook
