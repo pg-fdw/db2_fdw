@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"SQL_CLOB\\\\|SQL_BLOB\\\\|SQL_DBCLOB\" /home/temuenz/sqllib/include/sqlcli.h | head -20 *)",
+      "Read(//opt/ibm/db2/V11.5/include/**)",
+      "Bash(grep -n \"#include\" /home/temuenz/sqllib/include/sqlcli1.h | head; echo \"---\"; grep -n \"SQL_CLOB\\\\b\\\\|SQL_BLOB\\\\b\\\\|SQL_DBCLOB\\\\b\" /home/temuenz/sqllib/include/sqlcli.h)",
+      "Bash(which pg_config 2>/dev/null; ls /usr/pgsql-18/bin/pg_config 2>/dev/null; echo done)",
+      "Read(//usr/pgsql-18/bin/**)",
+      "Bash(/usr/pgsql-18/bin/psql -U postgres -h 127.0.0.1 -p 5438 -d db2_fdw_test -c \"DELETE FROM sample.emp_resume WHERE resume_format = '000130' AND empno='000130';\")",
+      "Bash(su - db2inst1 -c \"which db2\")",
+      "Read(//opt/ibm/db2/V11.5/bin/**)",
+      "Bash(export DB2INSTANCE=postgres)",
+      "Bash(/home/temuenz/sqllib/bin/db2 connect *)",
+      "Read(//var/lib/pgsql/sqllib/cfg/**)",
+      "Bash(sudo -n cat /var/lib/pgsql/sqllib/cfg/db2dsdriver.cfg)",
+      "Bash(find / -iname \"db2dsdriver.cfg\")",
+      "Bash(find / -iname \".odbc.ini\" -o -iname \"odbc.ini\")",
+      "Bash(export DB2INSTANCE=db2inst1)",
+      "Bash(/home/temuenz/sqllib/bin/db2 list *)",
+      "Bash(echo \"---\")",
+      "Bash(whoami)",
+      "Bash(id)",
+      "Read(//home/temuenz/sqllib/**)",
+      "Bash(find / -maxdepth 3 -iname \"db2profile\")",
+      "Read(//etc/**)",
+      "Bash(bash -c 'source /home/temuenz/sqllib/db2profile; echo DB2INSTANCE=$DB2INSTANCE; db2 list db directory')",
+      "Bash(sudo -u postgres bash -c 'export DB2INSTANCE=postgres; source /var/lib/pgsql/sqllib/db2profile; db2 list db directory')",
+      "Bash(sudo -u postgres bash -c ' *)",
+      "Bash(python3 -c ' *)",
+      "Bash(sudo DB2_HOME=/home/temuenz/sqllib PG_CONFIG=/usr/pgsql-18/bin/pg_config make install)",
+      "Bash(sudo bash -c \"tail -n +837528 /var/lib/pgsql/18/data/log/postgresql-Sun.log | grep -iE 'db2GetLob|value_len|extend|ind|bytes still|GetLob' \")",
+      "Bash(sudo bash -c \"tail -n +837528 /var/lib/pgsql/18/data/log/postgresql-Sun.log | wc -l\")",
+      "Bash(sudo bash -c \"tail -n +837528 /var/lib/pgsql/18/data/log/postgresql-Sun.log | grep -c 'db2GetLob.c'\")",
+      "Bash(sudo bash -c \"tail -n +837528 /var/lib/pgsql/18/data/log/postgresql-Sun.log\")"
+    ]
+  }
+}
