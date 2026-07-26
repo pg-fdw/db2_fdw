@@ -50,7 +50,6 @@ bool dml_in_transaction = false;
 /** Valid options for db2xa_fdw.
  */
 DB2FdwOption valid_options[] = {
-  {OPT_NLS_LANG         , ForeignDataWrapperRelationId, false},
   {OPT_DBSERVER         , ForeignServerRelationId     , true },
   {OPT_USER             , UserMappingRelationId       , false},
   {OPT_PASSWORD         , UserMappingRelationId       , false},
@@ -87,7 +86,7 @@ regproc* output_funcs;
 
 /** db2_utils
  */
-extern DB2Session*      db2GetSession              (const char* connectstring, char* user, char* password, char* jwt_token, const char* nls_lang, int curlevel);
+extern DB2Session*      db2GetSession              (const char* connectstring, char* user, char* password, char* jwt_token, int curlevel);
 extern void             db2CloseConnections        (void);
 extern void             db2ClientVersion           (DB2Session* session, char* version);
 extern void             db2ServerVersion           (DB2Session* session, char* version);
@@ -132,7 +131,6 @@ extern TupleTableSlot** db2ExecForeignBatchInsert   (EState *estate, ResultRelIn
 extern int              db2GetForeignModifyBatchSize(ResultRelInfo *rinfo);
 #endif
 /** db2 fdw utilities */
-extern char*           guessNlsLang              (char* nls_lang);
 extern void            exitHook                  (int code, Datum arg);
 
 
@@ -432,7 +430,6 @@ PGDLLEXPORT Datum db2_diag (PG_FUNCTION_ARGS) {
     ForeignDataWrapper* wrapper;
     List*               options;
     ListCell*           cell;
-    char*               nls_lang  = NULL;
     char*               user      = NULL;
     char*               password  = NULL;
     char*               dbserver  = NULL;
@@ -463,16 +460,13 @@ PGDLLEXPORT Datum db2_diag (PG_FUNCTION_ARGS) {
     options = list_concat (options, mapping->options);
     foreach (cell, options) {
       DefElem *def = (DefElem *) lfirst (cell);
-      nls_lang  = (strcmp (def->defname, OPT_NLS_LANG)  == 0) ? STRVAL(def->arg) : nls_lang;
       dbserver  = (strcmp (def->defname, OPT_DBSERVER)  == 0) ? STRVAL(def->arg) : dbserver;
       user      = (strcmp (def->defname, OPT_USER)      == 0) ? STRVAL(def->arg) : user;
       password  = (strcmp (def->defname, OPT_PASSWORD)  == 0) ? STRVAL(def->arg) : password;
       jwt_token = (strcmp (def->defname, OPT_JWT_TOKEN) == 0) ? STRVAL(def->arg) : jwt_token;
     }
-    /* guess a good NLS_LANG environment setting */
-    nls_lang = guessNlsLang (nls_lang);
     /* connect to DB2 database */
-    session = db2GetSession (dbserver, user, password, jwt_token, nls_lang, 1);
+    session = db2GetSession (dbserver, user, password, jwt_token, 1);
     /* get the client version */
 
     db2ClientVersion (session, cli_version);

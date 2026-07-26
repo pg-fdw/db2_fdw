@@ -13,9 +13,8 @@
 #include "DB2FdwDirectModifyState.h"
 
 /** external prototypes */
-extern char*        guessNlsLang  (char* nls_lang);
 extern bool         optionIsTrue  (const char* value);
-extern DB2Session*  db2GetSession (const char* connectstring, char* user, char* password, char* jwt_token, const char* nls_lang, int curlevel);
+extern DB2Session*  db2GetSession (const char* connectstring, char* user, char* password, char* jwt_token, int curlevel);
 extern DB2Table*    db2Describe   (DB2Session* session, char* schema, char* table, char* pgname, char* noencerr, char* batchsz);
 extern char*        db2CopyText   (const char* string, int size, int quote);
 extern char*        c2name        (short fcType);
@@ -53,7 +52,6 @@ DB2FdwState* db2GetFdwState (Oid foreigntableid, double* sample_percent, bool de
 
   foreach (cell, options) {
     DefElem *def = (DefElem *) lfirst (cell);
-    fdwState->nls_lang  = (strcmp (def->defname, OPT_NLS_LANG)          == 0) ? STRVAL(def->arg) : fdwState->nls_lang;
     fdwState->dbserver  = (strcmp (def->defname, OPT_DBSERVER)          == 0) ? STRVAL(def->arg) : fdwState->dbserver;
     fdwState->user      = (strcmp (def->defname, OPT_USER)              == 0) ? STRVAL(def->arg) : fdwState->user;
     fdwState->password  = (strcmp (def->defname, OPT_PASSWORD)          == 0) ? STRVAL(def->arg) : fdwState->password;
@@ -85,14 +83,11 @@ DB2FdwState* db2GetFdwState (Oid foreigntableid, double* sample_percent, bool de
     ereport (ERROR, (errcode (ERRCODE_FDW_OPTION_NAME_NOT_FOUND), errmsg ("required option \"%s\" in foreign table \"%s\" missing", OPT_TABLE, pgtablename)));
   }
 
-  /* guess a good NLS_LANG environment setting */
-  fdwState->nls_lang = guessNlsLang (fdwState->nls_lang);
-
   if (describe) {
     fdwState->db2Table = describeForeignTable(foreigntableid, schema, table, pgtablename, noencerr, batchsz);
     if (fdwState->db2Table == NULL) {
       /* connect to DB2 database */
-      fdwState->session = db2GetSession (fdwState->dbserver, fdwState->user, fdwState->password, fdwState->jwt_token, fdwState->nls_lang, GetCurrentTransactionNestLevel () );
+      fdwState->session = db2GetSession (fdwState->dbserver, fdwState->user, fdwState->password, fdwState->jwt_token, GetCurrentTransactionNestLevel () );
       /* get remote table description */
       fdwState->db2Table = db2Describe (fdwState->session, schema, table, pgtablename, noencerr, batchsz);
       /* add PostgreSQL data to table description */
@@ -129,7 +124,6 @@ DB2FdwDirectModifyState* db2GetFdwDirectModifyState (Oid foreigntableid, double*
 
   foreach (cell, options) {
     DefElem *def = (DefElem *) lfirst (cell);
-    fdwState->nls_lang  = (strcmp (def->defname, OPT_NLS_LANG)          == 0) ? STRVAL(def->arg) : fdwState->nls_lang;
     fdwState->dbserver  = (strcmp (def->defname, OPT_DBSERVER)          == 0) ? STRVAL(def->arg) : fdwState->dbserver;
     fdwState->user      = (strcmp (def->defname, OPT_USER)              == 0) ? STRVAL(def->arg) : fdwState->user;
     fdwState->password  = (strcmp (def->defname, OPT_PASSWORD)          == 0) ? STRVAL(def->arg) : fdwState->password;
@@ -161,13 +155,10 @@ DB2FdwDirectModifyState* db2GetFdwDirectModifyState (Oid foreigntableid, double*
     ereport (ERROR, (errcode (ERRCODE_FDW_OPTION_NAME_NOT_FOUND), errmsg ("required option \"%s\" in foreign table \"%s\" missing", OPT_TABLE, pgtablename)));
   }
 
-  /* guess a good NLS_LANG environment setting */
-  fdwState->nls_lang = guessNlsLang (fdwState->nls_lang);
-
   if (describe) {
     fdwState->db2Table = describeForeignTable(foreigntableid, schema, table, pgtablename, noencerr, batchsz);
   }
-  fdwState->session  = db2GetSession (fdwState->dbserver, fdwState->user, fdwState->password, fdwState->jwt_token, fdwState->nls_lang, GetCurrentTransactionNestLevel () );
+  fdwState->session  = db2GetSession (fdwState->dbserver, fdwState->user, fdwState->password, fdwState->jwt_token, GetCurrentTransactionNestLevel () );
 
   db2Exit1();
   return fdwState;

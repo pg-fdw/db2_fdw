@@ -117,9 +117,6 @@ a foreign data wrapper.
 
 The extension automatically creates a foreign data wrapper named `db2_fdw`.
 Normally that's all you need, and you can proceed to define foreign servers.
-You can create additional DB2 foreign data wrappers, for example if you
-need to set the **nls_lang** option (you can alter the existing `db2_fdw`
-wrapper, but all modifications will be lost after a dump/restore).
 
     FUNCTION db2_close_connections() RETURNS void
 
@@ -137,29 +134,6 @@ the DB2 server version.
 
 3 Options
 =========
-
-Foreign data wrapper options
-----------------------------
-
-(Caution: If you modify the default foreign data wrapper `db2_fdw`,
-any changes will be lost upon dump/restore.  Create a new foreign data wrapper
-if you want the options to be persistent.  The SQL script shipped with the
-software contains a CREATE FOREIGN DATA WRAPPER statement you can use.)
-
-- **nls_lang** (optional)
-
-  Sets the DB2CODEPAGE registry variable to the code page the database is setup.
-  To verfy the DB2 database codepage execute the command:
-
-      db2 get db cfg for SAMPLE|grep -E "Database code page|Database code set"
-
-  Then set the registry variable for the client to:
-
-      db2set DB2CODEPAGE=1208
-
-  When this value is not set, db2_fdw will automatically do the right
-  thing if it can and issue a warning if it cannot. Set this only if you
-  know what you are doing.  See the [Problems](#8-problems) section.
 
 Foreign server options
 ----------------------

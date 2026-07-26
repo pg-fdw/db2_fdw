@@ -5,7 +5,7 @@
 /** external variables */
 extern int          silent;                /* emit no error messages when set, used for shutdown            */
 extern int          sql_initialized;       /* set to "1" as soon as SQLAllocHandle(SQL_HANDLE_ENV is called */
-extern DB2EnvEntry* rootenvEntry;          /* Linked list of handles for cached DB2 connections.            */
+extern DB2EnvEntry* rootenvEntry;          /* Cached handle for the (at most one) DB2 environment per backend. */
 extern char         db2Message[ERRBUFSIZE];/* contains DB2 error messages, set by db2CheckErr()             */
 
 /** external prototypes */
@@ -13,7 +13,7 @@ extern void      db2Error             (db2error sqlstate, const char* message);
 extern void      db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern SQLRETURN db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 extern void      db2UnregisterCallback(void* arg);
-extern void      db2FreeEnvHdl        (DB2EnvEntry* envp, const char* nls_lang);
+extern void      db2FreeEnvHdl        (DB2EnvEntry* envp);
 
 /** local prototypes */
        void      db2CloseConnections  (void);
@@ -30,7 +30,7 @@ void db2CloseConnections (void) {
       db2FreeConnHdl(rootenvEntry, rootenvEntry->connlist);
       db2Debug3("rootenvEntry: %x, rootenvEntry->connlist: %x",rootenvEntry, rootenvEntry->connlist);
     }
-    db2FreeEnvHdl(rootenvEntry, NULL);
+    db2FreeEnvHdl(rootenvEntry);
   }
   db2Exit1();
 }

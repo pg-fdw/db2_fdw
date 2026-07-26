@@ -27,7 +27,6 @@ typedef struct db2FdwState {
   char*               user;                   // DB2 username
   char*               password;               // DB2 password
   char*               jwt_token;              // JWT token for authentication (alternative to user/password)
-  char*               nls_lang;               // DB2 locale information
   DB2Session*         session;                // encapsulates the active DB2 session
   char*               query;                  // query we issue against DB2
   List*               params;                 // list of parameters needed for the query

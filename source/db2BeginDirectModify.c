@@ -8,7 +8,7 @@
 #include "db2_fdw.h"
 #include "DB2FdwDirectModifyState.h"
 
-extern DB2Session*              db2GetSession             (const char* connectstring, char* user, char* password, char* jwt_token, const char* nls_lang, int curlevel);
+extern DB2Session*              db2GetSession             (const char* connectstring, char* user, char* password, char* jwt_token, int curlevel);
 extern DB2FdwDirectModifyState* db2GetFdwDirectModifyState(Oid foreigntableid, double* sample_percent, bool describe);
 
        void       db2BeginDirectModify            (ForeignScanState* node, int eflags);

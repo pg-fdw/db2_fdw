@@ -3,7 +3,7 @@
 /** global variables */
 
 /** external variables */
-extern DB2EnvEntry* rootenvEntry;          /* contains DB2 error messages, set by db2CheckErr()             */
+extern DB2EnvEntry* rootenvEntry;          /* Cached handle for the (at most one) DB2 environment per backend. */
 
 /** external prototypes */
 
@@ -20,7 +20,8 @@ void db2Cancel (void) {
 
   db2Entry1();
   /* send a cancel request for all servers ignoring errors */
-  for (envp = rootenvEntry; envp != NULL; envp = envp->right) {
+  envp = rootenvEntry;
+  if (envp != NULL) {
     for (connp = envp->connlist; connp != NULL; connp = connp->right) {
       for (entryp = connp->handlelist; entryp != NULL; entryp = entryp->next){
         if (entryp->type == SQL_HANDLE_STMT) {

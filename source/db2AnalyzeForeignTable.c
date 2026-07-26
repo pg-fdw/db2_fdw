@@ -10,7 +10,7 @@
 #include "DB2FdwState.h"
 
 /** external prototypes */
-extern DB2Session*  db2GetSession             (const char* connectstring, char* user, char* password, char* jwt_token, const char* nls_lang, int curlevel);
+extern DB2Session*  db2GetSession             (const char* connectstring, char* user, char* password, char* jwt_token, int curlevel);
 extern DB2FdwState* db2GetFdwState            (Oid foreigntableid, double* sample_percent, bool describe);
 extern int          db2IsStatementOpen        (DB2Session* session);
 extern void         db2PrepareQuery           (DB2Session* session, const char *query, DB2ResultColumn* resultList, unsigned long prefetch, int fetchsize);
@@ -66,7 +66,7 @@ static int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple* rows
   /* get connection options, connect and get the remote table description */
   fdw_state             = db2GetFdwState (RelationGetRelid (relation), &sample_percent, true);
   if (!fdw_state->session) {
-    fdw_state->session  = db2GetSession (fdw_state->dbserver, fdw_state->user, fdw_state->password, fdw_state->jwt_token, fdw_state->nls_lang, GetCurrentTransactionNestLevel () );
+    fdw_state->session  = db2GetSession (fdw_state->dbserver, fdw_state->user, fdw_state->password, fdw_state->jwt_token, GetCurrentTransactionNestLevel () );
   }
   fdw_state->paramList  = NULL;
   fdw_state->rowcount   = 0;
