@@ -1997,7 +1997,13 @@ static void deparseRelation(StringInfo buf, Relation rel) {
   if (relname == NULL)
     relname = RelationGetRelationName(rel);
 
-  appendStringInfo(buf, "%s.%s", quote_identifier(nspname), quote_identifier(relname));
+  /* A "table" option value that is a parenthesized derived table (subquery) is used verbatim,
+   * without schema-qualification or quoting, matching db2CopyText()'s handling of the same case.
+   */
+  if (relname[0] == '(' && relname[strlen(relname) - 1] == ')')
+    appendStringInfoString(buf, relname);
+  else
+    appendStringInfo(buf, "%s.%s", quote_identifier(nspname), quote_identifier(relname));
   db2Debug5("relation: %s",buf->data);
   db2Exit1();
 }
