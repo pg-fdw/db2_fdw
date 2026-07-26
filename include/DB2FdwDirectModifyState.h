@@ -14,7 +14,6 @@ typedef struct db2FdwDirectModifyState {
   char*               user;                   // DB2 username
   char*               password;               // DB2 password
   char*               jwt_token;              // JWT token for authentication (alternative to user/password)
-  char*               nls_lang;               // DB2 locale information
   DB2Session*         session;                // encapsulates the active DB2 session
   ParamDesc*          paramList;              // description of parameters needed for the query
   DB2ResultColumn*    resultList;             // list of result columns for the query

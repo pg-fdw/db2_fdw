@@ -343,7 +343,6 @@ static DB2FdwState* copyPlanData (DB2FdwState* orig) {
   copy->dbserver          = db2strdup(orig->dbserver, "copy->dbserver");
   copy->user              = db2strdup(orig->user, "copy->user");
   copy->password          = db2strdup(orig->password, "copy->password");
-  copy->nls_lang          = db2strdup(orig->nls_lang, "copy->nls_lang");
   copy->session           = NULL;
   copy->query             = NULL;
   copy->paramList         = NULL;

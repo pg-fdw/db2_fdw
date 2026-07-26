@@ -10,125 +10,112 @@ extern char      db2Message[ERRBUFSIZE];/* contains DB2 error messages, set by d
 extern void      db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern void      db2RegisterCallback  (void* arg);
 extern SQLRETURN db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
-extern void      db2FreeEnvHdl        (DB2EnvEntry* envp, const char* nls_lang);
 extern int       guessDb2ClientCodepage(void);
 extern void      db2Warning_d         (const char* message, const char* detail, ...);
 
 /** local prototypes */
-       DB2ConnEntry*    db2AllocConnHdl      (DB2EnvEntry* envp,const char* srvname, char* user, char* password, char* jwt_token, const char* nls_lang);
+       DB2ConnEntry*    db2AllocConnHdl      (DB2EnvEntry* envp,const char* srvname, char* user, char* password, char* jwt_token);
        DB2ConnEntry*    findconnEntry        (DB2ConnEntry* start, const char* srvname, const char* user, const char* jwttok);
 static DB2ConnEntry*    insertconnEntry      (DB2ConnEntry* start, const char* srvname, const char* uid, const char* pwd, const char* jwt_token, SQLHDBC hdbc);
 
 /* db2AllocConnHdl */
-DB2ConnEntry* db2AllocConnHdl(DB2EnvEntry* envp,const char* srvname, char* user, char* password, char* jwt_token, const char* nls_lang) {
+DB2ConnEntry* db2AllocConnHdl(DB2EnvEntry* envp,const char* srvname, char* user, char* password, char* jwt_token) {
   DB2ConnEntry* connp   = NULL;
   SQLRETURN     rc      = 0;
   SQLHDBC       hdbc    = SQL_NULL_HDBC;
 
-  db2Entry1("(envp: %x, srvname: %s, user: %s, password: %s, jwt_token: %s, nls_lang: %s)", envp, srvname,user, password, jwt_token ? "***" : "NULL", nls_lang);
-  if (nls_lang != NULL) {
+  db2Entry1("(envp: %x, srvname: %s, user: %s, password: %s, jwt_token: %s)", envp, srvname,user, password, jwt_token ? "***" : "NULL");
+  /* search user session for this server in cache */
+  connp = findconnEntry(envp->connlist, srvname, user, jwt_token);
+  if (connp == NULL) {
+    /* Declare all variables at beginning for C90 compatibility */
+    char connStr[4096];
+    int connStrLen;
+    SQLCHAR outConnStr[1024];
+    SQLSMALLINT outConnStrLen;
+
+    /* create connection handle */
     rc = SQLAllocHandle(SQL_HANDLE_DBC, envp->henv, &hdbc);
     db2Debug3("alloc dbc handle - rc: %d, henv: %d, hdbc: %d",rc, envp->henv, hdbc);
-    rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
-    if (rc != SQL_SUCCESS) {
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: SQLAllocHandle failed to allocate hdbc handle", db2Message);
-        db2FreeEnvHdl(envp,nls_lang);
-        envp = NULL;
+    rc = db2CheckErr(rc, envp->henv, SQL_HANDLE_ENV, __LINE__, __FILE__);
+    if (rc  != SQL_SUCCESS) {
+      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: SQLAllochHandle failed to allocate hdbc handle", db2Message);
     }
-    // envp->connlist = connp = insertconnEntry (envp->connlist, srvname, user, password, hdbc);
-  } else {
-    /* search user session for this server in cache */
-    connp = findconnEntry(envp->connlist, srvname, user, jwt_token);
-    if (connp == NULL) {
-      /* Declare all variables at beginning for C90 compatibility */
-      char connStr[4096];
-      int connStrLen;
-      SQLCHAR outConnStr[1024];
-      SQLSMALLINT outConnStrLen;
 
-      /* create connection handle */
-      rc = SQLAllocHandle(SQL_HANDLE_DBC, envp->henv, &hdbc);
-      db2Debug3("alloc dbc handle - rc: %d, henv: %d, hdbc: %d",rc, envp->henv, hdbc);
-      rc = db2CheckErr(rc, envp->henv, SQL_HANDLE_ENV, __LINE__, __FILE__);
-      if (rc  != SQL_SUCCESS) {
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: SQLAllochHandle failed to allocate hdbc handle", db2Message);
-      }
-
-      /* Pin the CLI connection's client codepage to whatever CCSID matches
-       * PostgreSQL's server_encoding, so DB2 CLI transcodes CHAR/CLOB data
-       * to exactly what PostgreSQL expects instead of an ambient default
-       * codepage picked up from the OS or db2cli.ini. Must be set before
-       * connecting: it has no effect once the connection is established. */
-      {
-        int db2Codepage = guessDb2ClientCodepage();
-        if (db2Codepage > 0) {
-          rc = SQLSetConnectAttr(hdbc, SQL_ATTR_CLIENT_CODEPAGE, (SQLPOINTER)(intptr_t) db2Codepage, SQL_IS_UINTEGER);
-          rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
-          if (rc != SQL_SUCCESS) {
-            db2Warning_d ("could not set DB2 CLI client codepage", "requested CCSID %d: %s", db2Codepage, db2Message);
-          }
-        }
-      }
-
-      /* Check if JWT token authentication is used */
-      if (jwt_token != NULL && jwt_token[0] != '\0') {
-        /* JWT token authentication */
-        db2Debug2("using JWT token authentication");
-
-        /* For DB2 11.5.4+ with JWT, use SQLDriverConnect with AUTHENTICATION=TOKEN */
-        /* Requires: DB2 client 11.5.4+, server configured with db2token.cfg */
-        /* and SRVCON_AUTH set to SERVER_ENCRYPT_TOKEN or similar */
-
-        /* Build connection string with JWT token using DB2 TOKEN authentication keywords */
-        /* JWT tokens contain identity information, so UID is typically not required */
-        connStrLen = snprintf(connStr, sizeof(connStr),
-                             "DSN=%s;AUTHENTICATION=TOKEN;ACCESSTOKEN=%s;ACCESSTOKENTYPE=JWT;",
-                             srvname, jwt_token);
-
-        if (connStrLen >= sizeof(connStr)) {
-          db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "connection string too long", " connection to foreign DB2 server");
-        }
-
-        db2Debug2("connecting with connection string (token hidden)");
-
-        /* Use SQLDriverConnect instead of SQLConnect */
-        rc = SQLDriverConnect(hdbc, NULL, (SQLCHAR*)connStr, SQL_NTS,
-                             outConnStr, sizeof(outConnStr), &outConnStrLen,
-                             SQL_DRIVER_NOPROMPT);
-
-        db2Debug2("connect to database(%s) with JWT token - rc: %d, hdbc: %d", srvname, rc, hdbc);
+    /* Pin the CLI connection's client codepage to whatever CCSID matches
+     * PostgreSQL's server_encoding, so DB2 CLI transcodes CHAR/CLOB data
+     * to exactly what PostgreSQL expects instead of an ambient default
+     * codepage picked up from the OS or db2cli.ini. Must be set before
+     * connecting: it has no effect once the connection is established. */
+    {
+      int db2Codepage = guessDb2ClientCodepage();
+      if (db2Codepage > 0) {
+        rc = SQLSetConnectAttr(hdbc, SQL_ATTR_CLIENT_CODEPAGE, (SQLPOINTER)(intptr_t) db2Codepage, SQL_IS_UINTEGER);
         rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
         if (rc != SQL_SUCCESS) {
-          db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate with JWT token", " connection connectstring: %s ,%s", srvname, db2Message);
-          db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate", " connection to foreign DB2 server,%s", db2Message);
-        }
-      } else {
-        /* Traditional user/password authentication */
-        db2Debug2("using user/password authentication");
-        rc = SQLConnect(hdbc, (SQLCHAR*)srvname, SQL_NTS, (SQLCHAR*)user, SQL_NTS, (SQLCHAR*)password, SQL_NTS);
-        db2Debug2("connect to database(%s) - rc: %d, hdbc: %d",srvname, rc, hdbc);
-        rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
-        if (rc != SQL_SUCCESS) {
-          db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection User: %s ,%s"            , user    , db2Message);
-          db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection password: %s ,%s"        , password, db2Message);
-          db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection connectstring: %s ,%s"   , srvname , db2Message);
-          db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection to foreign DB2 server,%s"          , db2Message);
+          db2Warning_d ("could not set DB2 CLI client codepage", "requested CCSID %d: %s", db2Codepage, db2Message);
         }
       }
+    }
 
-      if (rc == SQL_SUCCESS) {
-        /* add session handle to cache */
-        envp->connlist = connp = insertconnEntry (envp->connlist, srvname, user, password, jwt_token, hdbc);
+    /* Check if JWT token authentication is used */
+    if (jwt_token != NULL && jwt_token[0] != '\0') {
+      /* JWT token authentication */
+      db2Debug2("using JWT token authentication");
 
-        /* set Autocommit off */
-        rc = SQLSetConnectAttr(hdbc, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER)SQL_AUTOCOMMIT_OFF, SQL_IS_UINTEGER);
-        rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
-        if (rc != SQL_SUCCESS) {
-          db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "failed to set autocommit=off"," connection to foreign DB2 server,%s", db2Message);
-        }
-        /* register callback for PostgreSQL transaction events */
-        db2RegisterCallback (connp);
+      /* For DB2 11.5.4+ with JWT, use SQLDriverConnect with AUTHENTICATION=TOKEN */
+      /* Requires: DB2 client 11.5.4+, server configured with db2token.cfg */
+      /* and SRVCON_AUTH set to SERVER_ENCRYPT_TOKEN or similar */
+
+      /* Build connection string with JWT token using DB2 TOKEN authentication keywords */
+      /* JWT tokens contain identity information, so UID is typically not required */
+      connStrLen = snprintf(connStr, sizeof(connStr),
+                           "DSN=%s;AUTHENTICATION=TOKEN;ACCESSTOKEN=%s;ACCESSTOKENTYPE=JWT;",
+                           srvname, jwt_token);
+
+      if (connStrLen >= sizeof(connStr)) {
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "connection string too long", " connection to foreign DB2 server");
       }
+
+      db2Debug2("connecting with connection string (token hidden)");
+
+      /* Use SQLDriverConnect instead of SQLConnect */
+      rc = SQLDriverConnect(hdbc, NULL, (SQLCHAR*)connStr, SQL_NTS,
+                           outConnStr, sizeof(outConnStr), &outConnStrLen,
+                           SQL_DRIVER_NOPROMPT);
+
+      db2Debug2("connect to database(%s) with JWT token - rc: %d, hdbc: %d", srvname, rc, hdbc);
+      rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
+      if (rc != SQL_SUCCESS) {
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate with JWT token", " connection connectstring: %s ,%s", srvname, db2Message);
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate", " connection to foreign DB2 server,%s", db2Message);
+      }
+    } else {
+      /* Traditional user/password authentication */
+      db2Debug2("using user/password authentication");
+      rc = SQLConnect(hdbc, (SQLCHAR*)srvname, SQL_NTS, (SQLCHAR*)user, SQL_NTS, (SQLCHAR*)password, SQL_NTS);
+      db2Debug2("connect to database(%s) - rc: %d, hdbc: %d",srvname, rc, hdbc);
+      rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
+      if (rc != SQL_SUCCESS) {
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection User: %s ,%s"            , user    , db2Message);
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection password: %s ,%s"        , password, db2Message);
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection connectstring: %s ,%s"   , srvname , db2Message);
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection to foreign DB2 server,%s"          , db2Message);
+      }
+    }
+
+    if (rc == SQL_SUCCESS) {
+      /* add session handle to cache */
+      envp->connlist = connp = insertconnEntry (envp->connlist, srvname, user, password, jwt_token, hdbc);
+
+      /* set Autocommit off */
+      rc = SQLSetConnectAttr(hdbc, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER)SQL_AUTOCOMMIT_OFF, SQL_IS_UINTEGER);
+      rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
+      if (rc != SQL_SUCCESS) {
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "failed to set autocommit=off"," connection to foreign DB2 server,%s", db2Message);
+      }
+      /* register callback for PostgreSQL transaction events */
+      db2RegisterCallback (connp);
     }
   }
   db2Exit1(": %x",connp);

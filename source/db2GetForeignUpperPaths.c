@@ -177,7 +177,6 @@ static void db2CloneFdwStateUpper(PlannerInfo* root, RelOptInfo* input_rel, RelO
     copy->user          = fdw_in->user          ? db2strdup(fdw_in->user,          "copy->user")          : NULL;
     copy->password      = fdw_in->password      ? db2strdup(fdw_in->password,      "copy->password")      : NULL;
     copy->jwt_token     = fdw_in->jwt_token     ? db2strdup(fdw_in->jwt_token,     "copy->jwt_token")     : NULL;
-    copy->nls_lang      = fdw_in->nls_lang      ? db2strdup(fdw_in->nls_lang,      "copy->nls_lang")      : NULL;
     copy->query         = fdw_in->query         ? db2strdup(fdw_in->query,         "copy->query")         : NULL;
     copy->order_clause  = fdw_in->order_clause  ? db2strdup(fdw_in->order_clause,  "copy->order_clause")  : NULL;
     copy->where_clause  = fdw_in->where_clause  ? db2strdup(fdw_in->where_clause,  "copy->where_clause")  : NULL;

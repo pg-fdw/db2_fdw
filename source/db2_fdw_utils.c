@@ -41,7 +41,6 @@ extern short        c2dbType                   (short fcType);
 
 /** local prototypes */
 bool                optionIsTrue               (const char *value);
-char*               guessNlsLang               (char* nls_lang);
 int                 guessDb2ClientCodepage     (void);
 void                exitHook                   (int code, Datum arg);
 void                convertTuple               (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls);
@@ -62,124 +61,6 @@ bool optionIsTrue (const char* value) {
   result = (pg_strcasecmp (value, "on") == 0 || pg_strcasecmp (value, "yes") == 0 || pg_strcasecmp (value, "true") == 0);
   db2Exit4(": '%s'",((result) ? "true" : "false"));
   return result;
-}
-
-/* guessNlsLang
- * If nls_lang is not NULL, return "NLS_LANG=<nls_lang>".
- * Otherwise, return a good guess for DB2's NLS_LANG.
- */
-char* guessNlsLang (char *nls_lang) {
-  char*          server_encoding = NULL;
-  char*          lc_messages     = NULL;
-  char*          language        = "AMERICAN_AMERICA";
-  char*          charset         = NULL;
-  StringInfoData buf;
-
-  db2Entry4("(nls_lang: %s)", nls_lang);
-  initStringInfo (&buf);
-  if (nls_lang == NULL) {
-    server_encoding = db2strdup (GetConfigOption ("server_encoding", false, true),"server_encoding");
-    /* find an DB2 client character set that matches the database encoding */
-    if (strcmp (server_encoding, "UTF8") == 0)
-      charset = "AL32UTF8";
-    else if (strcmp (server_encoding, "EUC_JP") == 0)
-      charset = "JA16EUC";
-    else if (strcmp (server_encoding, "EUC_JIS_2004") == 0)
-      charset = "JA16SJIS";
-    else if (strcmp (server_encoding, "EUC_TW") == 0)
-      charset = "ZHT32EUC";
-    else if (strcmp (server_encoding, "ISO_8859_5") == 0)
-      charset = "CL8ISO8859P5";
-    else if (strcmp (server_encoding, "ISO_8859_6") == 0)
-      charset = "AR8ISO8859P6";
-    else if (strcmp (server_encoding, "ISO_8859_7") == 0)
-      charset = "EL8ISO8859P7";
-    else if (strcmp (server_encoding, "ISO_8859_8") == 0)
-      charset = "IW8ISO8859P8";
-    else if (strcmp (server_encoding, "KOI8R") == 0)
-      charset = "CL8KOI8R";
-    else if (strcmp (server_encoding, "KOI8U") == 0)
-      charset = "CL8KOI8U";
-    else if (strcmp (server_encoding, "LATIN1") == 0)
-      charset = "WE8ISO8859P1";
-    else if (strcmp (server_encoding, "LATIN2") == 0)
-      charset = "EE8ISO8859P2";
-    else if (strcmp (server_encoding, "LATIN3") == 0)
-      charset = "SE8ISO8859P3";
-    else if (strcmp (server_encoding, "LATIN4") == 0)
-      charset = "NEE8ISO8859P4";
-    else if (strcmp (server_encoding, "LATIN5") == 0)
-      charset = "WE8ISO8859P9";
-    else if (strcmp (server_encoding, "LATIN6") == 0)
-      charset = "NE8ISO8859P10";
-    else if (strcmp (server_encoding, "LATIN7") == 0)
-      charset = "BLT8ISO8859P13";
-    else if (strcmp (server_encoding, "LATIN8") == 0)
-      charset = "CEL8ISO8859P14";
-    else if (strcmp (server_encoding, "LATIN9") == 0)
-      charset = "WE8ISO8859P15";
-    else if (strcmp (server_encoding, "WIN866") == 0)
-      charset = "RU8PC866";
-    else if (strcmp (server_encoding, "WIN1250") == 0)
-      charset = "EE8MSWIN1250";
-    else if (strcmp (server_encoding, "WIN1251") == 0)
-      charset = "CL8MSWIN1251";
-    else if (strcmp (server_encoding, "WIN1252") == 0)
-      charset = "WE8MSWIN1252";
-    else if (strcmp (server_encoding, "WIN1253") == 0)
-      charset = "EL8MSWIN1253";
-    else if (strcmp (server_encoding, "WIN1254") == 0)
-      charset = "TR8MSWIN1254";
-    else if (strcmp (server_encoding, "WIN1255") == 0)
-      charset = "IW8MSWIN1255";
-    else if (strcmp (server_encoding, "WIN1256") == 0)
-      charset = "AR8MSWIN1256";
-    else if (strcmp (server_encoding, "WIN1257") == 0)
-      charset = "BLT8MSWIN1257";
-    else if (strcmp (server_encoding, "WIN1258") == 0)
-      charset = "VN8MSWIN1258";
-    else {
-      /* warn if we have to resort to 7-bit ASCII */
-      charset = "US7ASCII";
-      ereport (WARNING,(errcode (ERRCODE_WARNING)
-                      ,errmsg ("no DB2 character set for database encoding \"%s\"", server_encoding)
-                      ,errdetail ("All but ASCII characters will be lost.")
-                      ,errhint ("You can set the option \"%s\" on the foreign data wrapper to force an DB2 character set.", OPT_NLS_LANG)
-                      )
-              );
-    }
-    db2free(server_encoding,"server_encoding");
-    lc_messages = db2strdup (GetConfigOption ("lc_messages", false, true),"lc_messages");
-    /* try to guess those for which there is a backend translation */
-    if (strncmp (lc_messages, "de_", 3) == 0 || pg_strncasecmp (lc_messages, "german", 6) == 0)
-      language = "GERMAN_GERMANY";
-    if (strncmp (lc_messages, "es_", 3) == 0 || pg_strncasecmp (lc_messages, "spanish", 7) == 0)
-      language = "SPANISH_SPAIN";
-    if (strncmp (lc_messages, "fr_", 3) == 0 || pg_strncasecmp (lc_messages, "french", 6) == 0)
-      language = "FRENCH_FRANCE";
-    if (strncmp (lc_messages, "in_", 3) == 0 || pg_strncasecmp (lc_messages, "indonesian", 10) == 0)
-      language = "INDONESIAN_INDONESIA";
-    if (strncmp (lc_messages, "it_", 3) == 0 || pg_strncasecmp (lc_messages, "italian", 7) == 0)
-      language = "ITALIAN_ITALY";
-    if (strncmp (lc_messages, "ja_", 3) == 0 || pg_strncasecmp (lc_messages, "japanese", 8) == 0)
-      language = "JAPANESE_JAPAN";
-    if (strncmp (lc_messages, "pt_", 3) == 0 || pg_strncasecmp (lc_messages, "portuguese", 10) == 0)
-      language = "BRAZILIAN PORTUGUESE_BRAZIL";
-    if (strncmp (lc_messages, "ru_", 3) == 0 || pg_strncasecmp (lc_messages, "russian", 7) == 0)
-      language = "RUSSIAN_RUSSIA";
-    if (strncmp (lc_messages, "tr_", 3) == 0 || pg_strncasecmp (lc_messages, "turkish", 7) == 0)
-      language = "TURKISH_TURKEY";
-    if (strncmp (lc_messages, "zh_CN", 5) == 0 || pg_strncasecmp (lc_messages, "chinese-simplified", 18) == 0)
-      language = "SIMPLIFIED CHINESE_CHINA";
-    if (strncmp (lc_messages, "zh_TW", 5) == 0 || pg_strncasecmp (lc_messages, "chinese-traditional", 19) == 0)
-      language = "TRADITIONAL CHINESE_TAIWAN";
-    appendStringInfo (&buf, "NLS_LANG=%s.%s", language, charset);
-    db2free(lc_messages,"lc_messages");
-  } else {
-    appendStringInfo (&buf, "NLS_LANG=%s", nls_lang);
-  }
-  db2Exit4(": %s", buf.data);
-  return buf.data;
 }
 
 /* guessDb2ClientCodepage

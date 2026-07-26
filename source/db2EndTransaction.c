@@ -2,7 +2,7 @@
 
 /** external variables */
 extern char         db2Message[ERRBUFSIZE];/* contains DB2 error messages, set by db2CheckErr()             */
-extern DB2EnvEntry* rootenvEntry;          /* Linked list of handles for cached DB2 connections.            */
+extern DB2EnvEntry* rootenvEntry;          /* Cached handle for the (at most one) DB2 environment per backend. */
 
 /** external prototypes */
 extern void      db2Error             (db2error sqlstate, const char* message);
@@ -32,7 +32,7 @@ void db2EndTransaction (void* arg, int is_commit, int noerror) {
   } else {
     /* find the cached handles for the argument */
     envp = rootenvEntry;
-    for (envp = rootenvEntry; envp != NULL; envp = envp->right) {
+    if (envp != NULL) {
       for (connp = envp->connlist; connp != NULL; connp = connp->right ){
         if (connp == (DB2ConnEntry *) arg) {
           found = 1;

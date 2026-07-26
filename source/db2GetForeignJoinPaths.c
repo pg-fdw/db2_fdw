@@ -250,7 +250,6 @@ static bool foreign_join_ok (PlannerInfo * root, RelOptInfo * joinrel, JoinType 
   fdwState->dbserver = fdwState_o->dbserver;
   fdwState->user     = fdwState_o->user;
   fdwState->password = fdwState_o->password;
-  fdwState->nls_lang = fdwState_o->nls_lang;
 
   /* construct db2Table for the result of join */
   db2Table_o = fdwState_o->db2Table;

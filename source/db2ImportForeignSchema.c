@@ -7,8 +7,7 @@
 #include "db2_fdw.h"
 
 /** external prototypes */
-extern DB2Session*    db2GetSession             (const char* connectstring, char* user, char* password, char* jwt_token, const char* nls_lang, int curlevel);
-extern char*          guessNlsLang              (char* nls_lang);
+extern DB2Session*    db2GetSession             (const char* connectstring, char* user, char* password, char* jwt_token, int curlevel);
 extern short          c2dbType                  (short fcType);
 extern bool           isForeignSchema           (DB2Session* session, char* schema);
 extern char**         getForeignTableList       (DB2Session* session, char* schema, int list_type, char* table_list);
@@ -25,7 +24,6 @@ static ForeignServer* getOptions                (Oid serverOid, List** options);
  * Returns a List of CREATE FOREIGN TABLE statements.
  */
 List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
-  char*               nls_lang  = NULL;
   char*               user      = NULL;
   char*               password  = NULL;
   char*               jwt_token = NULL;
@@ -45,7 +43,6 @@ List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
   foreach (cell, options) {
     DefElem *def = (DefElem *) lfirst (cell);
     db2Debug2("option: '%s'", def->defname);
-    nls_lang  = (strcmp (def->defname, OPT_NLS_LANG)  == 0) ? STRVAL(def->arg) : nls_lang;
     dbserver  = (strcmp (def->defname, OPT_DBSERVER)  == 0) ? STRVAL(def->arg) : dbserver;
     user      = (strcmp (def->defname, OPT_USER)      == 0) ? STRVAL(def->arg) : user;
     password  = (strcmp (def->defname, OPT_PASSWORD)  == 0) ? STRVAL(def->arg) : password;
@@ -78,11 +75,8 @@ List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
     ereport (ERROR, (errcode (ERRCODE_FDW_INVALID_OPTION_NAME), errmsg ("invalid option \"%s\"", def->defname), errhint ("Valid options in this context are: %s", "case, readonly")));
   }
 
-  /* guess a good NLS_LANG environment setting */
-  nls_lang = guessNlsLang (nls_lang);
-
   /* connect to DB2 database */
-  session = db2GetSession (dbserver, user, password, jwt_token, nls_lang, 1);
+  session = db2GetSession (dbserver, user, password, jwt_token, 1);
 
   db2Debug2("stmt->list_type    : %d", stmt->list_type);
   db2Debug2("stmt->local_schema : %s", stmt->local_schema);

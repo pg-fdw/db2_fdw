@@ -5,10 +5,10 @@ int                 silent = 0;            /* emit no error messages when set, u
 
 /** external variables */
 extern int          sql_initialized;       /* set to "1" as soon as SQLAllocHandle(SQL_HANDLE_ENV is called */
-extern DB2EnvEntry* rootenvEntry;          /* Linked list of handles for cached DB2 connections.            */
+extern DB2EnvEntry* rootenvEntry;          /* Cached handle for the (at most one) DB2 environment per backend. */
 
 /** external prototypes */
-extern void      db2FreeEnvHdl        (DB2EnvEntry* envp, const char* nls_lang);
+extern void      db2FreeEnvHdl        (DB2EnvEntry* envp);
 extern void      db2CloseConnections  (void);
 
 /** local prototypes */
@@ -25,6 +25,6 @@ void db2Shutdown (void) {
   db2CloseConnections();
   /* done with DB2 */
   if (sql_initialized)
-    db2FreeEnvHdl(rootenvEntry, NULL);
+    db2FreeEnvHdl(rootenvEntry);
   db2Exit1();
 }

@@ -10,7 +10,7 @@
 #include "db2_fdw.h"
 
 /** external variables */
-extern DB2EnvEntry* rootenvEntry;          /* Linked list of handles for cached DB2 connections.            */
+extern DB2EnvEntry* rootenvEntry;          /* Cached handle for the (at most one) DB2 environment per backend. */
 
 /** external prototypes */
 extern void      db2Error             (db2error sqlstate, const char* message);
@@ -33,12 +33,10 @@ HdlEntry* db2AllocStmtHdl (SQLSMALLINT type, DB2ConnEntry* connp, db2error error
     HdlEntry*     hdlstep = NULL;
 
     db2Debug5("struct before calling pthread_create getpid: %d getpthread_self: %d", getpid(), (int)pthread_self());
-    for (envstep = rootenvEntry; envstep != NULL; envstep = envstep->right){
+    envstep = rootenvEntry;
+    if (envstep != NULL) {
       db2Debug5("EnvEntry               : %x",envstep);
-      db2Debug5("  nls_lang               : %s",envstep->nls_lang);
       db2Debug5("  step->henv             : %x",envstep->henv);
-      db2Debug5("  step->*left            : %x",envstep->left);
-      db2Debug5("  step->*right           : %x",envstep->right);
       db2Debug5("  step->*connlist        : %x",envstep->connlist);
       for (constep = envstep->connlist; constep != NULL; constep = constep->right){
         db2Debug5("    ConnEntr             : %x",constep);

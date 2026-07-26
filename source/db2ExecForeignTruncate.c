@@ -7,7 +7,7 @@
 
 /** external prototypes */
 extern DB2FdwState* db2GetFdwState       (Oid foreigntableid, double* sample_percent, bool drescribe);
-extern DB2Session*  db2GetSession        (const char* connectstring, char* user, char* password, char* jwt_token, const char* nls_lang, int curlevel);
+extern DB2Session*  db2GetSession        (const char* connectstring, char* user, char* password, char* jwt_token, int curlevel);
 extern int          db2ExecuteTruncate   (DB2Session* session, const char* query);
 extern void         db2CloseStatement    (DB2Session* session);
 

@@ -115,7 +115,6 @@ typedef enum {
   FDW_SERIALIZATION_FAILURE
 } db2error;
 
-#define OPT_NLS_LANG          "nls_lang"
 #define OPT_DBSERVER          "dbserver"
 #define OPT_USER              "user"
 #define OPT_PASSWORD          "password"

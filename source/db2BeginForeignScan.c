@@ -8,7 +8,7 @@
 #include "DB2FdwState.h"
 
 /** external prototypes */
-extern DB2Session*  db2GetSession             (const char* connectstring, char* user, char* password, char* jwt_token, const char* nls_lang, int curlevel);
+extern DB2Session*  db2GetSession             (const char* connectstring, char* user, char* password, char* jwt_token, int curlevel);
 extern DB2FdwState* deserializePlanData       (List* list);
 
 /** local prototypes */
@@ -53,7 +53,6 @@ void db2BeginForeignScan(ForeignScanState* node, int eflags) {
                                      ,fdw_state->user
                                      ,fdw_state->password
                                      ,fdw_state->jwt_token
-                                     ,fdw_state->nls_lang
                                      ,GetCurrentTransactionNestLevel()
     );
 
