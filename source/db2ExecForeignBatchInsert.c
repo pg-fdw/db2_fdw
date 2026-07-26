@@ -1,5 +1,4 @@
 #include <postgres.h>
-#if PG_VERSION_NUM >= 140000
 #include <nodes/makefuncs.h>
 #include "db2_fdw.h"
 
@@ -32,4 +31,3 @@ TupleTableSlot ** db2ExecForeignBatchInsert(EState *estate, ResultRelInfo *rinfo
   db2Exit1(": %x", slots);
   return slots;
 }
-#endif

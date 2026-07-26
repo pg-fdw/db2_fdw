@@ -1,8 +1,5 @@
 #include <postgres.h>
 #include <access/heapam.h>
-#if PG_VERSION_NUM < 140000
-#include <access/xact.h>
-#endif
 #include <commands/vacuum.h>
 #include <optimizer/optimizer.h>
 #include <utils/memutils.h>

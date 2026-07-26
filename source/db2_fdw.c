@@ -69,10 +69,8 @@ DB2FdwOption valid_options[] = {
   {OPT_DB2SCALE         , AttributeRelationId         , false},
   {OPT_DB2NULL          , AttributeRelationId         , false},
   {OPT_DB2CCSID         , AttributeRelationId         , false},
-#if PG_VERSION_NUM >= 140000
   {OPT_BATCH_SIZE       , ForeignServerRelationId     , false},
   {OPT_BATCH_SIZE       , ForeignTableRelationId      , false},
-#endif
   {OPT_NO_ENCODING_ERROR, ForeignDataWrapperRelationId, false},
   {OPT_NO_ENCODING_ERROR, ForeignTableRelationId      , false},
   {OPT_NO_ENCODING_ERROR, AttributeRelationId         , false}
@@ -104,11 +102,7 @@ extern void             db2BeginForeignScan         (ForeignScanState* node, int
 extern TupleTableSlot*  db2IterateForeignScan       (ForeignScanState* node);
 extern void             db2EndForeignScan           (ForeignScanState* node);
 extern void             db2ReScanForeignScan        (ForeignScanState* node);
-#if PG_VERSION_NUM < 140000
-extern void             db2AddForeignUpdateTargets  (Query* parsetree, RangeTblEntry* target_rte, Relation target_relation);
-#else
 extern void             db2AddForeignUpdateTargets  (PlannerInfo* root, Index rtindex, RangeTblEntry* target_rte, Relation target_relation);
-#endif
 extern List*            db2PlanForeignModify        (PlannerInfo* root, ModifyTable* plan, Index resultRelation, int subplan_index);
 extern void             db2BeginForeignModify       (ModifyTableState* mtstate, ResultRelInfo* rinfo, List* fdw_private, int subplan_index, int eflags);
 extern void             db2BeginForeignInsert       (ModifyTableState* mtstate, ResultRelInfo* rinfo);
@@ -125,11 +119,9 @@ extern void             db2BeginDirectModify        (ForeignScanState* node, int
 extern TupleTableSlot*  db2IterateDirectModify      (ForeignScanState* node);
 extern void             db2EndDirectModify          (ForeignScanState* node);
 
-#if PG_VERSION_NUM >= 140000
 extern void             db2ExecForeignTruncate      (List *rels, DropBehavior behavior, bool restart_seqs);
 extern TupleTableSlot** db2ExecForeignBatchInsert   (EState *estate, ResultRelInfo *rinfo, TupleTableSlot **slots, TupleTableSlot **planSlots, int *numSlots);
 extern int              db2GetForeignModifyBatchSize(ResultRelInfo *rinfo);
-#endif
 /** db2 fdw utilities */
 extern void            exitHook                  (int code, Datum arg);
 
@@ -168,11 +160,9 @@ PGDLLEXPORT Datum db2_fdw_handler (PG_FUNCTION_ARGS) {
   fdwroutine->IterateDirectModify       = db2IterateDirectModify;
   fdwroutine->EndDirectModify           = db2EndDirectModify;
 
-  #if PG_VERSION_NUM >= 140000
   fdwroutine->ExecForeignTruncate       = db2ExecForeignTruncate;
   fdwroutine->ExecForeignBatchInsert    = db2ExecForeignBatchInsert;
   fdwroutine->GetForeignModifyBatchSize = db2GetForeignModifyBatchSize;
-  #endif
 
   PG_RETURN_POINTER (fdwroutine);
 }
@@ -307,7 +297,6 @@ PGDLLEXPORT Datum db2_fdw_validator (PG_FUNCTION_ARGS) {
                   )
                 );
     }
-    #if PG_VERSION_NUM >= 140000
     /* check valid values for "batchsz" */
     if (strcmp (def->defname, OPT_BATCH_SIZE) == 0) {
       char *val = STRVAL(def->arg);
@@ -321,7 +310,6 @@ PGDLLEXPORT Datum db2_fdw_validator (PG_FUNCTION_ARGS) {
                   )
                 );
     }
-    #endif
   }
   /* check that all required options have been given */
   for (i = 0; i < option_count; ++i) {

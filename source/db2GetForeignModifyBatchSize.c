@@ -1,6 +1,4 @@
 #include <postgres.h>
-#if PG_VERSION_NUM >= 140000
-
 #include <nodes/makefuncs.h>
 #include <utils/guc.h>
 #include <access/heapam.h>
@@ -125,4 +123,3 @@ static int db2_get_batch_size_option(Relation rel) {
   db2Exit1(": %d", batch_size);
   return batch_size;
 }
-#endif

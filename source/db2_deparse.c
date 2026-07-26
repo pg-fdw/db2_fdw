@@ -3529,11 +3529,7 @@ static void deparseLockingClause(deparse_expr_cxt *context) {
      *
      * Note: because we actually run the query as a cursor, this assumes that DECLARE CURSOR ... FOR UPDATE is supported, which it isn't before 8.3.
      */
-    #if PG_VERSION_NUM < 140000
-    if (relid == root->parse->resultRelation && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)) {
-    #else
     if (bms_is_member(relid, root->all_result_relids) && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)) {
-    #endif
       /* Relation is UPDATE/DELETE target, so use FOR UPDATE */
       appendStringInfoString(buf, " FOR UPDATE");
 

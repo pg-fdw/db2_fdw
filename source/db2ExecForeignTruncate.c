@@ -1,5 +1,4 @@
 #include <postgres.h>
-#if PG_VERSION_NUM >= 140000
 #include <utils/rel.h>
 #include <access/xact.h>
 #include "db2_fdw.h"
@@ -83,4 +82,3 @@ static DB2FdwState* db2BuildTruncateFdwState(Relation rel, bool restart_seqs) {
   db2Exit1(": %x",fdwState);
   return fdwState;
 }
-#endif

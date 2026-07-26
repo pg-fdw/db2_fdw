@@ -45,11 +45,7 @@ ForeignScan* db2GetForeignPlan (PlannerInfo* root, RelOptInfo* foreignrel, Oid f
     /* for base relations, set scan_relid as the relid of the relation */
     scan_relid = foreignrel->relid;
     /* check if the foreign scan is for an UPDATE or DELETE */
-    #if PG_VERSION_NUM < 140000
-    if (foreignrel->relid == root->parse->resultRelation && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)) {
-    #else
     if (bms_is_member(foreignrel->relid, root->all_result_relids) && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)) {
-    #endif  /* PG_VERSION_NUM */
       /* we need the table's primary key columns */
       need_keys = true;
     }
