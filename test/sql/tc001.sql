@@ -6,12 +6,13 @@
 DROP FOREIGN TABLE IF EXISTS sample.org;
 -- recreate it manually
 \d+ sample.org;
+--
 CREATE FOREIGN TABLE sample.org (
-                  DEPTNUMB SMALLINT OPTIONS (key 'yes') NOT NULL ,
-                  DEPTNAME VARCHAR(14) ,
-                  MANAGER SMALLINT ,
-                  DIVISION VARCHAR(10) ,
-                  LOCATION VARCHAR(13)
+                  DEPTNUMB SMALLINT    OPTIONS (db2type '5' , db2size '5' , db2bytes '2' , db2chars '5', db2scale '0', db2null '0', db2ccsid '0' ,key 'yes') NOT NULL ,
+                  DEPTNAME VARCHAR(14) OPTIONS (db2type '12', db2size '14', db2bytes '14', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208'        )          ,
+                  MANAGER SMALLINT     OPTIONS (db2type '5' , db2size '5' , db2bytes '2' , db2chars '5', db2scale '0', db2null '1', db2ccsid '0'           )          ,
+                  DIVISION VARCHAR(10) OPTIONS (db2type '12', db2size '10', db2bytes '10', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208'        )          ,
+                  LOCATION VARCHAR(13) OPTIONS (db2type '12', db2size '13', db2bytes '13', db2chars '0', db2scale '0', db2null '1', db2ccsid '1208'        )
                    )
       SERVER sample OPTIONS (schema 'DB2INST1',table 'ORG');
 \d+ sample.org;
