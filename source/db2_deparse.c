@@ -163,6 +163,9 @@ static char*        deparseInterval           (Datum datum);
 static bool         foreign_expr_walker       (Node *node, foreign_glob_cxt* glob_cxt, foreign_loc_cxt* outer_cxt, foreign_loc_cxt* case_arg_cxt);
 
 static bool         isTranslatableOpExpr      (const char* opername, Oid leftargtype, Oid rightargtype);
+static bool         isTranslatableFuncExpr    (FuncExpr* expr);
+static bool         isTranslatableNormalFunction(const char* function_name, int nargs);
+static bool         isTranslatableDatePart    (FuncExpr* expr);
 
 static void         get_relation_column_alias_ids(Var* node, RelOptInfo* foreignrel, int* relno, int* colno);
 
@@ -297,6 +300,96 @@ static bool isTranslatableOpExpr(const char* opername, Oid leftargtype, Oid righ
   return result;
 }
 
+/*
+ * Return true for functions that deparseFuncExpr() can emit using ordinary
+ * DB2 function-call syntax (possibly with the name mappings applied there).
+ * Keep this list in one place so planner validation and SQL rendering cannot
+ * silently drift apart again.
+ */
+static bool isTranslatableNormalFunction(const char* function_name, int nargs) {
+  return strcmp(function_name, "abs")              == 0 || strcmp(function_name, "acos")             == 0
+      || strcmp(function_name, "asin")             == 0 || strcmp(function_name, "atan")             == 0
+      || strcmp(function_name, "atan2")            == 0 || strcmp(function_name, "ceil")             == 0
+      || strcmp(function_name, "ceiling")          == 0 || strcmp(function_name, "char_length")      == 0
+      || strcmp(function_name, "character_length") == 0 || strcmp(function_name, "concat")           == 0
+      || strcmp(function_name, "cos")              == 0 || strcmp(function_name, "exp")              == 0
+      || strcmp(function_name, "initcap")          == 0 || strcmp(function_name, "length")           == 0
+      || strcmp(function_name, "lower")            == 0 || strcmp(function_name, "lpad")             == 0
+      || strcmp(function_name, "ltrim")            == 0 || strcmp(function_name, "mod")              == 0
+      || strcmp(function_name, "octet_length")     == 0 || strcmp(function_name, "position")         == 0
+      || strcmp(function_name, "pow")              == 0 || strcmp(function_name, "power")            == 0
+      || strcmp(function_name, "replace")          == 0 || strcmp(function_name, "round")            == 0
+      || strcmp(function_name, "rpad")             == 0 || strcmp(function_name, "rtrim")            == 0
+      || strcmp(function_name, "sign")             == 0 || strcmp(function_name, "sin")              == 0
+      || strcmp(function_name, "sqrt")             == 0 || strcmp(function_name, "strpos")           == 0
+      || strcmp(function_name, "substr")           == 0 || strcmp(function_name, "tan")              == 0
+      || strcmp(function_name, "to_char")          == 0 || strcmp(function_name, "to_date")          == 0
+      || strcmp(function_name, "to_number")        == 0 || strcmp(function_name, "to_timestamp")     == 0
+      || strcmp(function_name, "trunc")            == 0 || strcmp(function_name, "upper")            == 0
+      || (strcmp(function_name, "substring")       == 0 && nargs == 3);
+}
+
+/* date_part() is only deparsed for the DB2 EXTRACT fields handled below. */
+static bool isTranslatableDatePart(FuncExpr* expr) {
+  Const* field;
+  char*  field_name;
+  bool   result;
+
+  if (list_length(expr->args) != 2 || !IsA(linitial(expr->args), Const))
+    return false;
+
+  field = (Const*) linitial(expr->args);
+  if (field->constisnull || field->consttype != TEXTOID)
+    return false;
+
+  field_name = TextDatumGetCString(field->constvalue);
+  result = strcmp(field_name, "year")            == 0 || strcmp(field_name, "month")           == 0
+        || strcmp(field_name, "day")             == 0 || strcmp(field_name, "hour")            == 0
+        || strcmp(field_name, "minute")          == 0 || strcmp(field_name, "second")          == 0
+        || strcmp(field_name, "timezone_hour")   == 0 || strcmp(field_name, "timezone_minute") == 0;
+  pfree(field_name);
+  return result;
+}
+
+/*
+ * Verify that deparseFuncExpr() has a complete DB2 representation for this
+ * exact function shape.  This is stricter than PostgreSQL object
+ * shippability: being a pg_catalog builtin does not imply that DB2 implements
+ * the same function or signature.
+ */
+static bool isTranslatableFuncExpr(FuncExpr* expr) {
+  HeapTuple    tuple;
+  Form_pg_proc procform;
+  const char*  function_name;
+  int          nargs;
+  bool         result = false;
+
+  if (!canHandleType(expr->funcresulttype))
+    return false;
+
+  if (expr->funcformat == COERCE_IMPLICIT_CAST)
+    return true;
+
+  tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(expr->funcid));
+  if (!HeapTupleIsValid(tuple))
+    elog(ERROR, "cache lookup failed for function %u", expr->funcid);
+
+  procform       = (Form_pg_proc) GETSTRUCT(tuple);
+  function_name = NameStr(procform->proname);
+  nargs          = list_length(expr->args);
+
+  if (procform->pronamespace == PG_CATALOG_NAMESPACE) {
+    result = isTranslatableNormalFunction(function_name, nargs)
+          || (strcmp(function_name, "translate") == 0 && nargs == 3)
+          || (strcmp(function_name, "date_part") == 0 && isTranslatableDatePart(expr))
+          || ((strcmp(function_name, "now") == 0 || strcmp(function_name, "transaction_timestamp") == 0)
+              && nargs == 0);
+  }
+
+  ReleaseSysCache(tuple);
+  return result;
+}
+
 static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_loc_cxt* outer_cxt, foreign_loc_cxt* case_arg_cxt) {
   bool  fResult = true;
 
@@ -401,6 +494,22 @@ static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_
             #endif
           }
         }
+
+        /*
+         * Shippability of the type alone is not sufficient. In particular,
+         * PostgreSQL's empty string has no equivalent value in DB2, where it
+         * is treated as NULL. datumToString() deliberately refuses to render
+         * such constants, so reject every non-NULL constant that the deparser
+         * cannot represent before it can leave an empty operand in remote SQL.
+         */
+        if (!c->constisnull && canHandleType(c->consttype)) {
+          char* rendered = datumToString(c->constvalue, c->consttype);
+
+          if (rendered == NULL)
+            return false;
+          db2free(rendered, "rendered constant");
+        }
+
         /* If the constant has nondefault collation, either it's of a non-builtin type, or it reflects folding of a CollateExpr.
          * It's unsafe to send to the remote unless it's used in a non-collation-sensitive context.
          */
@@ -462,6 +571,16 @@ static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_
          * semantics on remote side.
          */
         if (!is_shippable(fe->funcid, ProcedureRelationId, fpinfo))
+          return false;
+
+        /*
+         * Built-in PostgreSQL functions are considered shippable by
+         * is_shippable(), but DB2 only supports the subset implemented by
+         * deparseFuncExpr(). Keep both decisions in lockstep; otherwise an
+         * unsupported function (for example btrim()) becomes an empty operand
+         * in the generated DB2 SQL.
+         */
+        if (!isTranslatableFuncExpr(fe))
           return false;
   
         // Recurse to input subexpressions.
@@ -2267,9 +2386,9 @@ static void deparseParamExpr         (Param*             expr, deparse_expr_cxt*
 static void deparseVar(Var* expr, deparse_expr_cxt* ctx) {
   int     relno  = 0;
   int     colno  = 0;
+  Relids  relids = ctx->scanrel->relids;
   /* Qualify columns when multiple relations are involved. */
-  bool    qualify_col = (bms_membership( ctx->scanrel->relids) == BMS_MULTIPLE);
-  bool    is_query_var = false;
+  bool    qualify_col = (bms_membership(relids) == BMS_MULTIPLE);
 
   db2Entry1();
   /* If the Var belongs to the foreign relation that is deparsed as a subquery, use the relation and column alias to the Var provided by the
@@ -2279,15 +2398,9 @@ static void deparseVar(Var* expr, deparse_expr_cxt* ctx) {
     appendStringInfo(ctx->buf, "%s%d.%s%d", SUBQUERY_REL_ALIAS_PREFIX, relno, SUBQUERY_COL_ALIAS_PREFIX, colno);
     return;
   }
-  #if PG_VERSION_NUM < 160000
-  is_query_var = bms_is_member(expr->varno, ctx->scanrel->relids);
-  db2Debug2("bms_is_member(%d,%d): %s",expr->varno, ctx->scanrel->relids, is_query_var ? "true":"false");
-  #else
-  is_query_var = bms_is_member(expr->varno, ctx->root->all_query_rels);  
-  db2Debug2("bms_is_member(%d,%d): %s",expr->varno, ctx->root->all_query_rels, is_query_var ? "true":"false");
-  #endif
+  db2Debug2("bms_is_member(%d,%p): %s",expr->varno, (void*)relids, bms_is_member(expr->varno, relids) ? "true":"false");
   db2Debug2("expr->varlevelsup: %d",expr->varlevelsup);
-  if (is_query_var && expr->varlevelsup == 0) {
+  if (bms_is_member(expr->varno, relids) && expr->varlevelsup == 0) {
     deparseColumnRef(ctx->buf, expr->varno, expr->varattno, planner_rt_fetch(expr->varno, ctx->root), qualify_col);
   } else {
     /* Treat like a Param */
@@ -2773,8 +2886,8 @@ static void deparseCoalesceExpr      (CoalesceExpr*      expr, deparse_expr_cxt*
 
 static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt* ctx) {
   db2Entry1();
-  if (!canHandleType (expr->funcresulttype)) {
-    db2Debug2("cannot handle funct->funcresulttype: %d",expr->funcresulttype);
+  if (!isTranslatableFuncExpr(expr)) {
+    db2Debug2("function %u cannot be translated to DB2", expr->funcid);
   } else if (expr->funcformat == COERCE_IMPLICIT_CAST) {
       /* do nothing for implicit casts */
       db2Debug2("COERCE_IMPLICIT_CAST == expr->funcformat(%d)",expr->funcformat);
@@ -2799,20 +2912,7 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
       db2Debug2("T_FuncExpr: schema(%d) != PG_CATALOG_NAMESPACE", schema);
     } else {
       /* the "normal" functions that we can translate */
-      if (strcmp (opername, "abs")          == 0 || strcmp (opername, "acos")         == 0 || strcmp (opername, "asin")             == 0
-      ||  strcmp (opername, "atan")         == 0 || strcmp (opername, "atan2")        == 0 || strcmp (opername, "ceil")             == 0
-      ||  strcmp (opername, "ceiling")      == 0 || strcmp (opername, "char_length")  == 0 || strcmp (opername, "character_length") == 0
-      ||  strcmp (opername, "concat")       == 0 || strcmp (opername, "cos")          == 0 || strcmp (opername, "exp")              == 0
-      ||  strcmp (opername, "initcap")      == 0 || strcmp (opername, "length")       == 0 || strcmp (opername, "lower")            == 0
-      ||  strcmp (opername, "lpad")         == 0 || strcmp (opername, "ltrim")        == 0 || strcmp (opername, "mod")              == 0
-      ||  strcmp (opername, "octet_length") == 0 || strcmp (opername, "position")     == 0 || strcmp (opername, "pow")              == 0
-      ||  strcmp (opername, "power")        == 0 || strcmp (opername, "replace")      == 0 || strcmp (opername, "round")            == 0
-      ||  strcmp (opername, "rpad")         == 0 || strcmp (opername, "rtrim")        == 0 || strcmp (opername, "sign")             == 0
-      ||  strcmp (opername, "sin")          == 0 || strcmp (opername, "sqrt")         == 0 || strcmp (opername, "strpos")           == 0
-      ||  strcmp (opername, "substr")       == 0 || strcmp (opername, "tan")          == 0 || strcmp (opername, "to_char")          == 0
-      ||  strcmp (opername, "to_date")      == 0 || strcmp (opername, "to_number")    == 0 || strcmp (opername, "to_timestamp")     == 0
-      ||  strcmp (opername, "trunc")        == 0 || strcmp (opername, "upper")        == 0
-      || (strcmp (opername, "substring")    == 0 && list_length (expr->args) == 3)) {
+      if (isTranslatableNormalFunction(opername, list_length(expr->args))) {
         ListCell*      cell;
         char*          arg       = NULL;
         bool           ok        = true;
