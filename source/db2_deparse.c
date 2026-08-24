@@ -133,6 +133,7 @@ static void         deparseFromExpr           (List* quals, deparse_expr_cxt* co
 static void         deparseFromExprForRel     (StringInfo buf, PlannerInfo* root, RelOptInfo* foreignrel, bool use_alias, Index ignore_rel, List** ignore_conds, List** additional_conds, List** params_list);
 static void         deparseColumnRef          (StringInfo buf, int varno, int varattno, RangeTblEntry* rte, bool qualify_col);
 static void         deparseRelation           (StringInfo buf, Relation rel);
+static char*        deparseExprInContext      (Expr*              expr, deparse_expr_cxt* ctx);
 static void         deparseExprInt            (Expr*              expr, deparse_expr_cxt* ctx);
 static void         deparseConstExpr          (Const*             expr, deparse_expr_cxt* ctx);
 static void         deparseParamExpr          (Param*             expr, deparse_expr_cxt* ctx);
@@ -2182,6 +2183,29 @@ char* deparseExpr (PlannerInfo* root, RelOptInfo* rel, Expr* expr, List** params
   return retValue;
 }
 
+/*
+ * Deparse a child expression without losing the current relation context.
+ *
+ * In particular, when deparsing quals below an upper relation, scanrel points
+ * at the underlying base/join relation. Calling the public deparseExpr()
+ * recursively would reset scanrel to the upper relation, causing base Vars to
+ * be mistaken for runtime parameters. Besides generating wrong SQL, those
+ * bogus fdw_exprs cannot be resolved against the upper scan target list and
+ * setrefs.c fails with "variable not found in subplan target list".
+ */
+static char* deparseExprInContext(Expr* expr, deparse_expr_cxt* parent_ctx) {
+  deparse_expr_cxt child_ctx = *parent_ctx;
+  StringInfoData  buf;
+  char*           result;
+
+  initStringInfo(&buf);
+  child_ctx.buf = &buf;
+  deparseExprInt(expr, &child_ctx);
+  result = (buf.len > 0) ? db2strdup(buf.data, "buf.data") : NULL;
+  db2free(buf.data, "buf.data");
+  return result;
+}
+
 static void deparseExprInt           (Expr*              expr, deparse_expr_cxt* ctx) {
   db2Entry1();
   db2Debug2("expr: %x",expr);
@@ -2456,14 +2480,14 @@ static void deparseOpExpr            (OpExpr*            expr, deparse_expr_cxt*
     } else {
       char* left = NULL;
 
-      left = deparseExpr (ctx->root, ctx->foreignrel, linitial(expr->args), ctx->params_list);
+      left = deparseExprInContext(linitial(expr->args), ctx);
       db2Debug2("left: %s", left);
       if (left != NULL) {
         if (oprkind == 'b') {
           /* binary operator */
           char* right = NULL;
 
-          right = deparseExpr (ctx->root, ctx->foreignrel, lsecond(expr->args), ctx->params_list);
+          right = deparseExprInContext(lsecond(expr->args), ctx);
           db2Debug2("right: %s", right);
           if (right != NULL) {
             if (strcmp (opername, "~~") == 0) {
@@ -2540,7 +2564,7 @@ static void deparseScalarArrayOpExpr (ScalarArrayOpExpr* expr, deparse_expr_cxt*
         char* left  = NULL;
         char* right = NULL;
 
-        left = deparseExpr (ctx->root, ctx->foreignrel,linitial (expr->args), ctx->params_list);
+        left = deparseExprInContext(linitial(expr->args), ctx);
         // check if anything has been added beyond the initial "("
         if (left != NULL) {
           Expr* rightexpr = NULL;
@@ -2620,7 +2644,7 @@ static void deparseScalarArrayOpExpr (ScalarArrayOpExpr* expr, deparse_expr_cxt*
               initStringInfo(&buf);
               /* loop the array arguments */
               foreach (cell, array->elements) {
-                element = deparseExpr (ctx->root, ctx->foreignrel, (Expr*) lfirst (cell), ctx->params_list);
+                element = deparseExprInContext((Expr*) lfirst(cell), ctx);
                 if (element == NULL) {
                   /* if any element cannot be converted, give up */
                   db2free(buf.data,"buf.data");
@@ -2676,11 +2700,11 @@ static void deparseDistinctExpr      (DistinctExpr*      expr, deparse_expr_cxt*
   } else {
     char* left  = NULL;
 
-    left = deparseExpr (ctx->root, ctx->foreignrel, linitial ((expr)->args), ctx->params_list);
+    left = deparseExprInContext(linitial(expr->args), ctx);
     if (left != NULL) {
       char* right = NULL;
 
-      right = deparseExpr (ctx->root, ctx->foreignrel, lsecond ((expr)->args), ctx->params_list);
+      right = deparseExprInContext(lsecond(expr->args), ctx);
       if (right != NULL) {
         appendStringInfo (ctx->buf, "( %s IS DISTINCT FROM %s)", left, right);
       }
@@ -2734,12 +2758,12 @@ static void deparseNullIfExpr        (NullIfExpr*        expr, deparse_expr_cxt*
     db2Debug2("cannot Handle Type rightargtype (%d)",rightargtype);
   } else {
     char* left = NULL;
-    left = deparseExpr (ctx->root, ctx->foreignrel, linitial((expr)->args), ctx->params_list);
+    left = deparseExprInContext(linitial(expr->args), ctx);
 
     if (left != NULL) {
       char* right = NULL;
 
-      right = deparseExpr (ctx->root, ctx->foreignrel, lsecond((expr)->args), ctx->params_list);
+      right = deparseExprInContext(lsecond(expr->args), ctx);
       if (right != NULL) {
         appendStringInfo (ctx->buf, "NULLIF(%s,%s)", left, right);
       }
@@ -2757,13 +2781,13 @@ static void deparseBoolExpr          (BoolExpr*          expr, deparse_expr_cxt*
 
   db2Entry1();
   initStringInfo(&buf);
-  arg = deparseExpr (ctx->root, ctx->foreignrel, linitial(expr->args), ctx->params_list);
+  arg = deparseExprInContext(linitial(expr->args), ctx);
   if (arg != NULL) {
     bool bBreak = false;
     appendStringInfo (&buf, "(%s%s", expr->boolop == NOT_EXPR ? "NOT " : "", arg);
     for_each_cell(cell, expr->args, lnext(expr->args, list_head(expr->args))) { 
       db2free(arg,"arg");
-      arg = deparseExpr (ctx->root, ctx->foreignrel, (Expr*)lfirst(cell), ctx->params_list);
+      arg = deparseExprInContext((Expr*) lfirst(cell), ctx);
       if (arg != NULL) {
         appendStringInfo (&buf, " %s %s", expr->boolop == AND_EXPR ? "AND":"OR", arg);
       } else {
@@ -2795,7 +2819,7 @@ static void deparseCaseExpr          (CaseExpr*          expr, deparse_expr_cxt*
 
     if (expr->arg != NULL) {
       /* for the form "CASE arg WHEN ...", add first expression */
-      arg = deparseExpr (ctx->root, ctx->foreignrel, expr->arg, ctx->params_list);
+      arg = deparseExprInContext(expr->arg, ctx);
       db2Debug2("CASE %s WHEN ...", arg);
       if (arg == NULL) {
         appendStringInfo (&buf, " %s", arg);
@@ -2810,10 +2834,10 @@ static void deparseCaseExpr          (CaseExpr*          expr, deparse_expr_cxt*
         /* WHEN */
         if (expr->arg == NULL) {
           /* for CASE WHEN ..., use the whole expression */
-          arg = deparseExpr (ctx->root, ctx->foreignrel, whenclause->expr, ctx->params_list);
+          arg = deparseExprInContext(whenclause->expr, ctx);
         } else {
           /* for CASE arg WHEN ..., use only the right branch of the equality */
-          arg = deparseExpr (ctx->root, ctx->foreignrel, lsecond (((OpExpr*) whenclause->expr)->args), ctx->params_list);
+          arg = deparseExprInContext(lsecond(((OpExpr*) whenclause->expr)->args), ctx);
         }
         db2Debug2("WHEN %s ", arg);
         if (arg != NULL) {
@@ -2822,7 +2846,7 @@ static void deparseCaseExpr          (CaseExpr*          expr, deparse_expr_cxt*
           bBreak = true;
           break;
         }    /* THEN */
-        arg = deparseExpr (ctx->root, ctx->foreignrel, whenclause->result, ctx->params_list);
+        arg = deparseExprInContext(whenclause->result, ctx);
         db2Debug2(" THEN %s ", arg);
         if (arg != NULL) {
           appendStringInfo (&buf, " THEN %s", arg);
@@ -2834,7 +2858,7 @@ static void deparseCaseExpr          (CaseExpr*          expr, deparse_expr_cxt*
       if (!bBreak) {
         /* append ELSE clause if appropriate */
         if (expr->defresult != NULL) {
-          arg = deparseExpr (ctx->root, ctx->foreignrel, expr->defresult, ctx->params_list);
+          arg = deparseExprInContext(expr->defresult, ctx);
           db2Debug2("  ELSE %s", arg);
           if (arg != NULL) {
             appendStringInfo (&buf, " ELSE %s", arg);
@@ -2867,7 +2891,7 @@ static void deparseCoalesceExpr      (CoalesceExpr*      expr, deparse_expr_cxt*
     initStringInfo   (&result);
     appendStringInfo (&result, "COALESCE(");
     foreach (cell, expr->args) {
-      arg = deparseExpr (ctx->root, ctx->foreignrel, (Expr*)lfirst(cell),ctx->params_list);
+      arg = deparseExprInContext((Expr*) lfirst(cell), ctx);
       db2Debug2("arg: %s", arg);
       if (arg != NULL) {
         appendStringInfo(&result, ((first_arg) ? "%s" : ", %s"), arg);
@@ -2935,7 +2959,7 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
         else
           appendStringInfo (&buf, "%s(", opername);
         foreach (cell, expr->args) {
-          arg = deparseExpr (ctx->root, ctx->foreignrel, lfirst (cell), ctx->params_list);
+          arg = deparseExprInContext(lfirst(cell), ctx);
           if (arg != NULL) {
             appendStringInfo (&buf, "%s%s", (first_arg) ? "" : ", ",arg);
             first_arg = false;
@@ -2957,9 +2981,9 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
          * TRANSLATE(expression, to-string, from-string) takes them in the opposite order.
          * Forwarding the arguments as-is would silently swap the substitution direction.
          */
-        char* string = deparseExpr (ctx->root, ctx->foreignrel, linitial (expr->args), ctx->params_list);
-        char* from   = deparseExpr (ctx->root, ctx->foreignrel, lsecond  (expr->args), ctx->params_list);
-        char* to     = deparseExpr (ctx->root, ctx->foreignrel, lthird   (expr->args), ctx->params_list);
+        char* string = deparseExprInContext(linitial(expr->args), ctx);
+        char* from   = deparseExprInContext(lsecond(expr->args), ctx);
+        char* to     = deparseExprInContext(lthird(expr->args), ctx);
 
         if (string == NULL || from == NULL || to == NULL) {
           db2Debug2("T_FuncExpr: function %s that we cannot render for DB2", opername);
@@ -2973,7 +2997,7 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
         char* left = NULL;
 
         /* special case: EXTRACT */
-        left = deparseExpr (ctx->root, ctx->foreignrel, linitial (expr->args), ctx->params_list);
+        left = deparseExprInContext(linitial(expr->args), ctx);
         if (left == NULL) {
           db2Debug2("T_FuncExpr: function %s that we cannot render for DB2", opername);
         } else {
@@ -2986,7 +3010,7 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
 
             /* remove final quote */
             left[strlen (left) - 1] = '\0';
-            right = deparseExpr (ctx->root, ctx->foreignrel, lsecond (expr->args), ctx->params_list);
+            right = deparseExprInContext(lsecond(expr->args), ctx);
             if (right == NULL) {
               db2Debug2("T_FuncExpr: function %s that we cannot render for DB2", opername);
             } else {
