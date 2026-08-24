@@ -863,6 +863,25 @@ static bool foreign_grouping_ok(PlannerInfo* root, RelOptInfo* grouped_rel, Node
     i++;
   }
 
+  /*
+   * remote_conds and local_conds have a different meaning for an upper
+   * grouping relation than for its input relation: here they contain HAVING
+   * clauses only.  db2CloneFdwStateUpper() deliberately copies the input
+   * state, so discard the inherited base/join restrictions before classifying
+   * HAVING.  The input relation keeps those restrictions and
+   * deparseSelectStmtForRel() emits them in WHERE.
+   *
+   * Without this reset a base restriction is emitted twice, once correctly in
+   * WHERE and once incorrectly in HAVING.  For an aggregate without GROUP BY,
+   * DB2 then rejects a query such as
+   *
+   *   SELECT count(*) FROM t WHERE tenant IN (...) HAVING tenant IN (...)
+   *
+   * with SQL0119N.
+   */
+  fpinfo->remote_conds = NIL;
+  fpinfo->local_conds  = NIL;
+
   /* Classify the pushable and non-pushable HAVING clauses and save them in remote_conds and local_conds of the grouped rel's fpinfo. */
   if (havingQual) {
     foreach(lc, (List *) havingQual) {
