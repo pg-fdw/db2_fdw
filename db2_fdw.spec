@@ -12,7 +12,8 @@ BuildArch: x86_64
 BuildRequires: make
 BuildRequires: gcc
 BuildRequires: clang
-BuildRequires: llvm-libs
+BuildRequires: llvm
+BuildRequires: llvm-devel
 BuildRequires: postgresql-devel
 
 Requires: postgresql%{pgversion}-server
