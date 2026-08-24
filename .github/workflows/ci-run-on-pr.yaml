@@ -7,6 +7,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
 
 env:
+  DOCKER_BUILDKIT: 1
   COMPOSE_DOCKER_CLI_BUILD: 1
 
 jobs:
@@ -46,6 +47,7 @@ jobs:
 
       - name: build rpm
         run: |
+          docker-compose build --no-cache builder
           docker-compose up builder --exit-code-from builder
         env:
           PGVERSION: ${{ matrix.pgversion }}

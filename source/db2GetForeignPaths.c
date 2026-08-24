@@ -7,11 +7,12 @@
 #include "DB2FdwState.h"
 
 /** external prototypes */
-extern char*        deparseExpr               (PlannerInfo* root, RelOptInfo* foreignrel, Expr* expr, List** params);
+extern char*              deparseExpr          (PlannerInfo* root, RelOptInfo* foreignrel, Expr* expr, List** params);
+extern bool               is_foreign_pathkey   (PlannerInfo* root, RelOptInfo* baserel, PathKey* pathkey);
+extern EquivalenceMember* find_em_for_rel      (PlannerInfo* root, EquivalenceClass* ec, RelOptInfo* rel);
 
 /** local prototypes */
-       void  db2GetForeignPaths  (PlannerInfo* root, RelOptInfo* baserel, Oid foreigntableid);
-static Expr* find_em_expr_for_rel(EquivalenceClass * ec, RelOptInfo * rel);
+void db2GetForeignPaths(PlannerInfo* root, RelOptInfo* baserel, Oid foreigntableid);
 
 /* db2GetForeignPaths
  * Create a ForeignPath node and add it as only possible path.
@@ -31,13 +32,29 @@ void db2GetForeignPaths(PlannerInfo* root, RelOptInfo* baserel, Oid foreigntable
   foreach (cell, root->query_pathkeys) {
     PathKey*           pathkey      = (PathKey*) lfirst (cell);
     EquivalenceClass*  pathkey_ec   = pathkey->pk_eclass;
+    EquivalenceMember* em           = NULL;
     Expr*              em_expr      = NULL;
     char*              sort_clause  = NULL;
     Oid                em_type      = 0;
     bool               can_pushdown = false;
 
-    /* deparseExpr would detect volatile expressions as well, but ec_has_volatile saves some cycles. */
-    can_pushdown = !pathkey_ec->ec_has_volatile && ((em_expr = find_em_expr_for_rel (pathkey_ec, baserel)) != NULL);
+    /*
+     * Use the same shippability and EC-member lookup that appendOrderByClause()
+     * uses later when it deparses the selected ForeignPath.  The old local
+     * helper only compared relids and accepted expressions that deparseExpr()
+     * could print even when is_foreign_expr() rejected them.  Such a path
+     * advertised remote ordering, but failed during plan creation with
+     * "could not find pathkey item to sort" (notably for DISTINCT over CASE
+     * expressions).
+     */
+    can_pushdown = is_foreign_pathkey(root, baserel, pathkey);
+    if (can_pushdown) {
+      em = find_em_for_rel(root, pathkey_ec, baserel);
+      if (em != NULL)
+        em_expr = em->em_expr;
+      else
+        can_pushdown = false;
+    }
 
     if (can_pushdown) {
       em_type = exprType ((Node *) em_expr);
@@ -121,24 +138,4 @@ void db2GetForeignPaths(PlannerInfo* root, RelOptInfo* baserel, Oid foreigntable
                                                       )
     );
   db2Exit1();
-}
-
-/* find_em_expr_for_rel
- * Find an equivalence class member expression, all of whose Vars come from the indicated relation.
- */
-static Expr* find_em_expr_for_rel (EquivalenceClass* ec, RelOptInfo* rel) {
-  ListCell* lc_em  = NULL;
-  Expr*     result = NULL;
-
-  db2Entry4();
-  foreach (lc_em, ec->ec_members) {
-    EquivalenceMember* em = lfirst (lc_em);
-    if (bms_equal (em->em_relids, rel->relids)) {
-      /* If there is more than one equivalence member whose Vars are taken entirely from this relation, we'll be content to choose any one of those. */
-      result =  em->em_expr;
-      break;
-    }
-  }
-  db2Exit4(": %x", result);
-  return result;
 }
