@@ -54,6 +54,39 @@ void db2GetForeignUpperPaths(PlannerInfo *root, UpperRelationKind stage, RelOptI
     Query*       query  = root->parse;
     DB2FdwState* fpinfo = NULL;
 
+    /*
+     * Set-operation pushdown is not implemented.  In particular, the input of
+     * UNION / INTERSECT / EXCEPT may contain both foreign and local relations.
+     * Cloning FDW state into UPPERREL_SETOP makes later upper stages mistake
+     * that mixed result for a DB2 relation and can produce invalid remote SQL
+     * or even an invalid ForeignPath.
+     *
+     * Do not propagate FDW state through any query containing set operations.
+     * The individual foreign base scans can still run remotely; PostgreSQL
+     * performs aggregates, DISTINCT and ORDER BY above the set operation.
+     */
+    if (stage == UPPERREL_SETOP || query->setOperations != NULL) {
+      db2Debug2("set-operation upper-path pushdown is not supported");
+      db2Exit1();
+      return;
+    }
+
+    /*
+     * These stages currently only log that pushdown is not implemented.  Do
+     * not clone FDW state for them: otherwise a later ORDERED or FINAL stage
+     * can mistake the unsupported upper relation for a pushdown-safe DB2
+     * relation.
+     */
+    if (stage == UPPERREL_WINDOW || stage == UPPERREL_DISTINCT
+    #if PG_VERSION_NUM >= 150000
+        || stage == UPPERREL_PARTIAL_DISTINCT
+    #endif
+    ) {
+      db2Debug2("upper-path stage %d is not supported", stage);
+      db2Exit1();
+      return;
+    }
+
     db2Debug3("query->hasAggs        : %s", query->hasAggs         ? "true" : "false");
     db2Debug3("query->hasWindowFuncs : %s", query->hasWindowFuncs  ? "true" : "false");
     db2Debug3("query->hasDistinctOn  : %s", query->hasDistinctOn   ? "true" : "false");
@@ -79,25 +112,6 @@ void db2GetForeignUpperPaths(PlannerInfo *root, UpperRelationKind stage, RelOptI
       fpinfo->stage    = stage;
       fpinfo->outerrel = input_rel;
 
-      /*
-       * IMPORTANT (mirrors the analogous fix in db2GetForeignJoinPaths.c):
-       * db2CloneFdwStateUpper() copies db2Table->npgcols from the input relation, i.e. the
-       * underlying base table's column count. convertTuple() uses (natts == db2Table->npgcols)
-       * as a heuristic for "is this a plain 1:1 base-table select" and, if so, indexes result
-       * columns by pgattnum instead of resnum.
-       *
-       * An upper relation's output list (grouping/aggregation, DISTINCT, ORDER BY, ...) is
-       * always a computed projection, never a raw base-table row, so that heuristic must never
-       * fire here. Left unfixed, it misfires whenever the projection's column count happens to
-       * coincide with the base table's column count -- e.g. a SELECT with N ordered-set
-       * aggregates (PERCENTILE_CONT/PERCENTILE_DISC) over an N-column table, where every
-       * aggregate borrows pgattnum from the same ORDER BY column and all N results collide into
-       * a single output slot, leaving the rest NULL.
-       *
-       * Force resnum-based mapping unconditionally for upper relations.
-       */
-      if (fpinfo->db2Table != NULL)
-        fpinfo->db2Table->npgcols = 0;
     }    
     switch (stage) {
       case UPPERREL_SETOP:              // UNION/INTERSECT/EXCEPT
@@ -220,6 +234,7 @@ static void db2CloneFdwStateUpper(PlannerInfo* root, RelOptInfo* input_rel, RelO
     copy->db2Table            = db2CloneDb2TableForPlan(fdw_in->db2Table);
 
     /* Runtime-only / per-plan rebuilt fields */
+    copy->pushdown_safe       = false;
     copy->rowcount            = 0;
     copy->temp_cxt            = NULL;
     copy->paramList           = NULL;
@@ -374,6 +389,14 @@ static void add_foreign_ordered_paths(PlannerInfo *root, RelOptInfo *input_rel, 
   // Shouldn't get here unless the query has ORDER BY
   Assert(parse->sortClause);
 
+  /* No ordered ForeignPath can be built on an upper relation whose own
+   * operation was not accepted for pushdown. */
+  if (input_rel->reloptkind == RELOPT_UPPER_REL && !ifpinfo->pushdown_safe) {
+    db2Debug5("underlying upper relation is not pushdown-safe");
+    db2Exit4();
+    return;
+  }
+
   // We don't support cases where there are any SRFs in the targetlist
   if (parse->hasTargetSRFs) {
     db2Debug5("no support where there are any SRFs in the targetlist");
@@ -490,6 +513,14 @@ static void add_foreign_final_paths(PlannerInfo *root, RelOptInfo *input_rel, Re
   ForeignPath*         final_path               = NULL;
 
   db2Entry4();
+
+  /* A final ForeignPath is only valid if all underlying upper operations were
+   * accepted for remote execution. */
+  if (!ifpinfo->pushdown_safe) {
+    db2Debug5("underlying relation is not pushdown-safe");
+    db2Exit4();
+    return;
+  }
 
   /** Currently, we only support this for SELECT commands */
   if (parse->commandType != CMD_SELECT) {
@@ -1317,7 +1348,7 @@ static void merge_fdw_options(DB2FdwState* fpinfo, const DB2FdwState* fpinfo_o, 
   Assert(fpinfo_o);
 
   /* fpinfo_i may be NULL, but if present the servers must both match. */
-  Assert(!fpinfo_i || fpinfo_i->server->serverid == fpinfo_o->server->serverid);
+  Assert(!fpinfo_i || fpinfo_i->fserver->serverid == fpinfo_o->fserver->serverid);
 
   /* Copy the server specific FDW options.
    * (For a join, both relations come from the same server, so the server options should have the same value for both relations.)
