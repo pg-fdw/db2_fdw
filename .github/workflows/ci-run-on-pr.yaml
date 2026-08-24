@@ -53,6 +53,7 @@ jobs:
           PGVERSION: ${{ matrix.pgversion }}
 
       - name: Run rpm signer
+        if: github.event.pull_request.head.repo.full_name == github.repository
         env:
           PGVERSION: ${{ matrix.pgversion }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
