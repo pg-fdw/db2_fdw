@@ -9,6 +9,10 @@ Url: https://github.com/pg-fdw/db2_fdw
 %undefine _disable_source_fetch
 BuildArch: x86_64
 
+BuildRequires: make
+BuildRequires: gcc
+BuildRequires: postgresql-devel
+
 Requires: postgresql%{pgversion}-server
 %global __requires_exclude ^libdb2.*\\.so
 
