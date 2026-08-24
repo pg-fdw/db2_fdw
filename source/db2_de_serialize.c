@@ -1,4 +1,5 @@
 #include <postgres.h>
+#include <string.h>
 #include <utils/builtins.h>
 #include <nodes/makefuncs.h>
 #include "db2_fdw.h"
@@ -180,6 +181,7 @@ DB2FdwState* deserializePlanData (List* list) {
     res->val            = (char*) db2alloc (MIN(res->val_size + 1, 1073741823), "res->val");
     res->val_len        = 0;
     res->val_null       = 1;
+    memset(&res->val_indicator, 0, sizeof(res->val_indicator));
     res->next           = state->resultList;
     state->resultList   = res;
   }

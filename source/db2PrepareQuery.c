@@ -37,16 +37,20 @@ void db2PrepareQuery (DB2Session* session, const char *query, DB2ResultColumn* r
   DB2ResultColumn*  res         = NULL;
   int               need_getdata = 0;
 
+  /* figure out if the query is a SELECT / SELECT FOR UPDATE */
+  is_select  = (strncmp (query, "SELECT", 6) == 0);
+  for_update = (strstr (query, "FOR UPDATE") != NULL);
+
   #ifdef FIXED_FETCH_SIZE
   // Until the proper handling of multiple rows results on a single query are added the fetch size must be 1
   fetchsize = 1;
   #endif
 
   /*
-   * If we need SQLGetData for any result column, force row array size to 1.
-   *
-   * SQLGetData is only well-defined for single-row fetches; with rowsets enabled
-   * some DB2 CLI setups can fail already at SQLFetch time.
+   * DECIMAL/NUMERIC/DECFLOAT are retrieved separately with SQLGetData.  All
+   * other columns stay bound.  In particular, do not switch the whole result
+   * set to SQL_RD_OFF: that changes the lifetime and conversion semantics of
+   * every column and was the source of a broad SELECT workaround, not a fix.
    */
   for (res = resultList; res; res = res->next) {
     if (res->colType == SQL_DECIMAL || res->colType == SQL_NUMERIC || res->colType == SQL_DECFLOAT) {
@@ -54,18 +58,13 @@ void db2PrepareQuery (DB2Session* session, const char *query, DB2ResultColumn* r
       break;
     }
   }
-  if (need_getdata) {
+  if (need_getdata)
     fetchsize = 1;
-  }
 
   db2Entry1();
   db2Debug2("query    : '%s'",query);
   db2Debug2("prefetch : %d",prefetch);
   db2Debug2("fetchsize: %d",fetchsize);
-  /* figure out if the query is FOR UPDATE */
-  is_select  = (strncmp (query, "SELECT", 6) == 0);
-  for_update = (strstr (query, "FOR UPDATE") != NULL);
-
   /* make sure there is no statement handle stored in "session" */
   if (session->stmtp != NULL) {
     db2Error(FDW_ERROR, "db2PrepareQuery internal error: statement handle is not NULL");
@@ -96,11 +95,9 @@ void db2PrepareQuery (DB2Session* session, const char *query, DB2ResultColumn* r
       db2Debug3("set cursor pessemistic");
     } else {
       /*
-       * Use a forward-only cursor for plain SELECTs.
-       *
-       * Several DB2 CLI setups report CLI0111E / SQLSTATE 22003 during SQLFetch
-       * when using scrollable/static cursors + prefetch attributes.
-       * For correctness, prefer forward-only here.
+       * Keep the forward-only cursor introduced in 18.2.  Several DB2 CLI
+       * setups reject the former static cursor/prefetch combination with
+       * CLI0111E / SQLSTATE 22003.
        */
       rc = SQLSetStmtAttr(session->stmtp->hsql, SQL_ATTR_CURSOR_TYPE, (SQLPOINTER)SQL_CURSOR_FORWARD_ONLY, 0);
       rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
@@ -109,7 +106,8 @@ void db2PrepareQuery (DB2Session* session, const char *query, DB2ResultColumn* r
       }
       db2Debug3("set cursor forward-only");
     }
-    // Fetch rows per network roundtrip
+
+    /* The current implementation owns one value/indicator buffer per column. */
     rc = SQLSetStmtAttr(session->stmtp->hsql, SQL_ATTR_ROW_ARRAY_SIZE, SQL_VALUE_PTR_ULEN(cur_fetchsize), 0);
     rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
     if (rc != SQL_SUCCESS) {
@@ -117,23 +115,7 @@ void db2PrepareQuery (DB2Session* session, const char *query, DB2ResultColumn* r
     }
     db2Debug2("set cursor fetchsize: %d",cur_fetchsize);
 
-    /*
-     * If we plan to use SQLGetData for result retrieval, disable retrieval into
-     * bound columns during SQLFetch.
-     *
-     * This avoids DB2 CLI conversion at fetch time (which can throw CLI0111E /
-     * SQLSTATE 22003 for DECIMAL/NUMERIC/DECFLOAT), and instead retrieves data
-     * per-column via SQLGetData after a successful SQLFetch.
-     */
-    if (need_getdata) {
-      rc = SQLSetStmtAttr(session->stmtp->hsql, SQL_ATTR_RETRIEVE_DATA, (SQLPOINTER)SQL_RD_OFF, 0);
-      rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
-      if (rc != SQL_SUCCESS) {
-        db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: SQLSetStmtAttr failed to set SQL_ATTR_RETRIEVE_DATA=SQL_RD_OFF", db2Message);
-      }
-      db2Debug3("set SQL_ATTR_RETRIEVE_DATA = SQL_RD_OFF");
-    }
-    /* Prefetch rows is only applied for scrollable (non-forward-only) cursors. */
+    /* PREFETCH_NROWS only applies to the scrollable FOR UPDATE cursor. */
     if (for_update) {
       rc = SQLSetStmtAttr(session->stmtp->hsql, SQL_ATTR_PREFETCH_NROWS, SQL_VALUE_PTR_ULEN(prefetch_rows), 0);
       rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
@@ -202,18 +184,6 @@ void db2PrepareQuery (DB2Session* session, const char *query, DB2ResultColumn* r
       }
     }
 
-    /*
-     * In SQL_RD_OFF mode we fetch (most) result columns via SQLGetData(SQL_C_CHAR).
-     * Avoid truncation/retry cycles by ensuring a sane minimum buffer size.
-     */
-    if (need_getdata && fparamType == SQL_C_CHAR) {
-      if (needed < 128)
-        needed = 128;
-      if (res->val_size < needed) {
-        res->val = (char*) db2realloc(needed, res->val, "res->val");
-        res->val_size = needed;
-      }
-    }
     db2Debug2("res->colName       : %s" ,res->colName);
     db2Debug2("res->colSize       : %ld",res->colSize);
     db2Debug2("res->colType       : %d" ,res->colType);
@@ -230,20 +200,17 @@ void db2PrepareQuery (DB2Session* session, const char *query, DB2ResultColumn* r
     db2Debug2("res->resnum        : %d" ,res->resnum);
     db2Debug2("fparamType: %d (%s)",fparamType,param2name(fparamType));
 
-    if (need_getdata && fparamType == SQL_C_CHAR) {
-      /*
-       * In SQL_RD_OFF mode, SQLFetch will not populate bound columns.
-       * Initialize as NULL; db2FetchNext() will populate via SQLGetData.
-       */
-      res->val_null = (intptr_t) SQL_NULL_DATA;
-      res->val_len = 0;
-    } else if (use_getdata) {
+    if (use_getdata) {
       /* DECIMAL/NUMERIC/DECFLOAT are always fetched via SQLGetData. */
       res->val_null = (intptr_t) SQL_NULL_DATA;
       res->val_len = 0;
     } else {
-      db2Debug2("SQLBindCol(%d,%d,%d(%s),%x,%ld,%x)",session->stmtp->hsql,res->resnum, fparamType, param2name(fparamType), res->val, res->val_size, &res->val_null);
-      rc = SQLBindCol (session->stmtp->hsql,res->resnum, fparamType, res->val, res->val_size, (SQLLEN*) &res->val_null);
+      if (sizeof(SQLLEN) > sizeof(res->val_indicator.bytes)) {
+        db2Error(FDW_ERROR, "db2PrepareQuery internal error: SQLLEN does not fit into result indicator storage");
+      }
+      memset(&res->val_indicator, 0, sizeof(res->val_indicator));
+      db2Debug2("SQLBindCol(%d,%d,%d(%s),%x,%ld,%x)",session->stmtp->hsql,res->resnum, fparamType, param2name(fparamType), res->val, res->val_size, res->val_indicator.bytes);
+      rc = SQLBindCol (session->stmtp->hsql,res->resnum, fparamType, res->val, res->val_size, (SQLLEN*) res->val_indicator.bytes);
       rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
       if (rc != SQL_SUCCESS) {
         db2Error_d(FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: SQLBindCol failed to define result value", db2Message);

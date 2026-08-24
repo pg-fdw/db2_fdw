@@ -330,7 +330,7 @@ static DB2Table* describeForeignTable (Oid foreigntableid, char* schema, char* t
         case SQL_NUMERIC:
         case SQL_DECIMAL:
           if (db2Table->cols[cidx]->colScale == 0)
-            db2Table->cols[cidx]->val_size = bin_size;
+            db2Table->cols[cidx]->val_size = bin_size + 1;
           else
             db2Table->cols[cidx]->val_size = (scale > colSize ? scale : colSize) + 5;
         break;
@@ -347,7 +347,7 @@ static DB2Table* describeForeignTable (Oid foreigntableid, char* schema, char* t
           db2Table->cols[cidx]->val_size = colSize + 1;
         break;
         case SQL_BIGINT:
-          db2Table->cols[cidx]->val_size = 24;
+          db2Table->cols[cidx]->val_size = 24 + 1;
         break;
         case SQL_XML:
           db2Table->cols[cidx]->val_size = LOB_CHUNK_SIZE + 1;
