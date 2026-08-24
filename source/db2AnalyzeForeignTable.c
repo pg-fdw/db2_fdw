@@ -18,7 +18,7 @@ extern int          db2ExecuteQuery           (DB2Session* session, ParamDesc* p
 extern int          db2FetchNext              (DB2Session* session, DB2ResultColumn* resultList);
 extern void         checkDataType             (short db2type, int scale, Oid pgtype, const char* tablename, const char* colname);
 extern short        c2dbType                  (short fcType);
-extern void         convertTuple              (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls);
+extern void         convertTuple              (DB2Session* session, DB2ResultColumn* reslist, DB2TupleIndexMode index_mode, int natts, Datum* values, bool* nulls);
 
 /** local prototypes */
        bool db2AnalyzeForeignTable(Relation relation, AcquireSampleRowsFunc* func, BlockNumber* totalpages);
@@ -115,7 +115,8 @@ static int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple* rows
       /* the first "targrows" rows are added as samples */
       /* use a temporary memory context during convertTuple */
       old_cxt = MemoryContextSwitchTo (tmp_cxt);
-      convertTuple (fdw_state->session,fdw_state->db2Table,fdw_state->resultList, tupDesc->natts, values, nulls);
+      convertTuple (fdw_state->session, fdw_state->resultList, DB2_TUPLE_INDEX_ATTRIBUTE,
+                    tupDesc->natts, values, nulls);
       MemoryContextSwitchTo (old_cxt);
       rows[collected_rows++] = heap_form_tuple (tupDesc, values, nulls);
       MemoryContextReset (tmp_cxt);
@@ -131,7 +132,8 @@ static int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple* rows
         heap_freetuple (rows[k]);
         /* use a temporary memory context during convertTuple */
         old_cxt = MemoryContextSwitchTo (tmp_cxt);
-        convertTuple (fdw_state->session,fdw_state->db2Table,fdw_state->resultList, tupDesc->natts, values, nulls);
+        convertTuple (fdw_state->session, fdw_state->resultList, DB2_TUPLE_INDEX_ATTRIBUTE,
+                      tupDesc->natts, values, nulls);
         MemoryContextSwitchTo (old_cxt);
         rows[k] = heap_form_tuple (tupDesc, values, nulls);
         MemoryContextReset (tmp_cxt);
@@ -150,4 +152,3 @@ static int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple* rows
   db2Exit1();
   return collected_rows;
 }
-
