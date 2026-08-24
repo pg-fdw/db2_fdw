@@ -17,4 +17,4 @@ RUN   dnf install -y epel-release && \
       dnf update -y && \
       dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
       dnf -qy module disable postgresql && \
-      dnf install -y make gcc clang llvm-libs postgresql${PGVERSION}-server postgresql${PGVERSION}-devel git rpm-build rpm-sign
+      dnf install -y make gcc clang llvm llvm-devel postgresql${PGVERSION}-server postgresql${PGVERSION}-devel git rpm-build rpm-sign
