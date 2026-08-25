@@ -14,7 +14,7 @@ extern void         db2PrepareQuery           (DB2Session* session, const char *
 extern int          db2ExecuteQuery           (DB2Session* session, ParamDesc* paramList);
 extern int          db2FetchNext              (DB2Session* session, DB2ResultColumn* resultList);
 extern void         db2CloseStatement         (DB2Session* session);
-extern void         convertTuple              (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls);
+extern void         convertTuple              (DB2Session* session, DB2ResultColumn* reslist, DB2TupleIndexMode index_mode, int natts, Datum* values, bool* nulls);
 extern char*        deparseDate               (Datum datum);
 extern char*        deparseTimestamp          (Datum datum, bool hasTimezone);
 
@@ -55,7 +55,13 @@ TupleTableSlot* db2IterateForeignScan (ForeignScanState* node) {
     ++fdw_state->rowcount;
     /* convert result to arrays of values and null indicators */
     db2Debug2("slot->tts_tupleDescriptor->natts: %d",slot->tts_tupleDescriptor->natts);
-    convertTuple (fdw_state->session,fdw_state->db2Table,fdw_state->resultList, slot->tts_tupleDescriptor->natts, slot->tts_values, slot->tts_isnull);
+    /*
+     * db2GetForeignPlan() supplies an fdw_scan_tlist, so PostgreSQL builds this
+     * slot in that list's order.  That is the DB2 SELECT/result order, not
+     * necessarily the base table's physical pgattnum order.
+     */
+    convertTuple (fdw_state->session, fdw_state->resultList, DB2_TUPLE_INDEX_RESULT,
+                  slot->tts_tupleDescriptor->natts, slot->tts_values, slot->tts_isnull);
     /* store the virtual tuple */
     ExecStoreVirtualTuple (slot);
   } else {
@@ -146,4 +152,3 @@ static char* setSelectParameters (ParamDesc* paramList, ExprContext* econtext) {
   db2Exit4(": %s", info.data);
   return info.data;
 }
-

@@ -25,62 +25,45 @@ int db2FetchNext (DB2Session* session, DB2ResultColumn* resultList) {
   DB2ResultColumn* scan = NULL;
   int max_resnum = 0;
   int i = 0;
-  SQLULEN retrieve_data = SQL_RD_ON;
-  SQLRETURN attr_rc = SQL_SUCCESS;
-  int was_rd_off = 0;
   db2Entry1();
   /* make sure there is a statement handle stored in "session" */
   if (session->stmtp == NULL) {
     db2Error (FDW_ERROR, "db2FetchNext internal error: statement handle is NULL");
   }
 
-  /*
-   * Some DB2 CLI / ODBC driver setups update only the lower 32 bits of the
-   * SQLLEN indicator. If the previous row was NULL, stale high bits can make a
-   * later non-NULL value still look negative. Reset before each fetch.
-   */
+  /* Reset both the portable value and the driver-owned SQLLEN storage. */
   for (res = resultList; res; res = res->next) {
     res->val_null = 0;
     res->val_len = 0;
+    memset(&res->val_indicator, 0, sizeof(res->val_indicator));
     if (res->val != NULL && res->val_size > 0) {
       res->val[0] = '\0';
     }
   }
 
   /* fetch the next result row */
-  rc = SQLFetch (session->stmtp->hsql);
+  rc = SQLFetch(session->stmtp->hsql);
   rc = db2CheckErr(rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
   if (rc != SQL_SUCCESS && rc != SQL_NO_DATA) {
     db2Error_d (err_code == 8177 ? FDW_SERIALIZATION_FAILURE : FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: SQLFetch failed to fetch next result row", db2Message);
   }
 
-  /* Determine whether SQLFetch retrieved data into bound columns. */
-  attr_rc = SQLGetStmtAttr(session->stmtp->hsql, SQL_ATTR_RETRIEVE_DATA, &retrieve_data, 0, NULL);
-  if (!SQL_SUCCEEDED(attr_rc))
-    retrieve_data = SQL_RD_ON;
+  /* Copy bound SQLLEN indicators out of the ABI-neutral storage. */
+  if (rc == SQL_SUCCESS) {
+    for (res = resultList; res; res = res->next) {
+      SQLLEN indicator = 0;
+      int uses_getdata = (res->colType == SQL_DECIMAL || res->colType == SQL_NUMERIC || res->colType == SQL_DECFLOAT);
 
-  was_rd_off = (retrieve_data == SQL_RD_OFF);
-
-  /*
-   * DB2 CLI note:
-   * Some driver setups behave as if SQL_RD_OFF disables *all* retrieval for the
-   * current row (including SQLGetData). To avoid SQLFetch-time conversion while
-   * still allowing SQLGetData, keep SQL_RD_OFF during SQLFetch, then temporarily
-   * switch to SQL_RD_ON before calling SQLGetData.
-   */
-  if (rc == SQL_SUCCESS && retrieve_data == SQL_RD_OFF) {
-    SQLRETURN set_rc;
-    set_rc = SQLSetStmtAttr(session->stmtp->hsql, SQL_ATTR_RETRIEVE_DATA, (SQLPOINTER) SQL_RD_ON, 0);
-    if (!SQL_SUCCEEDED(set_rc))
-      retrieve_data = SQL_RD_ON;
+      if (uses_getdata)
+        continue;
+      if (sizeof(indicator) > sizeof(res->val_indicator.bytes))
+        db2Error(FDW_ERROR, "db2FetchNext internal error: SQLLEN does not fit into result indicator storage");
+      memcpy(&indicator, res->val_indicator.bytes, sizeof(indicator));
+      res->val_null = (intptr_t) indicator;
+    }
   }
 
-  /*
-   * If SQL_ATTR_RETRIEVE_DATA is SQL_RD_OFF, SQLFetch did not retrieve into any
-   * bound columns. Fetch values for all (non-LOB) result columns via SQLGetData.
-   *
-   * Otherwise, only fetch DECIMAL/NUMERIC/DECFLOAT via SQLGetData.
-   */
+  /* Fetch only the deliberately unbound numeric result columns via SQLGetData. */
   if (rc == SQL_SUCCESS && resultList) {
     /*
      * Some DB2 CLI / ODBC driver setups require SQLGetData calls to be made in
@@ -106,20 +89,10 @@ int db2FetchNext (DB2Session* session, DB2ResultColumn* resultList) {
         }
       }
       if (res == NULL) {
-        if (retrieve_data == SQL_RD_OFF) {
-          db2Error (FDW_ERROR, "db2FetchNext internal error: missing result column for resnum");
-        }
         continue;
       }
 
-      if (retrieve_data == SQL_RD_OFF) {
-        /* Skip LOBs here; convertTuple/db2GetLob will fetch them separately. */
-        if (res->colType == SQL_BLOB || res->colType == SQL_CLOB)
-          continue;
-        want_getdata = 1;
-      } else {
-        want_getdata = (res->colType == SQL_DECIMAL || res->colType == SQL_NUMERIC || res->colType == SQL_DECFLOAT);
-      }
+      want_getdata = (res->colType == SQL_DECIMAL || res->colType == SQL_NUMERIC || res->colType == SQL_DECFLOAT);
 
       if (!want_getdata)
         continue;
@@ -192,39 +165,26 @@ int db2FetchNext (DB2Session* session, DB2ResultColumn* resultList) {
     }
   }
 
-  /*
-   * Defensive normalization for NULL indicators in SQL_RD_ON mode.
-   *
-   * We store the indicator in an intptr_t (DB2ResultColumn.val_null) and cast it
-   * to SQLLEN* when binding. Some driver/toolchain combinations appear to write
-   * a 32-bit SQL_NULL_DATA (-1) into the lower 4 bytes only, leaving stale high
-   * bits. That can turn a NULL into a large positive value, which later code
-   * interprets as NOT NULL and may try to parse an empty buffer (e.g. timestamp
-   * "" -> invalid input syntax).
-   */
-  if (rc == SQL_SUCCESS && resultList && retrieve_data != SQL_RD_OFF) {
+  /* Normalize the already copied indicator and terminate bound text buffers. */
+  if (rc == SQL_SUCCESS && resultList) {
     for (res = resultList; res; res = res->next) {
-      if ((int32_t) res->val_null == (int32_t) SQL_NULL_DATA) {
+      if (res->val_null == (intptr_t) SQL_NULL_DATA) {
         res->val_null = (intptr_t) SQL_NULL_DATA;
         res->val_len = 0;
+      } else if (res->val_null >= 0 && res->val != NULL && res->val_size > 0) {
+        /*
+         * SQLBindCol reports the payload length through its indicator.  Preserve
+         * that bounded length instead of forcing convertTuple() to search for a
+         * terminator with strlen().
+         */
+        res->val_len = (size_t) res->val_null;
+        if (res->val_len >= res->val_size)
+          res->val_len = res->val_size - 1;
+        res->val[res->val_len] = '\0';
       }
     }
   }
 
-  /*
-   * If this fetch started in SQL_RD_OFF mode, we temporarily switched to
-   * SQL_RD_ON to allow SQLGetData. Restore SQL_RD_OFF so subsequent SQLFetch
-   * calls continue to avoid fetch-time conversion and we keep refreshing all
-   * columns per-row via SQLGetData.
-   */
-  if (rc == SQL_SUCCESS && was_rd_off) {
-    SQLRETURN set_back_rc;
-    set_back_rc = SQLSetStmtAttr(session->stmtp->hsql, SQL_ATTR_RETRIEVE_DATA, (SQLPOINTER) SQL_RD_OFF, 0);
-    set_back_rc = db2CheckErr(set_back_rc, session->stmtp->hsql, session->stmtp->type, __LINE__, __FILE__);
-    if (set_back_rc != SQL_SUCCESS) {
-      db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: failed to restore SQL_ATTR_RETRIEVE_DATA=SQL_RD_OFF", db2Message);
-    }
-  }
   db2Exit1(": %d",(rc == SQL_SUCCESS));
   return (rc == SQL_SUCCESS);
 }

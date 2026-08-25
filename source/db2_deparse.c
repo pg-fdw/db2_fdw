@@ -133,6 +133,7 @@ static void         deparseFromExpr           (List* quals, deparse_expr_cxt* co
 static void         deparseFromExprForRel     (StringInfo buf, PlannerInfo* root, RelOptInfo* foreignrel, bool use_alias, Index ignore_rel, List** ignore_conds, List** additional_conds, List** params_list);
 static void         deparseColumnRef          (StringInfo buf, int varno, int varattno, RangeTblEntry* rte, bool qualify_col);
 static void         deparseRelation           (StringInfo buf, Relation rel);
+static char*        deparseExprInContext      (Expr*              expr, deparse_expr_cxt* ctx);
 static void         deparseExprInt            (Expr*              expr, deparse_expr_cxt* ctx);
 static void         deparseConstExpr          (Const*             expr, deparse_expr_cxt* ctx);
 static void         deparseParamExpr          (Param*             expr, deparse_expr_cxt* ctx);
@@ -163,6 +164,9 @@ static char*        deparseInterval           (Datum datum);
 static bool         foreign_expr_walker       (Node *node, foreign_glob_cxt* glob_cxt, foreign_loc_cxt* outer_cxt, foreign_loc_cxt* case_arg_cxt);
 
 static bool         isTranslatableOpExpr      (const char* opername, Oid leftargtype, Oid rightargtype);
+static bool         isTranslatableFuncExpr    (FuncExpr* expr);
+static bool         isTranslatableNormalFunction(const char* function_name, int nargs);
+static bool         isTranslatableDatePart    (FuncExpr* expr);
 
 static void         get_relation_column_alias_ids(Var* node, RelOptInfo* foreignrel, int* relno, int* colno);
 
@@ -297,6 +301,96 @@ static bool isTranslatableOpExpr(const char* opername, Oid leftargtype, Oid righ
   return result;
 }
 
+/*
+ * Return true for functions that deparseFuncExpr() can emit using ordinary
+ * DB2 function-call syntax (possibly with the name mappings applied there).
+ * Keep this list in one place so planner validation and SQL rendering cannot
+ * silently drift apart again.
+ */
+static bool isTranslatableNormalFunction(const char* function_name, int nargs) {
+  return strcmp(function_name, "abs")              == 0 || strcmp(function_name, "acos")             == 0
+      || strcmp(function_name, "asin")             == 0 || strcmp(function_name, "atan")             == 0
+      || strcmp(function_name, "atan2")            == 0 || strcmp(function_name, "ceil")             == 0
+      || strcmp(function_name, "ceiling")          == 0 || strcmp(function_name, "char_length")      == 0
+      || strcmp(function_name, "character_length") == 0 || strcmp(function_name, "concat")           == 0
+      || strcmp(function_name, "cos")              == 0 || strcmp(function_name, "exp")              == 0
+      || strcmp(function_name, "initcap")          == 0 || strcmp(function_name, "length")           == 0
+      || strcmp(function_name, "lower")            == 0 || strcmp(function_name, "lpad")             == 0
+      || strcmp(function_name, "ltrim")            == 0 || strcmp(function_name, "mod")              == 0
+      || strcmp(function_name, "octet_length")     == 0 || strcmp(function_name, "position")         == 0
+      || strcmp(function_name, "pow")              == 0 || strcmp(function_name, "power")            == 0
+      || strcmp(function_name, "replace")          == 0 || strcmp(function_name, "round")            == 0
+      || strcmp(function_name, "rpad")             == 0 || strcmp(function_name, "rtrim")            == 0
+      || strcmp(function_name, "sign")             == 0 || strcmp(function_name, "sin")              == 0
+      || strcmp(function_name, "sqrt")             == 0 || strcmp(function_name, "strpos")           == 0
+      || strcmp(function_name, "substr")           == 0 || strcmp(function_name, "tan")              == 0
+      || strcmp(function_name, "to_char")          == 0 || strcmp(function_name, "to_date")          == 0
+      || strcmp(function_name, "to_number")        == 0 || strcmp(function_name, "to_timestamp")     == 0
+      || strcmp(function_name, "trunc")            == 0 || strcmp(function_name, "upper")            == 0
+      || (strcmp(function_name, "substring")       == 0 && nargs == 3);
+}
+
+/* date_part() is only deparsed for the DB2 EXTRACT fields handled below. */
+static bool isTranslatableDatePart(FuncExpr* expr) {
+  Const* field;
+  char*  field_name;
+  bool   result;
+
+  if (list_length(expr->args) != 2 || !IsA(linitial(expr->args), Const))
+    return false;
+
+  field = (Const*) linitial(expr->args);
+  if (field->constisnull || field->consttype != TEXTOID)
+    return false;
+
+  field_name = TextDatumGetCString(field->constvalue);
+  result = strcmp(field_name, "year")            == 0 || strcmp(field_name, "month")           == 0
+        || strcmp(field_name, "day")             == 0 || strcmp(field_name, "hour")            == 0
+        || strcmp(field_name, "minute")          == 0 || strcmp(field_name, "second")          == 0
+        || strcmp(field_name, "timezone_hour")   == 0 || strcmp(field_name, "timezone_minute") == 0;
+  pfree(field_name);
+  return result;
+}
+
+/*
+ * Verify that deparseFuncExpr() has a complete DB2 representation for this
+ * exact function shape.  This is stricter than PostgreSQL object
+ * shippability: being a pg_catalog builtin does not imply that DB2 implements
+ * the same function or signature.
+ */
+static bool isTranslatableFuncExpr(FuncExpr* expr) {
+  HeapTuple    tuple;
+  Form_pg_proc procform;
+  const char*  function_name;
+  int          nargs;
+  bool         result = false;
+
+  if (!canHandleType(expr->funcresulttype))
+    return false;
+
+  if (expr->funcformat == COERCE_IMPLICIT_CAST)
+    return true;
+
+  tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(expr->funcid));
+  if (!HeapTupleIsValid(tuple))
+    elog(ERROR, "cache lookup failed for function %u", expr->funcid);
+
+  procform       = (Form_pg_proc) GETSTRUCT(tuple);
+  function_name = NameStr(procform->proname);
+  nargs          = list_length(expr->args);
+
+  if (procform->pronamespace == PG_CATALOG_NAMESPACE) {
+    result = isTranslatableNormalFunction(function_name, nargs)
+          || (strcmp(function_name, "translate") == 0 && nargs == 3)
+          || (strcmp(function_name, "date_part") == 0 && isTranslatableDatePart(expr))
+          || ((strcmp(function_name, "now") == 0 || strcmp(function_name, "transaction_timestamp") == 0)
+              && nargs == 0);
+  }
+
+  ReleaseSysCache(tuple);
+  return result;
+}
+
 static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_loc_cxt* outer_cxt, foreign_loc_cxt* case_arg_cxt) {
   bool  fResult = true;
 
@@ -401,6 +495,22 @@ static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_
             #endif
           }
         }
+
+        /*
+         * Shippability of the type alone is not sufficient. In particular,
+         * PostgreSQL's empty string has no equivalent value in DB2, where it
+         * is treated as NULL. datumToString() deliberately refuses to render
+         * such constants, so reject every non-NULL constant that the deparser
+         * cannot represent before it can leave an empty operand in remote SQL.
+         */
+        if (!c->constisnull && canHandleType(c->consttype)) {
+          char* rendered = datumToString(c->constvalue, c->consttype);
+
+          if (rendered == NULL)
+            return false;
+          db2free(rendered, "rendered constant");
+        }
+
         /* If the constant has nondefault collation, either it's of a non-builtin type, or it reflects folding of a CollateExpr.
          * It's unsafe to send to the remote unless it's used in a non-collation-sensitive context.
          */
@@ -462,6 +572,16 @@ static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_
          * semantics on remote side.
          */
         if (!is_shippable(fe->funcid, ProcedureRelationId, fpinfo))
+          return false;
+
+        /*
+         * Built-in PostgreSQL functions are considered shippable by
+         * is_shippable(), but DB2 only supports the subset implemented by
+         * deparseFuncExpr(). Keep both decisions in lockstep; otherwise an
+         * unsupported function (for example btrim()) becomes an empty operand
+         * in the generated DB2 SQL.
+         */
+        if (!isTranslatableFuncExpr(fe))
           return false;
   
         // Recurse to input subexpressions.
@@ -537,11 +657,34 @@ static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_
       break;
       case T_ScalarArrayOpExpr: {
         ScalarArrayOpExpr *oe = (ScalarArrayOpExpr *) node;
-  
+        Expr              *lastarg;
+
         // Again, only shippable operators can be sent to remote.
         if (!is_shippable(oe->opno, OperatorRelationId, fpinfo))
           return false;
-  
+
+        /*
+         * Also make sure deparseScalarArrayOpExpr() will actually be able to
+         * translate the array argument; otherwise the clause would be deemed
+         * shippable here but deparse to nothing, corrupting the pushed-down
+         * WHERE clause (same concern as isTranslatableOpExpr() above). The
+         * array argument must be a Const, a literal ArrayExpr, or an
+         * ArrayCoerceExpr binary-coercing a literal ArrayExpr -- anything
+         * else, such as the Param/SubPlan produced for
+         * "col = ANY (ARRAY(SELECT ...))", can't be rendered as a literal
+         * IN-list and must be evaluated locally instead.
+         */
+        lastarg = (Expr *) llast(oe->args);
+        if (IsA(lastarg, ArrayCoerceExpr)) {
+          ArrayCoerceExpr *ace = (ArrayCoerceExpr *) lastarg;
+
+          if (ace->elemexpr && ace->elemexpr->type != T_RelabelType)
+            return false;
+          lastarg = ace->arg;
+        }
+        if (!IsA(lastarg, Const) && !IsA(lastarg, ArrayExpr))
+          return false;
+
         // Recurse to input subexpressions.
         if (!foreign_expr_walker((Node *) oe->args, glob_cxt, &inner_cxt, case_arg_cxt))
           return false;
@@ -2063,6 +2206,29 @@ char* deparseExpr (PlannerInfo* root, RelOptInfo* rel, Expr* expr, List** params
   return retValue;
 }
 
+/*
+ * Deparse a child expression without losing the current relation context.
+ *
+ * In particular, when deparsing quals below an upper relation, scanrel points
+ * at the underlying base/join relation. Calling the public deparseExpr()
+ * recursively would reset scanrel to the upper relation, causing base Vars to
+ * be mistaken for runtime parameters. Besides generating wrong SQL, those
+ * bogus fdw_exprs cannot be resolved against the upper scan target list and
+ * setrefs.c fails with "variable not found in subplan target list".
+ */
+static char* deparseExprInContext(Expr* expr, deparse_expr_cxt* parent_ctx) {
+  deparse_expr_cxt child_ctx = *parent_ctx;
+  StringInfoData  buf;
+  char*           result;
+
+  initStringInfo(&buf);
+  child_ctx.buf = &buf;
+  deparseExprInt(expr, &child_ctx);
+  result = (buf.len > 0) ? db2strdup(buf.data, "buf.data") : NULL;
+  db2free(buf.data, "buf.data");
+  return result;
+}
+
 static void deparseExprInt           (Expr*              expr, deparse_expr_cxt* ctx) {
   db2Entry1();
   db2Debug2("expr: %x",expr);
@@ -2267,9 +2433,9 @@ static void deparseParamExpr         (Param*             expr, deparse_expr_cxt*
 static void deparseVar(Var* expr, deparse_expr_cxt* ctx) {
   int     relno  = 0;
   int     colno  = 0;
+  Relids  relids = ctx->scanrel->relids;
   /* Qualify columns when multiple relations are involved. */
-  bool    qualify_col = (bms_membership( ctx->scanrel->relids) == BMS_MULTIPLE);
-  bool    is_query_var = false;
+  bool    qualify_col = (bms_membership(relids) == BMS_MULTIPLE);
 
   db2Entry1();
   /* If the Var belongs to the foreign relation that is deparsed as a subquery, use the relation and column alias to the Var provided by the
@@ -2279,15 +2445,9 @@ static void deparseVar(Var* expr, deparse_expr_cxt* ctx) {
     appendStringInfo(ctx->buf, "%s%d.%s%d", SUBQUERY_REL_ALIAS_PREFIX, relno, SUBQUERY_COL_ALIAS_PREFIX, colno);
     return;
   }
-  #if PG_VERSION_NUM < 160000
-  is_query_var = bms_is_member(expr->varno, ctx->scanrel->relids);
-  db2Debug2("bms_is_member(%d,%d): %s",expr->varno, ctx->scanrel->relids, is_query_var ? "true":"false");
-  #else
-  is_query_var = bms_is_member(expr->varno, ctx->root->all_query_rels);  
-  db2Debug2("bms_is_member(%d,%d): %s",expr->varno, ctx->root->all_query_rels, is_query_var ? "true":"false");
-  #endif
+  db2Debug2("bms_is_member(%d,%p): %s",expr->varno, (void*)relids, bms_is_member(expr->varno, relids) ? "true":"false");
   db2Debug2("expr->varlevelsup: %d",expr->varlevelsup);
-  if (is_query_var && expr->varlevelsup == 0) {
+  if (bms_is_member(expr->varno, relids) && expr->varlevelsup == 0) {
     deparseColumnRef(ctx->buf, expr->varno, expr->varattno, planner_rt_fetch(expr->varno, ctx->root), qualify_col);
   } else {
     /* Treat like a Param */
@@ -2343,14 +2503,14 @@ static void deparseOpExpr            (OpExpr*            expr, deparse_expr_cxt*
     } else {
       char* left = NULL;
 
-      left = deparseExpr (ctx->root, ctx->foreignrel, linitial(expr->args), ctx->params_list);
+      left = deparseExprInContext(linitial(expr->args), ctx);
       db2Debug2("left: %s", left);
       if (left != NULL) {
         if (oprkind == 'b') {
           /* binary operator */
           char* right = NULL;
 
-          right = deparseExpr (ctx->root, ctx->foreignrel, lsecond(expr->args), ctx->params_list);
+          right = deparseExprInContext(lsecond(expr->args), ctx);
           db2Debug2("right: %s", right);
           if (right != NULL) {
             if (strcmp (opername, "~~") == 0) {
@@ -2427,7 +2587,7 @@ static void deparseScalarArrayOpExpr (ScalarArrayOpExpr* expr, deparse_expr_cxt*
         char* left  = NULL;
         char* right = NULL;
 
-        left = deparseExpr (ctx->root, ctx->foreignrel,linitial (expr->args), ctx->params_list);
+        left = deparseExprInContext(linitial(expr->args), ctx);
         // check if anything has been added beyond the initial "("
         if (left != NULL) {
           Expr* rightexpr = NULL;
@@ -2494,6 +2654,18 @@ static void deparseScalarArrayOpExpr (ScalarArrayOpExpr* expr, deparse_expr_cxt*
               }
               /* the actual array is here */
               rightexpr = arraycoerce->arg;
+              /* rightexpr is only guaranteed to be an ArrayExpr (a literal array
+               * constructor) here. For an array-typed sub-select, e.g.
+               * "col = ANY (ARRAY(SELECT ...))", the planner produces a Param
+               * (or, if correlated, a SubPlan) wrapped in this ArrayCoerceExpr
+               * instead. Treating that as an ArrayExpr below would misinterpret
+               * its memory layout and crash, so bail out and evaluate locally.
+               */
+              if (rightexpr->type != T_ArrayExpr) {
+                db2Debug2("arraycoerce->arg->type(%d) is not T_ArrayExpr", rightexpr->type);
+                bResult = false;
+                break;
+              }
             }
             /* fall through ! */
             case T_ArrayExpr: {
@@ -2507,7 +2679,7 @@ static void deparseScalarArrayOpExpr (ScalarArrayOpExpr* expr, deparse_expr_cxt*
               initStringInfo(&buf);
               /* loop the array arguments */
               foreach (cell, array->elements) {
-                element = deparseExpr (ctx->root, ctx->foreignrel, (Expr*) lfirst (cell), ctx->params_list);
+                element = deparseExprInContext((Expr*) lfirst(cell), ctx);
                 if (element == NULL) {
                   /* if any element cannot be converted, give up */
                   db2free(buf.data,"buf.data");
@@ -2563,11 +2735,11 @@ static void deparseDistinctExpr      (DistinctExpr*      expr, deparse_expr_cxt*
   } else {
     char* left  = NULL;
 
-    left = deparseExpr (ctx->root, ctx->foreignrel, linitial ((expr)->args), ctx->params_list);
+    left = deparseExprInContext(linitial(expr->args), ctx);
     if (left != NULL) {
       char* right = NULL;
 
-      right = deparseExpr (ctx->root, ctx->foreignrel, lsecond ((expr)->args), ctx->params_list);
+      right = deparseExprInContext(lsecond(expr->args), ctx);
       if (right != NULL) {
         appendStringInfo (ctx->buf, "( %s IS DISTINCT FROM %s)", left, right);
       }
@@ -2621,12 +2793,12 @@ static void deparseNullIfExpr        (NullIfExpr*        expr, deparse_expr_cxt*
     db2Debug2("cannot Handle Type rightargtype (%d)",rightargtype);
   } else {
     char* left = NULL;
-    left = deparseExpr (ctx->root, ctx->foreignrel, linitial((expr)->args), ctx->params_list);
+    left = deparseExprInContext(linitial(expr->args), ctx);
 
     if (left != NULL) {
       char* right = NULL;
 
-      right = deparseExpr (ctx->root, ctx->foreignrel, lsecond((expr)->args), ctx->params_list);
+      right = deparseExprInContext(lsecond(expr->args), ctx);
       if (right != NULL) {
         appendStringInfo (ctx->buf, "NULLIF(%s,%s)", left, right);
       }
@@ -2644,13 +2816,13 @@ static void deparseBoolExpr          (BoolExpr*          expr, deparse_expr_cxt*
 
   db2Entry1();
   initStringInfo(&buf);
-  arg = deparseExpr (ctx->root, ctx->foreignrel, linitial(expr->args), ctx->params_list);
+  arg = deparseExprInContext(linitial(expr->args), ctx);
   if (arg != NULL) {
     bool bBreak = false;
     appendStringInfo (&buf, "(%s%s", expr->boolop == NOT_EXPR ? "NOT " : "", arg);
     for_each_cell(cell, expr->args, lnext(expr->args, list_head(expr->args))) { 
       db2free(arg,"arg");
-      arg = deparseExpr (ctx->root, ctx->foreignrel, (Expr*)lfirst(cell), ctx->params_list);
+      arg = deparseExprInContext((Expr*) lfirst(cell), ctx);
       if (arg != NULL) {
         appendStringInfo (&buf, " %s %s", expr->boolop == AND_EXPR ? "AND":"OR", arg);
       } else {
@@ -2682,7 +2854,7 @@ static void deparseCaseExpr          (CaseExpr*          expr, deparse_expr_cxt*
 
     if (expr->arg != NULL) {
       /* for the form "CASE arg WHEN ...", add first expression */
-      arg = deparseExpr (ctx->root, ctx->foreignrel, expr->arg, ctx->params_list);
+      arg = deparseExprInContext(expr->arg, ctx);
       db2Debug2("CASE %s WHEN ...", arg);
       if (arg == NULL) {
         appendStringInfo (&buf, " %s", arg);
@@ -2697,10 +2869,10 @@ static void deparseCaseExpr          (CaseExpr*          expr, deparse_expr_cxt*
         /* WHEN */
         if (expr->arg == NULL) {
           /* for CASE WHEN ..., use the whole expression */
-          arg = deparseExpr (ctx->root, ctx->foreignrel, whenclause->expr, ctx->params_list);
+          arg = deparseExprInContext(whenclause->expr, ctx);
         } else {
           /* for CASE arg WHEN ..., use only the right branch of the equality */
-          arg = deparseExpr (ctx->root, ctx->foreignrel, lsecond (((OpExpr*) whenclause->expr)->args), ctx->params_list);
+          arg = deparseExprInContext(lsecond(((OpExpr*) whenclause->expr)->args), ctx);
         }
         db2Debug2("WHEN %s ", arg);
         if (arg != NULL) {
@@ -2709,7 +2881,7 @@ static void deparseCaseExpr          (CaseExpr*          expr, deparse_expr_cxt*
           bBreak = true;
           break;
         }    /* THEN */
-        arg = deparseExpr (ctx->root, ctx->foreignrel, whenclause->result, ctx->params_list);
+        arg = deparseExprInContext(whenclause->result, ctx);
         db2Debug2(" THEN %s ", arg);
         if (arg != NULL) {
           appendStringInfo (&buf, " THEN %s", arg);
@@ -2721,7 +2893,7 @@ static void deparseCaseExpr          (CaseExpr*          expr, deparse_expr_cxt*
       if (!bBreak) {
         /* append ELSE clause if appropriate */
         if (expr->defresult != NULL) {
-          arg = deparseExpr (ctx->root, ctx->foreignrel, expr->defresult, ctx->params_list);
+          arg = deparseExprInContext(expr->defresult, ctx);
           db2Debug2("  ELSE %s", arg);
           if (arg != NULL) {
             appendStringInfo (&buf, " ELSE %s", arg);
@@ -2754,7 +2926,7 @@ static void deparseCoalesceExpr      (CoalesceExpr*      expr, deparse_expr_cxt*
     initStringInfo   (&result);
     appendStringInfo (&result, "COALESCE(");
     foreach (cell, expr->args) {
-      arg = deparseExpr (ctx->root, ctx->foreignrel, (Expr*)lfirst(cell),ctx->params_list);
+      arg = deparseExprInContext((Expr*) lfirst(cell), ctx);
       db2Debug2("arg: %s", arg);
       if (arg != NULL) {
         appendStringInfo(&result, ((first_arg) ? "%s" : ", %s"), arg);
@@ -2773,8 +2945,8 @@ static void deparseCoalesceExpr      (CoalesceExpr*      expr, deparse_expr_cxt*
 
 static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt* ctx) {
   db2Entry1();
-  if (!canHandleType (expr->funcresulttype)) {
-    db2Debug2("cannot handle funct->funcresulttype: %d",expr->funcresulttype);
+  if (!isTranslatableFuncExpr(expr)) {
+    db2Debug2("function %u cannot be translated to DB2", expr->funcid);
   } else if (expr->funcformat == COERCE_IMPLICIT_CAST) {
       /* do nothing for implicit casts */
       db2Debug2("COERCE_IMPLICIT_CAST == expr->funcformat(%d)",expr->funcformat);
@@ -2799,20 +2971,7 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
       db2Debug2("T_FuncExpr: schema(%d) != PG_CATALOG_NAMESPACE", schema);
     } else {
       /* the "normal" functions that we can translate */
-      if (strcmp (opername, "abs")          == 0 || strcmp (opername, "acos")         == 0 || strcmp (opername, "asin")             == 0
-      ||  strcmp (opername, "atan")         == 0 || strcmp (opername, "atan2")        == 0 || strcmp (opername, "ceil")             == 0
-      ||  strcmp (opername, "ceiling")      == 0 || strcmp (opername, "char_length")  == 0 || strcmp (opername, "character_length") == 0
-      ||  strcmp (opername, "concat")       == 0 || strcmp (opername, "cos")          == 0 || strcmp (opername, "exp")              == 0
-      ||  strcmp (opername, "initcap")      == 0 || strcmp (opername, "length")       == 0 || strcmp (opername, "lower")            == 0
-      ||  strcmp (opername, "lpad")         == 0 || strcmp (opername, "ltrim")        == 0 || strcmp (opername, "mod")              == 0
-      ||  strcmp (opername, "octet_length") == 0 || strcmp (opername, "position")     == 0 || strcmp (opername, "pow")              == 0
-      ||  strcmp (opername, "power")        == 0 || strcmp (opername, "replace")      == 0 || strcmp (opername, "round")            == 0
-      ||  strcmp (opername, "rpad")         == 0 || strcmp (opername, "rtrim")        == 0 || strcmp (opername, "sign")             == 0
-      ||  strcmp (opername, "sin")          == 0 || strcmp (opername, "sqrt")         == 0 || strcmp (opername, "strpos")           == 0
-      ||  strcmp (opername, "substr")       == 0 || strcmp (opername, "tan")          == 0 || strcmp (opername, "to_char")          == 0
-      ||  strcmp (opername, "to_date")      == 0 || strcmp (opername, "to_number")    == 0 || strcmp (opername, "to_timestamp")     == 0
-      ||  strcmp (opername, "trunc")        == 0 || strcmp (opername, "upper")        == 0
-      || (strcmp (opername, "substring")    == 0 && list_length (expr->args) == 3)) {
+      if (isTranslatableNormalFunction(opername, list_length(expr->args))) {
         ListCell*      cell;
         char*          arg       = NULL;
         bool           ok        = true;
@@ -2835,7 +2994,7 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
         else
           appendStringInfo (&buf, "%s(", opername);
         foreach (cell, expr->args) {
-          arg = deparseExpr (ctx->root, ctx->foreignrel, lfirst (cell), ctx->params_list);
+          arg = deparseExprInContext(lfirst(cell), ctx);
           if (arg != NULL) {
             appendStringInfo (&buf, "%s%s", (first_arg) ? "" : ", ",arg);
             first_arg = false;
@@ -2857,9 +3016,9 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
          * TRANSLATE(expression, to-string, from-string) takes them in the opposite order.
          * Forwarding the arguments as-is would silently swap the substitution direction.
          */
-        char* string = deparseExpr (ctx->root, ctx->foreignrel, linitial (expr->args), ctx->params_list);
-        char* from   = deparseExpr (ctx->root, ctx->foreignrel, lsecond  (expr->args), ctx->params_list);
-        char* to     = deparseExpr (ctx->root, ctx->foreignrel, lthird   (expr->args), ctx->params_list);
+        char* string = deparseExprInContext(linitial(expr->args), ctx);
+        char* from   = deparseExprInContext(lsecond(expr->args), ctx);
+        char* to     = deparseExprInContext(lthird(expr->args), ctx);
 
         if (string == NULL || from == NULL || to == NULL) {
           db2Debug2("T_FuncExpr: function %s that we cannot render for DB2", opername);
@@ -2873,7 +3032,7 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
         char* left = NULL;
 
         /* special case: EXTRACT */
-        left = deparseExpr (ctx->root, ctx->foreignrel, linitial (expr->args), ctx->params_list);
+        left = deparseExprInContext(linitial(expr->args), ctx);
         if (left == NULL) {
           db2Debug2("T_FuncExpr: function %s that we cannot render for DB2", opername);
         } else {
@@ -2886,7 +3045,7 @@ static void deparseFuncExpr          (FuncExpr*          expr, deparse_expr_cxt*
 
             /* remove final quote */
             left[strlen (left) - 1] = '\0';
-            right = deparseExpr (ctx->root, ctx->foreignrel, lsecond (expr->args), ctx->params_list);
+            right = deparseExprInContext(lsecond(expr->args), ctx);
             if (right == NULL) {
               db2Debug2("T_FuncExpr: function %s that we cannot render for DB2", opername);
             } else {

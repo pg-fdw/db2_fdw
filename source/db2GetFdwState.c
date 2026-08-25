@@ -327,7 +327,7 @@ static DB2Table* describeForeignTable (Oid foreigntableid, char* schema, char* t
         case SQL_NUMERIC:
         case SQL_DECIMAL:
           if (db2Table->cols[cidx]->colScale == 0)
-            db2Table->cols[cidx]->val_size = bin_size;
+            db2Table->cols[cidx]->val_size = bin_size + 1;
           else
             db2Table->cols[cidx]->val_size = (scale > colSize ? scale : colSize) + 5;
         break;
@@ -344,7 +344,7 @@ static DB2Table* describeForeignTable (Oid foreigntableid, char* schema, char* t
           db2Table->cols[cidx]->val_size = colSize + 1;
         break;
         case SQL_BIGINT:
-          db2Table->cols[cidx]->val_size = 24;
+          db2Table->cols[cidx]->val_size = 24 + 1;
         break;
         case SQL_XML:
           db2Table->cols[cidx]->val_size = LOB_CHUNK_SIZE + 1;
@@ -394,7 +394,7 @@ static DB2Table* describeForeignTable (Oid foreigntableid, char* schema, char* t
 static void getColumnData (DB2Table* db2Table, Oid foreigntableid) {
   Relation rel;
   TupleDesc tupdesc;
-  int i, index;
+  int i;
 
   db2Entry4();
   rel = table_open (foreigntableid, NoLock);
@@ -404,37 +404,74 @@ static void getColumnData (DB2Table* db2Table, Oid foreigntableid) {
   db2Table->npgcols = tupdesc->natts;
 
   /* loop through foreign table columns */
-  index = 0;  
   for (i = 0; i < tupdesc->natts; ++i) {
     Form_pg_attribute att_tuple = TupleDescAttr (tupdesc, i);
     List*             options;
     ListCell*         option;
+    const char*       remote_name = NameStr(att_tuple->attname);
+    char*             upper_name;
+    char*             quoted_name;
+    int               db2_index = -1;
+    int               j;
 
     /* ignore dropped columns */
     if (att_tuple->attisdropped)
       continue;
 
-    ++index;
-    /* get PostgreSQL column number and type */
-    if (index <= db2Table->ncols) {
-      db2Table->cols[index - 1]->pgattnum = att_tuple->attnum;
-      db2Table->cols[index - 1]->pgtype   = att_tuple->atttypid;
-      db2Table->cols[index - 1]->pgtypmod = att_tuple->atttypmod;
-      db2Table->cols[index - 1]->pgname   = db2strdup (NameStr(att_tuple->attname),"db2Table->cols[%d - 1]->pgname", index);
-    }
-
-    /* loop through column options */
+    /* Determine the remote column name in the same way as deparseColumnRef(). */
     options = GetForeignColumnOptions (foreigntableid, att_tuple->attnum);
     foreach (option, options) {
       DefElem* def = (DefElem*) lfirst (option);
-      /* is it the "key" option and is it set to "true" ? */
-      if (strcmp (def->defname, OPT_KEY) == 0 && optionIsTrue ((STRVAL(def->arg)))) {
-        /* mark the column as primary key column */
-        db2Table->cols[index - 1]->pkey           = 1;
+
+      if (strcmp(def->defname, "column_name") == 0)
+        remote_name = STRVAL(def->arg);
+    }
+
+    upper_name  = str_toupper(remote_name, strlen(remote_name), DEFAULT_COLLATION_OID);
+    quoted_name = db2CopyText(upper_name, strlen(upper_name), 1);
+
+    /*
+     * A foreign table may expose only a subset of the DB2 columns or list
+     * them in a different order. Match the DB2 descriptor by remote column
+     * name; ordinal matching assigns the wrong type/buffer metadata and can
+     * truncate values (for example LASTNAME using MIDINIT's CHAR(1) buffer).
+     */
+    for (j = 0; j < db2Table->ncols; ++j) {
+      if (db2Table->cols[j]->colName != NULL &&
+          strcmp(db2Table->cols[j]->colName, quoted_name) == 0) {
+        db2_index = j;
+        break;
       }
-      /* is it the "no_encoding_error" option set */
-      if (strcmp (def->defname, OPT_NO_ENCODING_ERROR) == 0) {
-        db2Table->cols[index - 1]->noencerr = optionIsTrue((STRVAL(def->arg))) ? NO_ENC_ERR_TRUE : NO_ENC_ERR_FALSE; 
+    }
+
+    pfree(upper_name);
+    db2free(quoted_name, "quoted_name");
+
+    if (db2_index < 0) {
+      ereport(WARNING,
+              (errcode(ERRCODE_WARNING),
+               errmsg("column \"%s\" of foreign table \"%s\" does not exist in foreign DB2 table",
+                      remote_name, db2Table->pgname)));
+      continue;
+    }
+
+    db2Table->cols[db2_index]->pgattnum = att_tuple->attnum;
+    db2Table->cols[db2_index]->pgtype   = att_tuple->atttypid;
+    db2Table->cols[db2_index]->pgtypmod = att_tuple->atttypmod;
+    db2Table->cols[db2_index]->pgname   = db2strdup(NameStr(att_tuple->attname),
+                                                    "db2Table->cols[%d]->pgname",
+                                                    db2_index);
+
+    /* Apply PostgreSQL-side column options to the matched DB2 column. */
+    foreach (option, options) {
+      DefElem* def = (DefElem*) lfirst(option);
+
+      if (strcmp(def->defname, OPT_KEY) == 0 && optionIsTrue(STRVAL(def->arg))) {
+        db2Table->cols[db2_index]->pkey = 1;
+      } else if (strcmp(def->defname, OPT_NO_ENCODING_ERROR) == 0) {
+        db2Table->cols[db2_index]->noencerr = optionIsTrue(STRVAL(def->arg))
+                                               ? NO_ENC_ERR_TRUE
+                                               : NO_ENC_ERR_FALSE;
       }
     }
   }

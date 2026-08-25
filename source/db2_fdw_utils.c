@@ -43,7 +43,7 @@ extern short        c2dbType                   (short fcType);
 bool                optionIsTrue               (const char *value);
 int                 guessDb2ClientCodepage     (void);
 void                exitHook                   (int code, Datum arg);
-void                convertTuple               (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls);
+void                convertTuple               (DB2Session* session, DB2ResultColumn* reslist, DB2TupleIndexMode index_mode, int natts, Datum* values, bool* nulls);
 void                reset_transmission_modes   (int nestlevel);
 int                 set_transmission_modes     (void);
 bool                is_builtin                 (Oid objectId);
@@ -150,19 +150,16 @@ void exitHook (int code, Datum arg) {
 /* convertTuple
  * Convert a result row from DB2 stored in db2Table into arrays of values and null indicators.
  */
-void convertTuple (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* reslist, int natts, Datum* values, bool* nulls) {
+void convertTuple (DB2Session* session, DB2ResultColumn* reslist, DB2TupleIndexMode index_mode, int natts, Datum* values, bool* nulls) {
   char*                value          = NULL;
   long                 value_len      = 0;
   int                  j              = 0;
   DB2ResultColumn*     res            = NULL;
-  bool                 isSimpleSelect = false;
 
   db2Entry4();
   db2Debug5("natts: %d", natts);
-
-  /* assign result values */
-  isSimpleSelect = (db2Table && natts == db2Table->npgcols);
-  db2Debug5("isSimpleSelect: %s", isSimpleSelect ? "true": "false");
+  db2Debug5("tuple index mode: %s",
+            index_mode == DB2_TUPLE_INDEX_RESULT ? "result" : "attribute");
 
   // initialize all columns to NULL
   for (j = 0; j < natts; j++) {
@@ -171,13 +168,36 @@ void convertTuple (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* res
   }
 
   for (res = reslist; res; res = res->next) {
-    j = ((isSimpleSelect) ? res->pgattnum : res->resnum) - 1;
+    /*
+     * Never infer the slot layout from natts.  A SELECT that returns every
+     * base column in a different order has natts == npgcols, while its
+     * fdw_scan_tlist (and therefore its TupleTableSlot) still follows result
+     * order.  Using pgattnum in that case stores by-value data in by-reference
+     * attributes (or vice versa), and PostgreSQL later dereferences an invalid
+     * Datum while materializing the slot.
+     */
+    j = (index_mode == DB2_TUPLE_INDEX_RESULT ? res->resnum : res->pgattnum) - 1;
+
+    /*
+     * Result metadata is assembled by the planner and crosses a serialization
+     * boundary before execution.  Never trust an invalid attribute/result
+     * number here: writing outside the TupleSlot arrays terminates the
+     * PostgreSQL backend instead of producing a normal SQL error.
+     */
+    if (j < 0 || j >= natts) {
+      ereport(ERROR,
+              (errcode(ERRCODE_FDW_ERROR),
+               errmsg("db2_fdw result column index out of range"),
+               errdetail("Result column %d maps to tuple index %d, but the tuple has %d attributes.",
+                         res->resnum, j, natts)));
+    }
+
     db2Debug5("start processing column %d of %d: values index = %d", res->resnum, natts, j);
     db2Debug5("res->pgname   : %s"  ,res->pgname  );
     db2Debug5("res->pgattnum : %d"  ,res->pgattnum);
     db2Debug5("res->pgtype   : %d"  ,res->pgtype  );
     db2Debug5("res->pgtypmod : %d"  ,res->pgtypmod);
-    db2Debug5("res->val      : %s"  ,res->val     );
+    db2Debug5("res->val      : %s"  ,res->val ? res->val : "(null)");
     db2Debug5("res->val_len  : %ld"  ,(long) res->val_len );
     db2Debug5("res->val_null : %ld"  ,(long) res->val_null);
 
@@ -217,9 +237,18 @@ void convertTuple (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* res
           db2Debug5("DB2_FLOAT, DECIMAL, SMALLINT, INTEGER, REAL, DECFLOAT, DOUBLE");
           value     = res->val;
           value_len = res->val_len;
-          value_len = (value_len == 0) ? strlen(value) : value_len;
-          tmp_value = value;
-          if((tmp_value = strchr(value,',')) != NULL) {
+          if (value == NULL || res->val_size == 0) {
+            ereport(ERROR,
+                    (errcode(ERRCODE_FDW_ERROR),
+                     errmsg("db2_fdw received a non-NULL result without a value buffer")));
+          }
+          if (value_len == 0)
+            value_len = strnlen(value, res->val_size);
+          if ((size_t) value_len >= res->val_size)
+            value_len = res->val_size - 1;
+          value[value_len] = '\0';
+          tmp_value = memchr(value, ',', value_len);
+          if(tmp_value != NULL) {
             *tmp_value = '.';
           }
         }
@@ -229,7 +258,16 @@ void convertTuple (DB2Session* session, DB2Table* db2Table, DB2ResultColumn* res
           /* for other data types, db2Table contains the results */
           value     = res->val;
           value_len = res->val_len;
-          value_len = (value_len == 0) ? strlen(value) : value_len;
+          if (value == NULL || res->val_size == 0) {
+            ereport(ERROR,
+                    (errcode(ERRCODE_FDW_ERROR),
+                     errmsg("db2_fdw received a non-NULL result without a value buffer")));
+          }
+          if (value_len == 0)
+            value_len = strnlen(value, res->val_size);
+          if ((size_t) value_len >= res->val_size)
+            value_len = res->val_size - 1;
+          value[value_len] = '\0';
         }
         break;
       }

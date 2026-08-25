@@ -91,6 +91,31 @@ ForeignScan* db2GetForeignPlan(PlannerInfo* root, RelOptInfo* foreignrel, Oid fo
     scan_relid = foreignrel->relid;
 
     /*
+     * GetForeignPlan's tlist is the actual output target list selected for
+     * this path.  It can contain base Vars which no longer occur in
+     * foreignrel->reltarget (notably with parameterized LATERAL VALUES
+     * paths).  Since a non-empty fdw_scan_tlist makes setrefs.c rewrite the
+     * plan target list against that scan list, every such Var must be
+     * present there or planning fails with "variable not found in subplan
+     * target list".
+     */
+    {
+      List*     plan_vars = pull_var_clause((Node*) tlist, PVC_RECURSE_PLACEHOLDERS);
+      List*     base_vars = NIL;
+      ListCell* var_cell  = NULL;
+
+      foreach (var_cell, plan_vars) {
+        Var* var = lfirst_node(Var, var_cell);
+
+        if (var->varno == scan_relid && var->varlevelsup == 0)
+          base_vars = lappend(base_vars, var);
+      }
+
+      ptlist = add_to_flat_tlist(ptlist, base_vars);
+      ptlist_len = list_length(ptlist);
+    }
+
+    /*
      * If we have any locally-evaluated quals, they might reference Vars that are
      * *not* part of the query's output targetlist. Those Vars must still be
      * available in the ForeignScan's tuple slot, otherwise setrefs.c can error

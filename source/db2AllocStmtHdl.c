@@ -72,6 +72,8 @@ HdlEntry* db2AllocStmtHdl (SQLSMALLINT type, DB2ConnEntry* connp, db2error error
     /* add handle to linked list */
     db2Debug3("entry->hsql: %d",entry->hsql);
     entry->type         = type;
+    memset(entry->dummy_buffer, 0, sizeof(entry->dummy_buffer));
+    entry->dummy_null   = 0;
     db2Debug3("entry->type: %d",entry->type);
     entry->next         = connp->handlelist;
     db2Debug3("adding connp->handlelist: %x to entry->next: %x",connp->handlelist, entry->next);

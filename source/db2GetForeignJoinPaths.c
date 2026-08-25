@@ -326,23 +326,6 @@ static bool foreign_join_ok (PlannerInfo * root, RelOptInfo * joinrel, JoinType 
     fdwState->db2Table->cols[fdwState->db2Table->ncols++] = newcol;
   }
 
-  /*
-   * IMPORTANT:
-   * For base foreign tables, db2Table->npgcols matches the number of PG columns
-   * and convertTuple() can map output columns by pgattnum.
-   *
-   * For join pushdown, however, the executor slot natts equals the number of
-   * projected join output columns, while the pgattnum values we carry in the
-   * DB2ResultColumn descriptors refer to *base-table* attnums (and can be
-   * sparse / non-1..N).  If npgcols == natts, convertTuple() would treat the
-   * join as a "simple select" and use pgattnum as the destination index,
-   * causing out-of-bounds writes and corrupted tuples.
-   *
-   * Force convertTuple() to use resnum-based mapping for joinrels.
-   */
-  fdwState->db2Table->npgcols = 0;
-
   db2Exit1();
   return true;
 }
-
