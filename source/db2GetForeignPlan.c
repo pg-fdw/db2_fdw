@@ -539,13 +539,21 @@ static void getUsedColumns (Expr* expr, RelOptInfo* foreignrel, DB2ResultColumn*
           /* The above borrows its column definition (DB2 type, size, ...) from whichever Var
            * was found first in the aggregate's arguments/ORDER BY/DISTINCT list, via
            * copyCol2Result(). That's correct as long as the aggregate's own PostgreSQL return
-           * type matches that Var's type (true for MIN/MAX, and for PERCENTILE_DISC, which
-           * always returns the type of its sort key). It's wrong whenever the aggregate
+           * type AND wire-level precision/scale match that Var's (true for MIN/MAX, and for
+           * PERCENTILE_DISC, which always returns the type of its sort key -- these hand back
+           * one of the actual input values, unaltered). It's wrong whenever the aggregate
            * promotes/changes the type -- e.g. AVG()/SUM() turning an integer column into
            * numeric, or PERCENTILE_CONT() always returning double precision regardless of its
-           * sort key's type. In that mismatched case, DB2 sends back a DECFLOAT-formatted value
-           * that doesn't fit the borrowed column's layout, which can crash the fetch or corrupt
-           * the result (observed: AVG() over a bigint column segfaulting the backend).
+           * sort key's type -- but it's *also* wrong for AVG()/SUM()/STDDEV()/VARIANCE() over a
+           * numeric/decimal column: the PG return type OID is still "numeric", so a check that
+           * only compares OIDs sees no mismatch, yet DB2 computes and returns these with wider
+           * precision/scale than the borrowed source column (e.g. summing many numeric(9,2)
+           * rows, or the fractional digits AVG() introduces). In every one of these mismatched
+           * cases, DB2 sends back a DECFLOAT-formatted value that doesn't fit the borrowed
+           * column's fixed layout, which can crash the fetch, corrupt the result (observed:
+           * AVG() over a bigint column segfaulting the backend, and separately, misreading a
+           * wide AVG()/SUM() as if it were the narrow source column's DECIMAL(9,2) layout
+           * produced a wildly wrong value instead of an error).
            *
            * Re-tag the result column with the aggregate's real return type and route it through
            * the same safe, generously-sized SQLGetData(SQL_C_CHAR) fetch path already used for
@@ -553,15 +561,33 @@ static void getUsedColumns (Expr* expr, RelOptInfo* foreignrel, DB2ResultColumn*
            * db2_fdw_utils.c, which also normalizes a locale decimal comma to a period for these
            * types) instead of trusting the borrowed layout.
            */
-          if (resCol->colName != NULL && resCol->pgtype != aggref->aggtype) {
-            resCol->colType  = -360; // SQL_DECFLOAT
-            resCol->colSize  = 34;   // DB2's maximum DECFLOAT precision
-            resCol->colScale = 0;
-            resCol->colChars = 42;   // precision + sign + '.' + exponent, with headroom
-            resCol->colBytes = 16;
-            resCol->pgtype   = aggref->aggtype;
+          {
+            bool widensPrecision = aggname && (strcmp(aggname, "sum") == 0 || strcmp(aggname, "avg") == 0 ||
+                                                strncmp(aggname, "stddev", 6) == 0 || strncmp(aggname, "var", 3) == 0);
+
+            if (resCol->colName != NULL && (resCol->pgtype != aggref->aggtype || widensPrecision)) {
+              resCol->colType  = -360; // SQL_DECFLOAT
+              resCol->colSize  = 34;   // DB2's maximum DECFLOAT precision
+              resCol->colScale = 0;
+              resCol->colChars = 42;   // precision + sign + '.' + exponent, with headroom
+              resCol->colBytes = 16;
+              resCol->pgtype   = aggref->aggtype;
+              resCol->val_size = 64;
+            }
+          }
+
+          /* Independently of the retagging above, never carry the borrowed Var's typmod forward
+           * onto the aggregate's result. PostgreSQL itself never associates a typmod with an
+           * Aggref (see exprTypmod()'s T_Aggref case in nodeFuncs.c, which unconditionally
+           * returns -1): SUM()/AVG() over a numeric(9,2) column return unconstrained numeric,
+           * not numeric(9,2). Left in place, the borrowed numeric(9,2) typmod gets enforced by
+           * numeric_in() in convertTuple() (db2_fdw_utils.c) against the aggregated value, which
+           * is free to exceed the single column's precision -- observed as "field overflow" once
+           * SUM(salary+comm+bonus) across many rows passed 10^7, the limit of a lone employee's
+           * numeric(9,2) salary column.
+           */
+          if (resCol->colName != NULL) {
             resCol->pgtypmod = -1;
-            resCol->val_size = 64;
           }
         }
       }
