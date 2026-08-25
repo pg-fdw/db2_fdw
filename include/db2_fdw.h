@@ -16,7 +16,7 @@
 #include <foreign/fdwapi.h>
 #include <nodes/pathnodes.h>
 
-#define PG_SUPPORTED_MIN_VERSION 130000
+#define PG_SUPPORTED_MIN_VERSION 140000
 
 #if PG_VERSION_NUM >= 150000
 #define STRVAL(arg) ((String *)(arg))->sval
@@ -24,12 +24,12 @@
 #define STRVAL(arg) ((Value*)(arg))->val.str
 #endif
 
-#if PG_VERSION_NUM < 130000
-#error "This extension requires PostgreSQL version 13.0 or higher."
+#if PG_VERSION_NUM < 140000
+#error "This extension requires PostgreSQL version 14.0 or higher."
 #endif
 
 #if PG_VERSION_NUM < PG_SUPPORTED_MIN_VERSION
-#error "This extension requires PostgreSQL version 13.0 or higher."
+#error "This extension requires PostgreSQL version 14.0 or higher."
 #endif
 
 #ifndef PQ_QUERY_PARAM_MAX_LIMIT
@@ -45,7 +45,7 @@
 
 
 /* db2_fdw version */
-#define DB2_FDW_VERSION             "18.2.1"
+#define DB2_FDW_VERSION             "18.3.0"
 /* number of bytes to read per LOB chunk */
 #define LOB_CHUNK_SIZE              8192
 #define ERRBUFSIZE                  2000

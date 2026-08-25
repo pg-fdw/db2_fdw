@@ -76,11 +76,7 @@ void db2GetForeignJoinPaths (PlannerInfo * root, RelOptInfo * joinrel, RelOptInf
           fdwState_i = (DB2FdwState*) innerrel->fdw_private;
 
           /* estimate the number of result rows for the join */
-          #if PG_VERSION_NUM < 140000
-          if (outerrel->pages > 0 && innerrel->pages > 0)
-          #else
           if (outerrel->tuples >= 0 && innerrel->tuples >= 0)
-          #endif  /* PG_VERSION_NUM */
           {
             /* both relations have been ANALYZEd, so there should be useful statistics */
             joinclauses_selectivity = clauselist_selectivity(root, fdwState->joinclauses, 0, JOIN_INNER, extra->sjinfo);

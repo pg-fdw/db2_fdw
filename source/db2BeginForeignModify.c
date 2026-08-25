@@ -19,11 +19,7 @@ void db2BeginForeignModify (ModifyTableState* mtstate, ResultRelInfo* rinfo, Lis
   Plan        *subplan   = NULL;
 
   db2Entry1();
-  #if PG_VERSION_NUM < 140000
-  subplan   = mtstate->mt_plans[subplan_index]->plan;
-  #else
   subplan   = outerPlanState(mtstate)->plan;
-  #endif
 
   db2BeginForeignModifyCommon(mtstate, rinfo, fdw_state, subplan);
   db2Exit1();

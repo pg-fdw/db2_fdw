@@ -1,112 +1,26 @@
 --
--- TC022: keep set operations and operations above them local
+-- TC022: CLOB/DBCLOB Unicode round-trip correctness (CODEUNITS16/32, UTF-16)
 --
--- Set-operation pushdown is not implemented.  These queries mix a DB2 foreign
--- table with a local table and must therefore never create a foreign upper path
--- for UNION, DISTINCT, aggregation or ORDER BY.
 --
-CREATE TEMP TABLE tc022_local_employee (
-  empno varchar(6)
-);
-
-INSERT INTO tc022_local_employee (empno) VALUES ('000010'), ('LOCAL1');
-
-EXPLAIN (VERBOSE)
-SELECT DISTINCT empno
-FROM (
-  SELECT empno FROM sample.employee
-  UNION ALL
-  SELECT empno FROM tc022_local_employee
-) AS employee_scope
-ORDER BY empno;
-
--- DISTINCT and window processing are local too; a following ORDER BY must not
--- revive an unsupported foreign upper path.
-EXPLAIN (VERBOSE)
-SELECT DISTINCT empno
-FROM sample.employee
-ORDER BY empno;
-
-EXPLAIN (VERBOSE)
-SELECT empno, row_number() OVER (ORDER BY empno) AS row_number
-FROM sample.employee
-ORDER BY empno;
-
-SELECT DISTINCT empno
-FROM (
-  SELECT empno FROM sample.employee WHERE empno = '000010'
-  UNION ALL
-  SELECT empno FROM tc022_local_employee
-) AS employee_scope
-ORDER BY empno;
-
-CREATE TEMP TABLE tc022_scope (
-  empno varchar(6)
-);
-
-INSERT INTO tc022_scope (empno) VALUES ('000010');
-
-EXPLAIN (VERBOSE)
-SELECT source_name, row_count
-FROM (
-  SELECT 'DB2'::text AS source_name, count(*) AS row_count
-  FROM sample.employee
-  WHERE empno = ANY (ARRAY(SELECT empno FROM tc022_scope))
-  UNION ALL
-  SELECT 'LOCAL'::text, count(*)
-  FROM tc022_local_employee
-) AS source_counts
-ORDER BY source_name;
-
-SELECT source_name, row_count
-FROM (
-  SELECT 'DB2'::text AS source_name, count(*) AS row_count
-  FROM sample.employee
-  WHERE empno = ANY (ARRAY(SELECT empno FROM tc022_scope))
-  UNION ALL
-  SELECT 'LOCAL'::text, count(*)
-  FROM tc022_local_employee
-) AS source_counts
-ORDER BY source_name;
-
--- deparseExpr() knows how to print COALESCE, but COALESCE is deliberately not
--- accepted by is_foreign_expr().  A DISTINCT path over this CASE expression
--- must therefore use a local sort instead of advertising a remote path that
--- appendOrderByClause() cannot reproduce later.
-EXPLAIN (VERBOSE)
-SELECT DISTINCT
-       workdept,
-       CASE WHEN COALESCE(edlevel, 0) = 1 THEN salary ELSE bonus END AS amount
-FROM sample.employee;
-
-CREATE TEMP TABLE tc022_distinct_case AS
-SELECT DISTINCT
-       workdept,
-       CASE WHEN COALESCE(edlevel, 0) = 1 THEN salary ELSE bonus END AS amount
-FROM sample.employee;
-
-SELECT count(*) AS distinct_case_rows
-FROM tc022_distinct_case;
-
--- A pg_catalog function is not automatically available with identical
--- syntax and semantics in DB2.  btrim() is intentionally evaluated locally,
--- as is the comparison with PostgreSQL's empty string (DB2 treats it as
--- NULL).  The non-NULL predicate may still be pushed down independently.
-EXPLAIN (VERBOSE)
-SELECT empno
-FROM sample.employee
-WHERE firstnme IS NOT NULL
-  AND btrim(firstnme) <> '';
-
-CREATE TEMP TABLE tc022_nonempty_names AS
-SELECT empno
-FROM sample.employee
-WHERE firstnme IS NOT NULL
-  AND btrim(firstnme) <> '';
-
-SELECT count(*) AS nonempty_name_rows
-FROM tc022_nonempty_names;
-
+\d+ sample.dataxml;
+--
+select * from sample.dataxml;
+--
+--
+\d+ sample1.dataxml;
+--
+select * from sample1.dataxml;
+--
+--
+CREATE FOREIGN TABLE sample1.dataxml1 (
+    xmlid          bigint                         OPTIONS (db2type '-5' , db2size '19'       , db2bytes '8'        , db2chars '19', db2scale '0', db2null '0', db2ccsid '0'   ) NOT NULL ,
+    dataxml        bytea                          OPTIONS (db2type '-99', db2size '104857600', db2bytes '104857600', db2chars '0' , db2scale '0', db2null '1', db2ccsid '1208')          ,
+    lastupdated    timestamp(6) without time zone OPTIONS (db2type '93' , db2size '26'       , db2bytes '16'       , db2chars '26', db2scale '6', db2null '0', db2ccsid '0'   ) NOT NULL 
+)
+SERVER sample1
+OPTIONS (schema 'DB2INST1', "table" 'DATAXML');
+--
+select xmlid, convert_from(dataxml, 'UTF8'), dataxml, lastupdated from sample1.dataxml1;
 --
 -- END of TC022
 --

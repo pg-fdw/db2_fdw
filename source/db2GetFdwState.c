@@ -1,9 +1,6 @@
 #include <postgres.h>
 #include <sqlcli.h>
 #include <access/heapam.h>
-#if PG_VERSION_NUM < 140000
-#include <access/xact.h>
-#endif
 #include <catalog/pg_collation.h>
 #include <miscadmin.h>
 #include <utils/formatting.h>

@@ -1,88 +1,111 @@
 --
--- TC024: preserve ForeignScan output Vars for parameterized LATERAL paths
+-- TC024: keep set operations and operations above them local
 --
--- A LATERAL VALUES relation can make the selected path's output target list
--- differ from the base relation's RelOptInfo target.  db2_fdw uses a custom
--- fdw_scan_tlist, so it must include every base Var from GetForeignPlan's
--- actual target list.  Otherwise PostgreSQL's setrefs.c aborts planning with
--- "variable not found in subplan target list".
+-- Set-operation pushdown is not implemented.  These queries mix a DB2 foreign
+-- table with a local table and must therefore never create a foreign upper path
+-- for UNION, DISTINCT, aggregation or ORDER BY.
 --
-CREATE TEMP TABLE tc024_target (
-  empno varchar(6),
-  enabled boolean
+CREATE TEMP TABLE tc024_local_employee (
+  empno varchar(6)
 );
 
-CREATE TEMP TABLE tc024_mapping (
-  source_expression text,
-  target_code text,
-  enabled boolean
+INSERT INTO tc024_local_employee (empno) VALUES ('000010'), ('LOCAL1');
+
+EXPLAIN (VERBOSE)
+SELECT DISTINCT empno
+FROM (
+  SELECT empno FROM sample.employee
+  UNION ALL
+  SELECT empno FROM tc024_local_employee
+) AS employee_scope
+ORDER BY empno;
+
+-- DISTINCT and window processing are local too; a following ORDER BY must not
+-- revive an unsupported foreign upper path.
+EXPLAIN (VERBOSE)
+SELECT DISTINCT empno
+FROM sample.employee
+ORDER BY empno;
+
+EXPLAIN (VERBOSE)
+SELECT empno, row_number() OVER (ORDER BY empno) AS row_number
+FROM sample.employee
+ORDER BY empno;
+
+SELECT DISTINCT empno
+FROM (
+  SELECT empno FROM sample.employee WHERE empno = '000010'
+  UNION ALL
+  SELECT empno FROM tc024_local_employee
+) AS employee_scope
+ORDER BY empno;
+
+CREATE TEMP TABLE tc024_scope (
+  empno varchar(6)
 );
 
-INSERT INTO tc024_target VALUES ('000010', true);
-INSERT INTO tc024_mapping VALUES
-  ('salary', 'salary', true),
-  ('bonus',  'bonus',  true),
-  ('comm',   'comm',   true);
+INSERT INTO tc024_scope (empno) VALUES ('000010');
 
-ANALYZE tc024_target;
-ANALYZE tc024_mapping;
+EXPLAIN (VERBOSE)
+SELECT source_name, row_count
+FROM (
+  SELECT 'DB2'::text AS source_name, count(*) AS row_count
+  FROM sample.employee
+  WHERE empno = ANY (ARRAY(SELECT empno FROM tc024_scope))
+  UNION ALL
+  SELECT 'LOCAL'::text, count(*)
+  FROM tc024_local_employee
+) AS source_counts
+ORDER BY source_name;
 
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT src.empno,
-       value_row.source_expression,
-       value_row.amount,
-       value_row.department_present,
-       value_row.job_present
-FROM sample.employee src
-JOIN tc024_target target
-  ON target.empno = src.empno
- AND target.enabled
-CROSS JOIN LATERAL (VALUES
-  ('salary', 'salary', src.salary::numeric,
-   src.workdept IS NOT NULL, src.job IS NOT NULL),
-  ('bonus', 'bonus', src.bonus::numeric,
-   src.workdept IS NOT NULL, src.job IS NOT NULL),
-  ('comm', 'comm', src.comm::numeric,
-   src.workdept IS NOT NULL, src.job IS NOT NULL)
-) AS value_row(source_expression, target_code, amount,
-               department_present, job_present)
-JOIN tc024_mapping mapping
-  ON mapping.source_expression = value_row.source_expression
- AND mapping.target_code = value_row.target_code
- AND mapping.enabled
-WHERE value_row.amount IS NOT NULL
-   OR value_row.department_present
-   OR value_row.job_present;
+SELECT source_name, row_count
+FROM (
+  SELECT 'DB2'::text AS source_name, count(*) AS row_count
+  FROM sample.employee
+  WHERE empno = ANY (ARRAY(SELECT empno FROM tc024_scope))
+  UNION ALL
+  SELECT 'LOCAL'::text, count(*)
+  FROM tc024_local_employee
+) AS source_counts
+ORDER BY source_name;
 
-CREATE TEMP TABLE tc024_result AS
-SELECT src.empno,
-       value_row.source_expression,
-       value_row.amount,
-       value_row.department_present,
-       value_row.job_present
-FROM sample.employee src
-JOIN tc024_target target
-  ON target.empno = src.empno
- AND target.enabled
-CROSS JOIN LATERAL (VALUES
-  ('salary', 'salary', src.salary::numeric,
-   src.workdept IS NOT NULL, src.job IS NOT NULL),
-  ('bonus', 'bonus', src.bonus::numeric,
-   src.workdept IS NOT NULL, src.job IS NOT NULL),
-  ('comm', 'comm', src.comm::numeric,
-   src.workdept IS NOT NULL, src.job IS NOT NULL)
-) AS value_row(source_expression, target_code, amount,
-               department_present, job_present)
-JOIN tc024_mapping mapping
-  ON mapping.source_expression = value_row.source_expression
- AND mapping.target_code = value_row.target_code
- AND mapping.enabled
-WHERE value_row.amount IS NOT NULL
-   OR value_row.department_present
-   OR value_row.job_present;
+-- deparseExpr() knows how to print COALESCE, but COALESCE is deliberately not
+-- accepted by is_foreign_expr().  A DISTINCT path over this CASE expression
+-- must therefore use a local sort instead of advertising a remote path that
+-- appendOrderByClause() cannot reproduce later.
+EXPLAIN (VERBOSE)
+SELECT DISTINCT
+       workdept,
+       CASE WHEN COALESCE(edlevel, 0) = 1 THEN salary ELSE bonus END AS amount
+FROM sample.employee;
 
-SELECT count(*) AS lateral_rows
-FROM tc024_result;
+CREATE TEMP TABLE tc024_distinct_case AS
+SELECT DISTINCT
+       workdept,
+       CASE WHEN COALESCE(edlevel, 0) = 1 THEN salary ELSE bonus END AS amount
+FROM sample.employee;
+
+SELECT count(*) AS distinct_case_rows
+FROM tc024_distinct_case;
+
+-- A pg_catalog function is not automatically available with identical
+-- syntax and semantics in DB2.  btrim() is intentionally evaluated locally,
+-- as is the comparison with PostgreSQL's empty string (DB2 treats it as
+-- NULL).  The non-NULL predicate may still be pushed down independently.
+EXPLAIN (VERBOSE)
+SELECT empno
+FROM sample.employee
+WHERE firstnme IS NOT NULL
+  AND btrim(firstnme) <> '';
+
+CREATE TEMP TABLE tc024_nonempty_names AS
+SELECT empno
+FROM sample.employee
+WHERE firstnme IS NOT NULL
+  AND btrim(firstnme) <> '';
+
+SELECT count(*) AS nonempty_name_rows
+FROM tc024_nonempty_names;
 
 --
 -- END of TC024

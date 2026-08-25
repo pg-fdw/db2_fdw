@@ -1,8 +1,6 @@
 #include <postgres.h>
 #include <nodes/makefuncs.h>
-#if PG_VERSION_NUM >= 140000
 #include <optimizer/appendinfo.h>
-#endif  /* PG_VERSION_NUM */
 #include <optimizer/optimizer.h>
 #include <access/heapam.h>
 #include <utils/lsyscache.h>
@@ -12,20 +10,12 @@
 extern bool         optionIsTrue              (const char* value);
 
 /** local prototypes */
-#if PG_VERSION_NUM < 140000
-void db2AddForeignUpdateTargets(Query* parsetree, RangeTblEntry* target_rte, Relation target_relation);
-#else
 void db2AddForeignUpdateTargets(PlannerInfo* root, Index rtindex, RangeTblEntry* target_rte, Relation target_relation);
-#endif
 
 /* db2AddForeignUpdateTargets
  * Add the primary key columns as resjunk entries.
  */
-#if PG_VERSION_NUM < 140000
-void db2AddForeignUpdateTargets (Query* parsetree,RangeTblEntry* target_rte, Relation target_relation){
-#else
 void db2AddForeignUpdateTargets (PlannerInfo* root, Index rtindex,RangeTblEntry* target_rte, Relation target_relation){
-#endif
   Oid       relid   = RelationGetRelid (target_relation);
   TupleDesc tupdesc = target_relation->rd_att;
   int       i       = 0;
@@ -51,25 +41,6 @@ void db2AddForeignUpdateTargets (PlannerInfo* root, Index rtindex,RangeTblEntry*
         if (optionIsTrue (STRVAL(def->arg))) {
           Var*  var           = NULL;
 
-          #if PG_VERSION_NUM < 140000
-          TargetEntry *tle;
-          /* Make a Var representing the desired value */
-          var = makeVar(
-            parsetree->resultRelation,
-            attrno,
-            att->atttypid,
-            att->atttypmod,
-            att->attcollation,
-            0);
-          /* Wrap it in a resjunk TLE with the right name ... */
-          tle = makeTargetEntry( (Expr*)var
-                               , list_length(parsetree->targetList) + 1
-                               , NameStr(att->attname)
-                               , true
-                              );
-          /* ... and add it to the query's targetlist */
-          parsetree->targetList = lappend(parsetree->targetList, tle);
-          #else
           /* Build a Var referencing the PK column of the target RTE */
           var = makeVar( rtindex
                        , attrno
@@ -82,7 +53,6 @@ void db2AddForeignUpdateTargets (PlannerInfo* root, Index rtindex,RangeTblEntry*
           /* Register it as a required row-identity column. The name becomes the resjunk column name in the plan. */
           add_row_identity_var(root, var, rtindex, NameStr(att->attname));
           db2Debug2("add resjunk column %s: %d", NameStr(att->attname), rtindex);
-          #endif  /* PG_VERSION_NUM */
           has_key = true;
         }
       }

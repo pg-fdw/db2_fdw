@@ -30,11 +30,7 @@ void db2BeginDirectModify(ForeignScanState* node, int eflags) {
   /* Do nothing in EXPLAIN (no ANALYZE) case.  node->fdw_state stays NULL. */
   if (!(eflags & EXEC_FLAG_EXPLAIN_ONLY)) {
     /* Get info about foreign table. */
-    #if PG_VERSION_NUM < 140000
-    rtindex           = estate->es_result_relation_info->ri_RangeTableIndex;
-    #else
     rtindex           = node->resultRelInfo->ri_RangeTableIndex;
-    #endif
     foreigntable      = (fsplan->scan.scanrelid == 0) ? ExecOpenScanRelation(estate, rtindex, eflags) : node->ss.ss_currentRelation;
       /* We'll save private state in node->fdw_state. */
     dmstate           = db2GetFdwDirectModifyState(foreigntable->rd_id, NULL, false);

@@ -17,11 +17,6 @@
 #include "DB2FdwState.h"
 #include "DB2FdwPathExtraData.h"
 
-#if PG_VERSION_NUM < 140000
-/* source-code-compatibility hacks for pull_varnos() API change */
-#define make_restrictinfo(a,b,c,d,e,f,g,h,i) make_restrictinfo_new(a,b,c,d,e,f,g,h,i)
-#endif
-
 /** external prototypes */
 extern List*              build_tlist_to_deparse    (PlannerInfo* root, RelOptInfo* foreignrel);
 extern char*              deparseExpr               (PlannerInfo* root, RelOptInfo* foreignrel, Expr* expr, List** params);
@@ -1145,38 +1140,18 @@ void estimate_path_cost_size(PlannerInfo* root, RelOptInfo* foreignrel, List* pa
       /* Get rows from input rel */
       input_rows = ofpinfo->rows;
       /* Collect statistics about aggregates for estimating costs. */
-      #if PG_VERSION_NUM < 140000
-      MemSet(&aggcosts, 0, sizeof(AggClauseCosts));
-      if (root->parse->hasAggs) {
-        get_agg_clause_costs(root, (Node *) fpinfo->grouped_tlist, AGGSPLIT_SIMPLE, &aggcosts);
-        /* The cost of aggregates in the HAVING qual will be the same for each child as it is for the parent, so there's no need
-         * to use a translated version of havingQual.
-         */
-        get_agg_clause_costs(root, (Node *) root->parse->havingQual, AGGSPLIT_SIMPLE, &aggcosts);
-      }
-      #else
       if (root->parse->hasAggs) {
         get_agg_clause_costs(root, AGGSPLIT_SIMPLE, &aggcosts);
       }
-      #endif
       /* Get number of grouping columns and possible number of groups */
       #if PG_VERSION_NUM < 160000
       numGroupCols = list_length(root->parse->groupClause);
-      #if PG_VERSION_NUM < 140000
-      numGroups    = estimate_num_groups( root
-                                        , get_sortgrouplist_exprs( root->parse->groupClause
-                                                                 , fpinfo->grouped_tlist
-                                                                 )
-                                        , input_rows, NULL
-                                        );
-      #else
       numGroups    = estimate_num_groups( root
                                         , get_sortgrouplist_exprs( root->parse->groupClause
                                                                  , fpinfo->grouped_tlist
                                                                  )
                                         , input_rows, NULL, NULL
                                         );
-      #endif
       #else
       numGroupCols = list_length(root->processed_groupClause);
       numGroups    = estimate_num_groups( root

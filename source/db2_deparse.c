@@ -657,11 +657,34 @@ static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_
       break;
       case T_ScalarArrayOpExpr: {
         ScalarArrayOpExpr *oe = (ScalarArrayOpExpr *) node;
-  
+        Expr              *lastarg;
+
         // Again, only shippable operators can be sent to remote.
         if (!is_shippable(oe->opno, OperatorRelationId, fpinfo))
           return false;
-  
+
+        /*
+         * Also make sure deparseScalarArrayOpExpr() will actually be able to
+         * translate the array argument; otherwise the clause would be deemed
+         * shippable here but deparse to nothing, corrupting the pushed-down
+         * WHERE clause (same concern as isTranslatableOpExpr() above). The
+         * array argument must be a Const, a literal ArrayExpr, or an
+         * ArrayCoerceExpr binary-coercing a literal ArrayExpr -- anything
+         * else, such as the Param/SubPlan produced for
+         * "col = ANY (ARRAY(SELECT ...))", can't be rendered as a literal
+         * IN-list and must be evaluated locally instead.
+         */
+        lastarg = (Expr *) llast(oe->args);
+        if (IsA(lastarg, ArrayCoerceExpr)) {
+          ArrayCoerceExpr *ace = (ArrayCoerceExpr *) lastarg;
+
+          if (ace->elemexpr && ace->elemexpr->type != T_RelabelType)
+            return false;
+          lastarg = ace->arg;
+        }
+        if (!IsA(lastarg, Const) && !IsA(lastarg, ArrayExpr))
+          return false;
+
         // Recurse to input subexpressions.
         if (!foreign_expr_walker((Node *) oe->args, glob_cxt, &inner_cxt, case_arg_cxt))
           return false;
@@ -2631,6 +2654,18 @@ static void deparseScalarArrayOpExpr (ScalarArrayOpExpr* expr, deparse_expr_cxt*
               }
               /* the actual array is here */
               rightexpr = arraycoerce->arg;
+              /* rightexpr is only guaranteed to be an ArrayExpr (a literal array
+               * constructor) here. For an array-typed sub-select, e.g.
+               * "col = ANY (ARRAY(SELECT ...))", the planner produces a Param
+               * (or, if correlated, a SubPlan) wrapped in this ArrayCoerceExpr
+               * instead. Treating that as an ArrayExpr below would misinterpret
+               * its memory layout and crash, so bail out and evaluate locally.
+               */
+              if (rightexpr->type != T_ArrayExpr) {
+                db2Debug2("arraycoerce->arg->type(%d) is not T_ArrayExpr", rightexpr->type);
+                bResult = false;
+                break;
+              }
             }
             /* fall through ! */
             case T_ArrayExpr: {
@@ -3653,11 +3688,7 @@ static void deparseLockingClause(deparse_expr_cxt *context) {
      *
      * Note: because we actually run the query as a cursor, this assumes that DECLARE CURSOR ... FOR UPDATE is supported, which it isn't before 8.3.
      */
-    #if PG_VERSION_NUM < 140000
-    if (relid == root->parse->resultRelation && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)) {
-    #else
     if (bms_is_member(relid, root->all_result_relids) && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)) {
-    #endif
       /* Relation is UPDATE/DELETE target, so use FOR UPDATE */
       appendStringInfoString(buf, " FOR UPDATE");
 
