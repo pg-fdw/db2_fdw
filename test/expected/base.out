@@ -52,6 +52,7 @@ IMPORT FOREIGN SCHEMA
  sample | cl_sched            | sample | (schema 'DB2INST1', "table" 'CL_SCHED')            | [NULL]
  sample | clobtest            | sample | (schema 'DB2INST1', "table" 'CLOBTEST')            | [NULL]
  sample | clobutf16           | sample | (schema 'DB2INST1', "table" 'CLOBUTF16')           | [NULL]
+ sample | clobutf16           | sample | (schema 'DB2INST1', "table" 'CLOBUTF16')           | [NULL]
  sample | customer            | sample | (schema 'DB2INST1', "table" 'CUSTOMER')            | [NULL]
  sample | dataxml             | sample | (schema 'DB2INST1', "table" 'DATAXML')             | [NULL]
  sample | department          | sample | (schema 'DB2INST1', "table" 'DEPARTMENT')          | [NULL]
@@ -2150,6 +2151,234 @@ SELECT PERCENTILE_DISC(0.11) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_1
           1100 |          1200 |          1300 |          1400 |          1500 |          1600 |          1700 |          1800 |          1900 |          2000 |          2100
 (1 row)
 
+EXPLAIN (verbose)
+SELECT PERCENTILE_CONT(0.11) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_1
+     , PERCENTILE_CONT(0.12) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_2
+     , PERCENTILE_CONT(0.13) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_3
+     , PERCENTILE_CONT(0.14) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_4
+     , PERCENTILE_CONT(0.15) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_5
+     , PERCENTILE_CONT(0.16) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_6
+     , PERCENTILE_CONT(0.17) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_7
+     , PERCENTILE_CONT(0.18) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_8
+     , PERCENTILE_CONT(0.19) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_9
+     , PERCENTILE_CONT(0.20) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_1_0
+     , PERCENTILE_CONT(0.21) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_1_1
+       FROM sample.tbcfileentry;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=112.80..148.65 rows=1 width=88)
+   Output: (percentile_cont('0.11'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision))), (percentile_cont('0.12'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision))), (percentile_cont('0.13'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision))), (percentile_cont('0.14'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision))), (percentile_cont('0.15'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision))), (percentile_cont('0.16'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision))), (percentile_cont('0.17'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision))), (percentile_cont('0.18'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision))), (percentile_cont('0.19'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision))), (percentile_cont('0.2'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision))), (percentile_cont('0.21'::double precision) WITHIN GROUP (ORDER BY ((tbcfientid)::double precision)))
+   DB2 query: SELECT PERCENTILE_CONT(0.11) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.12) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.13) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.14) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.15) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.16) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.17) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.18) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.19) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.2) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.21) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC) FROM "DB2INST1"."TBCFILEENTRY"
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 11.5, 5622-044 (c) Copyright IBM Corp. 1991, 2019
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 12.1, 5622-044 (c) Copyright IBM Corp. 1991, 2022
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: ******************** DYNAMIC ***************************************
+   DB2 plan: 
+   DB2 plan: ==================== STATEMENT ==========================================
+   DB2 plan: 
+   DB2 plan:     Isolation Level          = Cursor Stability
+   DB2 plan:     Blocking                 = Block Unambiguous Cursors
+   DB2 plan:     Query Optimization Class = 5
+   DB2 plan: 
+   DB2 plan:     Partition Parallel       = No
+   DB2 plan:     Intra-Partition Parallel = No
+   DB2 plan: 
+   DB2 plan:     SQL Path                 = "SYSIBM", "SYSFUN", "SYSPROC", "SYSIBMADM", 
+   DB2 plan:                                    "SYSHADOOP", "DB2INST1"
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: Statement:
+   DB2 plan:   
+   DB2 plan:   SELECT PERCENTILE_CONT(0.11)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.12)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.13)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.14)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.15)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.16)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.17)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.18)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.19)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.2)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_CONT(0.21)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC)
+   DB2 plan:   FROM "DB2INST1" ."TBCFILEENTRY" 
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: compiledInTenantID = 0
+   DB2 plan: 
+   DB2 plan: Section Code Page = 1208
+   DB2 plan: 
+   DB2 plan: Estimated Cost = 179,498245
+   DB2 plan: Estimated Cardinality = 1,000000
+   DB2 plan: 
+   DB2 plan: Access Table Name = DB2INST1.TBCFILEENTRY  ID = 3,16
+   DB2 plan: |  tenantID = 0
+   DB2 plan: |  Index Scan:  Name = DB2INST1.PK_TBCFILEENTRY  ID = 1
+   DB2 plan: |  |  Regular Index (Not Clustered)
+   DB2 plan: |  |  Index Columns:
+   DB2 plan: |  |  |  1: TBCFIENTID (Ascending)
+   DB2 plan: |  #Columns = 1
+   DB2 plan: |  Skip Inserted Rows
+   DB2 plan: |  Avoid Locking Committed Data
+   DB2 plan: |  Currently Committed for Cursor Stability
+   DB2 plan: |  #Key Columns = 0
+   DB2 plan: |  |  Start Key: Beginning of Index
+   DB2 plan: |  |  Stop Key: End of Index
+   DB2 plan: |  Index-Only Access
+   DB2 plan: |  Index Prefetch: Sequential(26), Readahead
+   DB2 plan: |  Lock Intents
+   DB2 plan: |  |  Table: Intent Share
+   DB2 plan: |  |  Row  : Next Key Share
+   DB2 plan: |  Sargable Index Predicate(s)
+   DB2 plan: |  |  Predicate Aggregation
+   DB2 plan: |  |  |  Column Function(s)
+   DB2 plan: Aggregation Completion
+   DB2 plan: |  Column Function(s)
+   DB2 plan: Return Data to Application
+   DB2 plan: |  #Columns = 11
+   DB2 plan: 
+   DB2 plan: End of section
+   DB2 plan: 
+   DB2 plan: 
+(80 rows)
+
+SELECT PERCENTILE_CONT(0.11) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_1
+     , PERCENTILE_CONT(0.12) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_2
+     , PERCENTILE_CONT(0.13) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_3
+     , PERCENTILE_CONT(0.14) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_4
+     , PERCENTILE_CONT(0.15) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_5
+     , PERCENTILE_CONT(0.16) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_6
+     , PERCENTILE_CONT(0.17) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_7
+     , PERCENTILE_CONT(0.18) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_8
+     , PERCENTILE_CONT(0.19) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_9
+     , PERCENTILE_CONT(0.20) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_1_0
+     , PERCENTILE_CONT(0.21) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_1_1
+       FROM sample.tbcfileentry;
+ perc_cont_0_1 | perc_cont_0_2 | perc_cont_0_3 | perc_cont_0_4 | perc_cont_0_5 | perc_cont_0_6 | perc_cont_0_7 | perc_cont_0_8 | perc_cont_0_9 | perc_cont_1_0 | perc_cont_1_1 
+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------
+       1100.89 |       1200.88 |       1300.87 |       1400.86 |       1500.85 |       1600.84 |       1700.83 |       1800.82 |       1900.81 |        2000.8 |       2100.79
+(1 row)
+
+EXPLAIN (verbose)
+SELECT PERCENTILE_DISC(0.11) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_1
+     , PERCENTILE_DISC(0.12) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_2
+     , PERCENTILE_DISC(0.13) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_3
+     , PERCENTILE_DISC(0.14) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_4
+     , PERCENTILE_DISC(0.15) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_5
+     , PERCENTILE_DISC(0.16) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_6
+     , PERCENTILE_DISC(0.17) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_7
+     , PERCENTILE_DISC(0.18) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_8
+     , PERCENTILE_DISC(0.19) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_9
+     , PERCENTILE_DISC(0.20) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_1_0
+     , PERCENTILE_DISC(0.21) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_1_1
+       FROM sample.tbcfileentry;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=106.40..142.25 rows=1 width=88)
+   Output: (percentile_disc('0.11'::double precision) WITHIN GROUP (ORDER BY tbcfientid)), (percentile_disc('0.12'::double precision) WITHIN GROUP (ORDER BY tbcfientid)), (percentile_disc('0.13'::double precision) WITHIN GROUP (ORDER BY tbcfientid)), (percentile_disc('0.14'::double precision) WITHIN GROUP (ORDER BY tbcfientid)), (percentile_disc('0.15'::double precision) WITHIN GROUP (ORDER BY tbcfientid)), (percentile_disc('0.16'::double precision) WITHIN GROUP (ORDER BY tbcfientid)), (percentile_disc('0.17'::double precision) WITHIN GROUP (ORDER BY tbcfientid)), (percentile_disc('0.18'::double precision) WITHIN GROUP (ORDER BY tbcfientid)), (percentile_disc('0.19'::double precision) WITHIN GROUP (ORDER BY tbcfientid)), (percentile_disc('0.2'::double precision) WITHIN GROUP (ORDER BY tbcfientid)), (percentile_disc('0.21'::double precision) WITHIN GROUP (ORDER BY tbcfientid))
+   DB2 query: SELECT PERCENTILE_DISC(0.11) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.12) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.13) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.14) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.15) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.16) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.17) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.18) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.19) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.2) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.21) WITHIN GROUP (ORDER BY "TBCFIENTID" ASC) FROM "DB2INST1"."TBCFILEENTRY"
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 11.5, 5622-044 (c) Copyright IBM Corp. 1991, 2019
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: DB2 Universal Database Version 12.1, 5622-044 (c) Copyright IBM Corp. 1991, 2022
+   DB2 plan: Licensed Material - Program Property of IBM
+   DB2 plan: IBM DB2 Universal Database SQL and XQUERY Explain Tool
+   DB2 plan: 
+   DB2 plan: ******************** DYNAMIC ***************************************
+   DB2 plan: 
+   DB2 plan: ==================== STATEMENT ==========================================
+   DB2 plan: 
+   DB2 plan:     Isolation Level          = Cursor Stability
+   DB2 plan:     Blocking                 = Block Unambiguous Cursors
+   DB2 plan:     Query Optimization Class = 5
+   DB2 plan: 
+   DB2 plan:     Partition Parallel       = No
+   DB2 plan:     Intra-Partition Parallel = No
+   DB2 plan: 
+   DB2 plan:     SQL Path                 = "SYSIBM", "SYSFUN", "SYSPROC", "SYSIBMADM", 
+   DB2 plan:                                    "SYSHADOOP", "DB2INST1"
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: Statement:
+   DB2 plan:   
+   DB2 plan:   SELECT PERCENTILE_DISC(0.11)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.12)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.13)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.14)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.15)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.16)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.17)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.18)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.19)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.2)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC), PERCENTILE_DISC(0.21)WITHIN 
+   DB2 plan:   GROUP (ORDER BY "TBCFIENTID" ASC)
+   DB2 plan:   FROM "DB2INST1" ."TBCFILEENTRY" 
+   DB2 plan: 
+   DB2 plan: 
+   DB2 plan: compiledInTenantID = 0
+   DB2 plan: 
+   DB2 plan: Section Code Page = 1208
+   DB2 plan: 
+   DB2 plan: Estimated Cost = 179,498245
+   DB2 plan: Estimated Cardinality = 1,000000
+   DB2 plan: 
+   DB2 plan: Access Table Name = DB2INST1.TBCFILEENTRY  ID = 3,16
+   DB2 plan: |  tenantID = 0
+   DB2 plan: |  Index Scan:  Name = DB2INST1.PK_TBCFILEENTRY  ID = 1
+   DB2 plan: |  |  Regular Index (Not Clustered)
+   DB2 plan: |  |  Index Columns:
+   DB2 plan: |  |  |  1: TBCFIENTID (Ascending)
+   DB2 plan: |  #Columns = 1
+   DB2 plan: |  Skip Inserted Rows
+   DB2 plan: |  Avoid Locking Committed Data
+   DB2 plan: |  Currently Committed for Cursor Stability
+   DB2 plan: |  #Key Columns = 0
+   DB2 plan: |  |  Start Key: Beginning of Index
+   DB2 plan: |  |  Stop Key: End of Index
+   DB2 plan: |  Index-Only Access
+   DB2 plan: |  Index Prefetch: Sequential(26), Readahead
+   DB2 plan: |  Lock Intents
+   DB2 plan: |  |  Table: Intent Share
+   DB2 plan: |  |  Row  : Next Key Share
+   DB2 plan: |  Sargable Index Predicate(s)
+   DB2 plan: |  |  Predicate Aggregation
+   DB2 plan: |  |  |  Column Function(s)
+   DB2 plan: Aggregation Completion
+   DB2 plan: |  Column Function(s)
+   DB2 plan: Return Data to Application
+   DB2 plan: |  #Columns = 11
+   DB2 plan: 
+   DB2 plan: End of section
+   DB2 plan: 
+   DB2 plan: 
+(80 rows)
+
+SELECT PERCENTILE_DISC(0.11) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_1
+     , PERCENTILE_DISC(0.12) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_2
+     , PERCENTILE_DISC(0.13) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_3
+     , PERCENTILE_DISC(0.14) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_4
+     , PERCENTILE_DISC(0.15) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_5
+     , PERCENTILE_DISC(0.16) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_6
+     , PERCENTILE_DISC(0.17) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_7
+     , PERCENTILE_DISC(0.18) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_8
+     , PERCENTILE_DISC(0.19) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_0_9
+     , PERCENTILE_DISC(0.20) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_1_0
+     , PERCENTILE_DISC(0.21) WITHIN GROUP (ORDER BY tbcfientid) AS Perc_Cont_1_1
+       FROM sample.tbcfileentry;
+ perc_cont_0_1 | perc_cont_0_2 | perc_cont_0_3 | perc_cont_0_4 | perc_cont_0_5 | perc_cont_0_6 | perc_cont_0_7 | perc_cont_0_8 | perc_cont_0_9 | perc_cont_1_0 | perc_cont_1_1 
+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------
+          1100 |          1200 |          1300 |          1400 |          1500 |          1600 |          1700 |          1800 |          1900 |          2000 |          2100
+(1 row)
+
 --
 -- END of TC015
 --
@@ -3449,6 +3678,9 @@ select empno, translate(lastname,'AEIOU','12345') from sample.employee where tra
 --
 -- TC019: test using a query as table for a fdw table
 --
+DROP FOREIGN TABLE IF EXISTS sample.percent;
+psql:test/sql/tc019.sql:4: HINWEIS:  Fremdtabelle »percent« existiert nicht, wird übersprungen
+DROP FOREIGN TABLE
 DROP FOREIGN TABLE IF EXISTS sample.percent;
 psql:test/sql/tc019.sql:4: HINWEIS:  Fremdtabelle »percent« existiert nicht, wird übersprungen
 DROP FOREIGN TABLE

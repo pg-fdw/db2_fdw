@@ -107,7 +107,26 @@ void db2GetForeignUpperPaths(PlannerInfo *root, UpperRelationKind stage, RelOptI
       fpinfo->stage    = stage;
       fpinfo->outerrel = input_rel;
 
-    }
+      /*
+       * IMPORTANT (mirrors the analogous fix in db2GetForeignJoinPaths.c):
+       * db2CloneFdwStateUpper() copies db2Table->npgcols from the input relation, i.e. the
+       * underlying base table's column count. convertTuple() uses (natts == db2Table->npgcols)
+       * as a heuristic for "is this a plain 1:1 base-table select" and, if so, indexes result
+       * columns by pgattnum instead of resnum.
+       *
+       * An upper relation's output list (grouping/aggregation, DISTINCT, ORDER BY, ...) is
+       * always a computed projection, never a raw base-table row, so that heuristic must never
+       * fire here. Left unfixed, it misfires whenever the projection's column count happens to
+       * coincide with the base table's column count -- e.g. a SELECT with N ordered-set
+       * aggregates (PERCENTILE_CONT/PERCENTILE_DISC) over an N-column table, where every
+       * aggregate borrows pgattnum from the same ORDER BY column and all N results collide into
+       * a single output slot, leaving the rest NULL.
+       *
+       * Force resnum-based mapping unconditionally for upper relations.
+       */
+      if (fpinfo->db2Table != NULL)
+        fpinfo->db2Table->npgcols = 0;
+    }    
     switch (stage) {
       case UPPERREL_SETOP:              // UNION/INTERSECT/EXCEPT
         db2Debug2("stage: %d - UPPERREL_SETOP", stage);
