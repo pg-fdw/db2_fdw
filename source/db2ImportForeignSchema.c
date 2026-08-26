@@ -233,9 +233,30 @@ static void generateForeignTableCreate(StringInfo buf, char* servername, char* l
         appendStringInfo (buf, "double precision");
         break;
       case DB2_DECFLOAT:
+        /*
+         * DB2 DECFLOAT is a decimal floating-point type with either 16 or
+         * 34 decimal digits of precision and no fixed scale.  Mapping it to
+         * PostgreSQL float(p) is lossy: PostgreSQL interprets float(1..24) as
+         * real, so the former colSize cap at 8 reduced every imported
+         * DECFLOAT column to about six decimal digits of precision.
+         *
+         * An unconstrained numeric preserves both DECFLOAT precisions and
+         * their variable scale.  A typmod such as numeric(34) would imply a
+         * scale of zero and would therefore be incorrect for fractional
+         * DECFLOAT values.
+         */
+        appendStringInfo (buf, "numeric");
+        break;
       case DB2_FLOAT:
-        db2Table->cols[i]->colSize = (db2Table->cols[i]->colSize > 8) ? 8 : db2Table->cols[i]->colSize;
-        appendStringInfo (buf, "float(%ld)", db2Table->cols[i]->colSize);
+        /*
+         * DB2 FLOAT without an explicit precision is double precision.  Even
+         * for FLOAT(p) with p <= 24, importing into PostgreSQL double
+         * precision is a lossless widening conversion.  PostgreSQL float(8)
+         * means real/float4 (the argument is binary precision, not bytes), so
+         * the former mapping silently rounded values with more than about six
+         * significant decimal digits.
+         */
+        appendStringInfo (buf, "double precision");
         break;
       case DB2_REAL:
         appendStringInfo (buf, "real");
