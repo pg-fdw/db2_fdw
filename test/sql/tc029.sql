@@ -23,6 +23,24 @@ WHERE n.nspname = 'sample'
   AND opt.option_name = 'db2type'
   AND opt.option_value = '-360';
 
+-- SQL_FLOAT is 6 in DB2 CLI.  PostgreSQL float(8) is real/float4, not an
+-- eight-byte float, so imported DB2 FLOAT columns must use float8.
+SELECT count(*) AS found_float_columns,
+       coalesce(bool_and(a.atttypid = 'double precision'::regtype), true)
+         AS all_float_columns_are_double_precision
+FROM pg_attribute a
+JOIN pg_class c
+  ON c.oid = a.attrelid
+JOIN pg_namespace n
+  ON n.oid = c.relnamespace
+CROSS JOIN LATERAL pg_options_to_table(a.attfdwoptions) opt
+WHERE n.nspname = 'sample'
+  AND c.relkind = 'f'
+  AND a.attnum > 0
+  AND NOT a.attisdropped
+  AND opt.option_name = 'db2type'
+  AND opt.option_value = '6';
+
 --
 -- END of TC029
 --

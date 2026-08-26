@@ -378,6 +378,7 @@ These conversions are automatically handled by db2_fdw:
     INTEGER                  | integer
     BIGINT                   | bigint
     DOUBLE                   | numeric,float
+    FLOAT                    | double precision
     DECFLOAT                 | numeric
     DATE                     | date
     TIMESTAMP                | timestamp

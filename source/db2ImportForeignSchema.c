@@ -248,8 +248,15 @@ static void generateForeignTableCreate(StringInfo buf, char* servername, char* l
         appendStringInfo (buf, "numeric");
         break;
       case DB2_FLOAT:
-        db2Table->cols[i]->colSize = (db2Table->cols[i]->colSize > 8) ? 8 : db2Table->cols[i]->colSize;
-        appendStringInfo (buf, "float(%ld)", db2Table->cols[i]->colSize);
+        /*
+         * DB2 FLOAT without an explicit precision is double precision.  Even
+         * for FLOAT(p) with p <= 24, importing into PostgreSQL double
+         * precision is a lossless widening conversion.  PostgreSQL float(8)
+         * means real/float4 (the argument is binary precision, not bytes), so
+         * the former mapping silently rounded values with more than about six
+         * significant decimal digits.
+         */
+        appendStringInfo (buf, "double precision");
         break;
       case DB2_REAL:
         appendStringInfo (buf, "real");
