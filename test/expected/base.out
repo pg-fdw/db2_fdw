@@ -451,7 +451,7 @@ select * from sample.sales;
 explain (analyze,verbose) select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=3.975..28.426 rows=41.00 loops=1)
+ Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=3.888..27.716 rows=41.00 loops=1)
    Output: a.empno, a.firstnme, a.midinit, a.lastname, a.workdept, a.phoneno, a.hiredate, a.job, a.edlevel, a.sex, a.birthdate, a.salary, a.bonus, a.comm, b.sales_date, b.sales_person, b.region, b.sales
    DB2 query: SELECT r1."EMPNO", r1."FIRSTNME", r1."MIDINIT", r1."LASTNAME", r1."WORKDEPT", r1."PHONENO", r1."HIREDATE", r1."JOB", r1."EDLEVEL", r1."SEX", r1."BIRTHDATE", r1."SALARY", r1."BONUS", r1."COMM", r2."SALES_DATE", r2."SALES_PERSON", r2."REGION", r2."SALES" FROM ("DB2INST1"."EMPLOYEE" r1 INNER JOIN "DB2INST1"."SALES" r2 ON (((r1."LASTNAME" = r2."SALES_PERSON"))))
    DB2 plan: 
@@ -541,8 +541,8 @@ explain (analyze,verbose) select * from sample.employee a, sample.sales b where 
    DB2 plan: 
  Planning:
    Buffers: shared hit=8
- Planning Time: 4.661 ms
- Execution Time: 30.457 ms
+ Planning Time: 4.603 ms
+ Execution Time: 29.761 ms
 (92 rows)
 
 select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
@@ -595,7 +595,7 @@ select * from sample.employee a, sample.sales b where a.lastname = b.sales_perso
 explain (analyze,verbose) select * from sample.employee a join sample.sales b on a.lastname = b.sales_person;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=1.879..25.188 rows=41.00 loops=1)
+ Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=1.944..25.870 rows=41.00 loops=1)
    Output: a.empno, a.firstnme, a.midinit, a.lastname, a.workdept, a.phoneno, a.hiredate, a.job, a.edlevel, a.sex, a.birthdate, a.salary, a.bonus, a.comm, b.sales_date, b.sales_person, b.region, b.sales
    DB2 query: SELECT r1."EMPNO", r1."FIRSTNME", r1."MIDINIT", r1."LASTNAME", r1."WORKDEPT", r1."PHONENO", r1."HIREDATE", r1."JOB", r1."EDLEVEL", r1."SEX", r1."BIRTHDATE", r1."SALARY", r1."BONUS", r1."COMM", r2."SALES_DATE", r2."SALES_PERSON", r2."REGION", r2."SALES" FROM ("DB2INST1"."EMPLOYEE" r1 INNER JOIN "DB2INST1"."SALES" r2 ON (((r1."LASTNAME" = r2."SALES_PERSON"))))
    DB2 plan: 
@@ -683,8 +683,8 @@ explain (analyze,verbose) select * from sample.employee a join sample.sales b on
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 4.589 ms
- Execution Time: 27.210 ms
+ Planning Time: 4.993 ms
+ Execution Time: 28.046 ms
 (90 rows)
 
 select * from sample.employee a join sample.sales b on a.lastname = b.sales_person;
@@ -819,7 +819,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
                                                                  QUERY PLAN                                                                 
 --------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=4.218..4.433 rows=1.00 loops=1)
+ Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=2.545..2.618 rows=1.00 loops=1)
    Output: (min(salary)), (max(salary)), (avg(salary)), (sum(((salary + comm) + bonus))), (count(*))
    DB2 query: SELECT MIN("SALARY"), MAX("SALARY"), AVG("SALARY"), SUM((("SALARY" + "COMM") + "BONUS")), COUNT(*) FROM "DB2INST1"."EMPLOYEE"
    DB2 plan: 
@@ -888,8 +888,8 @@ explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary 
    DB2 plan: 
  Planning:
    Buffers: shared hit=20
- Planning Time: 11.876 ms
- Execution Time: 8.481 ms
+ Planning Time: 3.316 ms
+ Execution Time: 3.726 ms
 (71 rows)
 
 select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
@@ -902,7 +902,7 @@ select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) fr
 explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
                                                                                    QUERY PLAN                                                                                    
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=2.444..2.972 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=2.726..3.303 rows=3.00 loops=1)
    Output: empno, firstnme, lastname, ((salary + bonus) + comm)
    DB2 query: SELECT "EMPNO", "FIRSTNME", "LASTNAME", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" > 43840.01)) AND (("LASTNAME" LIKE 'L%' ESCAPE '\'))
    DB2 plan: 
@@ -971,8 +971,8 @@ explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm
    DB2 plan: 
  Planning:
    Buffers: shared hit=3
- Planning Time: 3.081 ms
- Execution Time: 4.250 ms
+ Planning Time: 3.093 ms
+ Execution Time: 4.472 ms
 (71 rows)
 
 select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
@@ -1192,7 +1192,7 @@ SELECT count(*) FROM sample.employee;
 SELECT db2_close_connections();
 psql:test/sql/tc009.sql:5: FEHLER:  cannot release environment handle
 DETAIL:  SQLSTATE = HY010  SQLCODE = -99999
-line=34
+line=32
 file=source/db2FreeEnvHdl.c
 DIAG_COLUMN_NUMBER=-2
 DIAG_ROW_NUMBER=-2
@@ -1215,7 +1215,7 @@ SELECT count(*) FROM sample.employee;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee WHERE workdept IN ('A00','B01','E21') AND salary BETWEEN 40000 AND 70000 AND (lastname LIKE 'L%' OR lastname LIKE 'G%');
                                                                                                                                  QUERY PLAN                                                                                                                                 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..127.26 rows=1 width=90) (actual time=3.272..3.671 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..127.26 rows=1 width=90) (actual time=3.267..3.657 rows=3.00 loops=1)
    Output: empno, lastname, salary, workdept
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY", "WORKDEPT" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" >= 40000)) AND (("SALARY" <= 70000)) AND (("WORKDEPT"  IN ('A00', 'B01', 'E21'))) AND ((("LASTNAME" LIKE 'L%' ESCAPE '\') OR ("LASTNAME" LIKE 'G%' ESCAPE '\')))
    DB2 plan: 
@@ -1291,8 +1291,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee WH
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.778 ms
- Execution Time: 4.772 ms
+ Planning Time: 3.830 ms
+ Execution Time: 4.724 ms
 (78 rows)
 
 SELECT empno, lastname, salary FROM sample.employee WHERE workdept IN ('A00','B01','E21') AND salary BETWEEN 40000 AND 70000 AND (lastname LIKE 'L%' OR lastname LIKE 'G%') ORDER BY empno;
@@ -1325,7 +1325,7 @@ FROM sample.employee;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..101.11 rows=5 width=90) (actual time=1.929..2.526 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..101.11 rows=5 width=90) (actual time=1.759..2.342 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" FETCH FIRST 5 ROWS ONLY
    DB2 plan: 
@@ -1387,8 +1387,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LI
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.881 ms
- Execution Time: 3.667 ms
+ Planning Time: 2.262 ms
+ Execution Time: 3.343 ms
 (64 rows)
 
 SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
@@ -1404,7 +1404,7 @@ SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.05..101.16 rows=5 width=90) (actual time=2.319..2.942 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.05..101.16 rows=5 width=90) (actual time=2.329..2.973 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY
    DB2 plan: 
@@ -1468,8 +1468,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LI
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.296 ms
- Execution Time: 3.947 ms
+ Planning Time: 2.275 ms
+ Execution Time: 3.967 ms
 (66 rows)
 
 SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
@@ -1485,9 +1485,9 @@ SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
                                                                   QUERY PLAN                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=100.47..101.64 rows=5 width=90) (actual time=3.908..4.447 rows=5.00 loops=1)
+ Limit  (cost=100.47..101.64 rows=5 width=90) (actual time=2.407..2.938 rows=5.00 loops=1)
    Output: empno, lastname, salary
-   ->  Foreign Scan on sample.employee  (cost=100.00..267.96 rows=718 width=90) (actual time=3.637..4.442 rows=7.00 loops=1)
+   ->  Foreign Scan on sample.employee  (cost=100.00..267.96 rows=718 width=90) (actual time=2.148..2.935 rows=7.00 loops=1)
          Output: empno, lastname, salary
          DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" ORDER BY "SALARY" DESC NULLS FIRST, "EMPNO" ASC NULLS LAST
          DB2 plan: 
@@ -1570,8 +1570,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee OR
          DB2 plan: 
  Planning:
    Buffers: shared hit=12
- Planning Time: 5.240 ms
- Execution Time: 6.690 ms
+ Planning Time: 2.698 ms
+ Execution Time: 3.995 ms
 (87 rows)
 
 SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
@@ -1598,7 +1598,7 @@ PREPARE
 EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=2.532..2.605 rows=1.00 loops=1)
+ Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=2.208..2.275 rows=1.00 loops=1)
    Output: actno, actkwd, actdesc
    DB2 query: SELECT "ACTNO", "ACTKWD", "ACTDESC" FROM "DB2INST1"."ACT" WHERE (("ACTNO" = 10))
    DB2 plan: 
@@ -1671,8 +1671,8 @@ EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 1.237 ms
- Execution Time: 3.034 ms
+ Planning Time: 1.248 ms
+ Execution Time: 2.695 ms
 (75 rows)
 
 EXECUTE act_by_no(10);
@@ -1783,11 +1783,11 @@ VALUES  ( 581927,
           );
 INSERT 0 1
 SELECT * FROM sample.remotetable;
-  col1  |   col2   |   col3   |   col4   |  col5  |  col6  |   col7   |    col8    |   col9   |   col10    |  col11   | col12 | col13 | col14  | col15  | col16  | col17  | col18  | col19  | col20  | col21  | col22  | col23  |          col24           |  col25   | col26  | col27  | col28  
---------+----------+----------+----------+--------+--------+----------+------------+----------+------------+----------+-------+-------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------------------------+----------+--------+--------+--------
- 581927 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2026-09-04 | 09:56:15 | 2026-09-04 | 09:56:15 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2026-09-04 09:56:15.3596 | sometext | [NULL] | [NULL] | [NULL]
- 581928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988  | sometext | [NULL] | [NULL] | [NULL]
- 681928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   998 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988  | sometext | [NULL] | [NULL] | [NULL]
+  col1  |   col2   |   col3   |   col4   |  col5  |  col6  |   col7   |    col8    |   col9   |   col10    |  col11   | col12 | col13 | col14  | col15  | col16  | col17  | col18  | col19  | col20  | col21  | col22  | col23  |           col24            |  col25   | col26  | col27  | col28  
+--------+----------+----------+----------+--------+--------+----------+------------+----------+------------+----------+-------+-------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+----------------------------+----------+--------+--------+--------
+ 581927 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2026-09-04 | 10:44:05 | 2026-09-04 | 10:44:05 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2026-09-04 10:44:05.407763 | sometext | [NULL] | [NULL] | [NULL]
+ 581928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988    | sometext | [NULL] | [NULL] | [NULL]
+ 681928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   998 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988    | sometext | [NULL] | [NULL] | [NULL]
 (3 rows)
 
 DELETE FROM sample.remotetable where col1 = 581927;
@@ -1851,7 +1851,7 @@ FDW options: (schema 'DB2INST1', "table" 'TBCFILEENTRY_SAMPLE')
 EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry_sample;
                                                                                             QUERY PLAN                                                                                             
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.tbcfileentry_sample  (cost=100.00..124.74 rows=67 width=1196) (actual time=11.323..728.972 rows=693.00 loops=1)
+ Foreign Scan on sample.tbcfileentry_sample  (cost=100.00..124.74 rows=67 width=1196) (actual time=6.267..995.834 rows=1221.00 loops=1)
    Output: tbcfientid, filename, filepath, filesize, filetype, checksum, owner, created_at, modified_at, status, description
    DB2 query: SELECT "TBCFIENTID", "FILENAME", "FILEPATH", "FILESIZE", "FILETYPE", "CHECKSUM", "OWNER", "CREATED_AT", "MODIFIED_AT", "STATUS", "DESCRIPTION" FROM "DB2INST1"."TBCFILEENTRY_SAMPLE"
    DB2 plan: 
@@ -1901,8 +1901,8 @@ EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry_sample;
    DB2 plan: 
  Planning:
    Buffers: shared hit=59
- Planning Time: 9.429 ms
- Execution Time: 732.739 ms
+ Planning Time: 2.653 ms
+ Execution Time: 997.961 ms
 (52 rows)
 
 EXPLAIN (verbose) SELECT PERCENTILE_CONT(0.5)
@@ -2263,7 +2263,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select * from sample.employee where lastname between 'LUTZ' and 'LEE' order by lastname;
                                                                                                                                          QUERY PLAN                                                                                                                                          
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..114.56 rows=1 width=258) (actual time=2.878..2.879 rows=0.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..114.56 rows=1 width=258) (actual time=2.690..2.690 rows=0.00 loops=1)
    Output: empno, firstnme, midinit, lastname, workdept, phoneno, hiredate, job, edlevel, sex, birthdate, salary, bonus, comm
    DB2 query: SELECT "EMPNO", "FIRSTNME", "MIDINIT", "LASTNAME", "WORKDEPT", "PHONENO", "HIREDATE", "JOB", "EDLEVEL", "SEX", "BIRTHDATE", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("LASTNAME" >= 'LUTZ')) AND (("LASTNAME" <= 'LEE')) ORDER BY "LASTNAME" ASC NULLS LAST
    DB2 plan: 
@@ -2317,8 +2317,8 @@ explain (analyze,verbose) select * from sample.employee where lastname between '
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 4.269 ms
- Execution Time: 4.486 ms
+ Planning Time: 4.320 ms
+ Execution Time: 4.291 ms
 (56 rows)
 
 select * from sample.employee where lastname between 'LEE' and 'LUTZ' order by lastname;
@@ -2333,7 +2333,7 @@ select * from sample.employee where lastname between 'LEE' and 'LUTZ' order by l
 explain (analyze,verbose) select * from sample.employee where salary between 10000.00 and 60000.00 order by salary;
                                                                                                                                          QUERY PLAN                                                                                                                                         
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..114.56 rows=1 width=258) (actual time=3.825..17.846 rows=26.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..114.56 rows=1 width=258) (actual time=3.527..15.188 rows=26.00 loops=1)
    Output: empno, firstnme, midinit, lastname, workdept, phoneno, hiredate, job, edlevel, sex, birthdate, salary, bonus, comm
    DB2 query: SELECT "EMPNO", "FIRSTNME", "MIDINIT", "LASTNAME", "WORKDEPT", "PHONENO", "HIREDATE", "JOB", "EDLEVEL", "SEX", "BIRTHDATE", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" >= 10000.00)) AND (("SALARY" <= 60000.00)) ORDER BY "SALARY" ASC NULLS LAST
    DB2 plan: 
@@ -2419,8 +2419,8 @@ explain (analyze,verbose) select * from sample.employee where salary between 100
    DB2 plan: 
  Planning:
    Buffers: shared hit=4
- Planning Time: 5.248 ms
- Execution Time: 20.720 ms
+ Planning Time: 4.445 ms
+ Execution Time: 16.827 ms
 (88 rows)
 
 select * from sample.employee where salary between 10000.00 and 60000.00 order by salary;
@@ -2491,7 +2491,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select empno, lastname from sample.employee where substr(lastname,1,1) = 'L' order by empno;
                                                                  QUERY PLAN                                                                  
 ---------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.286..2.536 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.217..2.477 rows=3.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((substr("LASTNAME", 1, 1) = 'L')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -2573,8 +2573,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where subs
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 9.002 ms
- Execution Time: 3.455 ms
+ Planning Time: 3.058 ms
+ Execution Time: 3.444 ms
 (84 rows)
 
 select empno, lastname from sample.employee where substr(lastname,1,1) = 'L' order by empno;
@@ -2589,7 +2589,7 @@ select empno, lastname from sample.employee where substr(lastname,1,1) = 'L' ord
 explain (analyze,verbose) select empno, lastname from sample.employee where substr(lastname,2,3) = 'UTZ' order by empno;
                                                                   QUERY PLAN                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.332..2.636 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.128..2.196 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((substr("LASTNAME", 2, 3) = 'UTZ')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -2671,8 +2671,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where subs
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.866 ms
- Execution Time: 4.091 ms
+ Planning Time: 4.666 ms
+ Execution Time: 3.147 ms
 (84 rows)
 
 select empno, lastname from sample.employee where substr(lastname,2,3) = 'UTZ' order by empno;
@@ -2685,7 +2685,7 @@ select empno, lastname from sample.employee where substr(lastname,2,3) = 'UTZ' o
 explain (analyze,verbose) select empno, lastname from sample.employee where replace(lastname,'E','X') = 'LXX' order by empno;
                                                                      QUERY PLAN                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.271..2.345 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.197..2.265 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((replace("LASTNAME", 'E', 'X') = 'LXX')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -2767,8 +2767,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where repl
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.580 ms
- Execution Time: 3.308 ms
+ Planning Time: 3.069 ms
+ Execution Time: 3.210 ms
 (84 rows)
 
 select empno, lastname from sample.employee where replace(lastname,'E','X') = 'LXX' order by empno;
@@ -2781,7 +2781,7 @@ select empno, lastname from sample.employee where replace(lastname,'E','X') = 'L
 explain (analyze,verbose) select empno, lastname from sample.employee where lpad(lastname,10,'*') = '******LUTZ' order by empno;
                                                                       QUERY PLAN                                                                       
 -------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.137..2.203 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.158..2.232 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((lpad("LASTNAME", 10, '*') = '******LUTZ')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -2863,8 +2863,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where lpad
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.527 ms
- Execution Time: 3.438 ms
+ Planning Time: 3.073 ms
+ Execution Time: 3.182 ms
 (84 rows)
 
 select empno, lastname from sample.employee where lpad(lastname,10,'*') = '******LUTZ' order by empno;
@@ -2877,7 +2877,7 @@ select empno, lastname from sample.employee where lpad(lastname,10,'*') = '*****
 explain (analyze,verbose) select empno, lastname from sample.employee where rpad(lastname,10,'*') = 'LUTZ******' order by empno;
                                                                       QUERY PLAN                                                                       
 -------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.090..2.157 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.139..2.209 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((rpad("LASTNAME", 10, '*') = 'LUTZ******')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -2959,8 +2959,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where rpad
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.545 ms
- Execution Time: 3.332 ms
+ Planning Time: 3.102 ms
+ Execution Time: 3.151 ms
 (84 rows)
 
 select empno, lastname from sample.employee where rpad(lastname,10,'*') = 'LUTZ******' order by empno;
@@ -2973,7 +2973,7 @@ select empno, lastname from sample.employee where rpad(lastname,10,'*') = 'LUTZ*
 explain (analyze,verbose) select empno, lastname from sample.employee where strpos(lastname,'EE') = 2 order by empno;
                                                                 QUERY PLAN                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.195..2.274 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.201..2.267 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((INSTR("LASTNAME", 'EE') = 2)) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3055,8 +3055,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where strp
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.385 ms
- Execution Time: 3.227 ms
+ Planning Time: 3.313 ms
+ Execution Time: 3.212 ms
 (84 rows)
 
 select empno, lastname from sample.employee where strpos(lastname,'EE') = 2 order by empno;
@@ -3069,7 +3069,7 @@ select empno, lastname from sample.employee where strpos(lastname,'EE') = 2 orde
 explain (analyze,verbose) select empno, edlevel from sample.employee where mod(edlevel,2) = 0 order by empno;
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..138.23 rows=8 width=30) (actual time=2.124..5.158 rows=34.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..138.23 rows=8 width=30) (actual time=2.175..5.568 rows=34.00 loops=1)
    Output: empno, edlevel
    DB2 query: SELECT "EMPNO", "EDLEVEL" FROM "DB2INST1"."EMPLOYEE" WHERE ((mod("EDLEVEL", 2) = 0)) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3151,8 +3151,8 @@ explain (analyze,verbose) select empno, edlevel from sample.employee where mod(e
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.385 ms
- Execution Time: 6.113 ms
+ Planning Time: 2.968 ms
+ Execution Time: 6.551 ms
 (84 rows)
 
 select empno, edlevel from sample.employee where mod(edlevel,2) = 0 order by empno;
@@ -3234,7 +3234,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select empno, lastname from sample.employee where translate(lastname,'AEIOU','12345') = 'L5TZ' order by empno;
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.001..3.069 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=2.285..2.353 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((TRANSLATE("LASTNAME", '12345', 'AEIOU') = 'L5TZ')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3316,8 +3316,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where tran
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.067 ms
- Execution Time: 3.989 ms
+ Planning Time: 3.032 ms
+ Execution Time: 3.288 ms
 (84 rows)
 
 select empno, lastname from sample.employee where translate(lastname,'AEIOU','12345') = 'L5TZ' order by empno;
@@ -3330,7 +3330,7 @@ select empno, lastname from sample.employee where translate(lastname,'AEIOU','12
 explain (analyze,verbose) select empno, lastname from sample.employee where translate(lastname,'AEIOU','12345') = translate('LUTZ','AEIOU','12345') order by empno;
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=0.896..0.961 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=0.551..0.611 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((TRANSLATE("LASTNAME", '12345', 'AEIOU') = 'L5TZ')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3412,8 +3412,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where tran
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.101 ms
- Execution Time: 2.308 ms
+ Planning Time: 3.049 ms
+ Execution Time: 1.552 ms
 (84 rows)
 
 select empno, lastname from sample.employee where translate(lastname,'AEIOU','12345') = translate('LUTZ','AEIOU','12345') order by empno;
@@ -3426,7 +3426,7 @@ select empno, lastname from sample.employee where translate(lastname,'AEIOU','12
 explain (analyze,verbose) select empno, translate(lastname,'AEIOU','12345') from sample.employee where translate(lastname,'AEIOU','12345') = translate('LUTZ','AEIOU','12345') order by empno;
                                                                                                QUERY PLAN                                                                                               
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.14 rows=4 width=60) (actual time=2.416..2.493 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.14 rows=4 width=60) (actual time=2.160..2.228 rows=1.00 loops=1)
    Output: empno, (translate((lastname)::text, 'AEIOU'::text, '12345'::text))
    DB2 query: SELECT TRANSLATE("LASTNAME", '12345', 'AEIOU'), "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((TRANSLATE("LASTNAME", '12345', 'AEIOU') = 'L5TZ')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3507,8 +3507,8 @@ explain (analyze,verbose) select empno, translate(lastname,'AEIOU','12345') from
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.587 ms
- Execution Time: 3.496 ms
+ Planning Time: 3.301 ms
+ Execution Time: 3.237 ms
 (83 rows)
 
 select empno, translate(lastname,'AEIOU','12345') from sample.employee where translate(lastname,'AEIOU','12345') = translate('LUTZ','AEIOU','12345') order by empno;
@@ -3547,7 +3547,7 @@ FDW options: ("table" '(SELECT PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY TBCFI
 explain (analyze,verbose) select * from sample.percent;
                                                                 QUERY PLAN                                                                 
 -------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.percent  (cost=100.00..431.64 rows=1462 width=32) (actual time=2.613..2.678 rows=1.00 loops=1)
+ Foreign Scan on sample.percent  (cost=100.00..431.64 rows=1462 width=32) (actual time=2.233..2.340 rows=1.00 loops=1)
    Output: percent
    DB2 query: SELECT "PERCENT" FROM (SELECT PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY TBCFIENTID) AS percent FROM DB2INST1.TBCFILEENTRY)
    DB2 plan: 
@@ -3621,8 +3621,8 @@ explain (analyze,verbose) select * from sample.percent;
    DB2 plan: 
  Planning:
    Buffers: shared hit=9
- Planning Time: 2.711 ms
- Execution Time: 2.899 ms
+ Planning Time: 3.172 ms
+ Execution Time: 2.865 ms
 (76 rows)
 
 select * from sample.percent;
@@ -3667,7 +3667,7 @@ FDW options: ("table" '(SELECT PERCENTILE_CONT(0.10) WITHIN GROUP (ORDER BY TBCF
 explain (analyze,verbose) select * from sample.percent3;
                                                                                                                                                                        QUERY PLAN                                                                                                                                                                        
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.percent3  (cost=100.00..228.36 rows=538 width=128) (actual time=2.548..2.618 rows=1.00 loops=1)
+ Foreign Scan on sample.percent3  (cost=100.00..228.36 rows=538 width=128) (actual time=2.524..2.616 rows=1.00 loops=1)
    Output: p10, p11, p12, p13
    DB2 query: SELECT "P10", "P11", "P12", "P13" FROM (SELECT PERCENTILE_CONT(0.10) WITHIN GROUP (ORDER BY TBCFIENTID) AS p10,PERCENTILE_CONT(0.11) WITHIN GROUP (ORDER BY TBCFIENTID) AS p11,PERCENTILE_CONT(0.12) WITHIN GROUP (ORDER BY TBCFIENTID) AS p12,PERCENTILE_CONT(0.13) WITHIN GROUP (ORDER BY TBCFIENTID) AS p13 FROM DB2INST1.TBCFILEENTRY)
    DB2 plan: 
@@ -3744,8 +3744,8 @@ explain (analyze,verbose) select * from sample.percent3;
    DB2 plan: 
  Planning:
    Buffers: shared hit=24
- Planning Time: 4.034 ms
- Execution Time: 3.183 ms
+ Planning Time: 3.645 ms
+ Execution Time: 3.153 ms
 (79 rows)
 
 select * from sample.percent3;
