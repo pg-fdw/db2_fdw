@@ -5,10 +5,10 @@ select db2_diag();
 -- Install FDW Server
 CREATE SERVER IF NOT EXISTS sample FOREIGN DATA WRAPPER db2_fdw OPTIONS (dbserver 'SAMPLE');
 -- Map a user
-CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user 'db2inst1', password 'db2inst1');
+CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user 'db2app', password 's2+5=%-AT1X08Qb2Ix');
 
 -- Install FDW Server
 CREATE SERVER IF NOT EXISTS sample1 FOREIGN DATA WRAPPER db2_fdw OPTIONS (dbserver 'SAMPLE1');
 -- Map a user
-CREATE USER MAPPING FOR PUBLIC SERVER sample1 OPTIONS (user 'db2inst1', password 'db2inst1');
+CREATE USER MAPPING FOR PUBLIC SERVER sample1 OPTIONS (user 'db2app', password 's2+5=%-AT1X08Qb2Ix');
 

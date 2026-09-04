@@ -42,7 +42,7 @@ HdlEntry* db2AllocStmtHdl (SQLSMALLINT type, DB2ConnEntry* connp, db2error error
         db2Debug5("    ConnEntr             : %x",constep);
         db2Debug5("      dbAlias              : %s",constep->srvname);
         db2Debug5("      user                 : %s",constep->uid);
-        db2Debug5("      password             : %s",constep->pwd);
+        db2Debug5("      password             : %s",constep->pwd ? "***" : "(null)");
         db2Debug5("      xact_level           : %d",constep->xact_level);
         db2Debug5("      conattr              : %d",constep->conAttr);
         db2Debug5("      *handlelist          : %x",constep->handlelist);

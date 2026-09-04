@@ -13,6 +13,7 @@ extern char*        c2name              (short fcType);
        List*        serializePlanData   (DB2FdwState* fdwState);
 
 static char*        deserializeString   (Const* constant);
+static char*        deserializeSecretString (Const* constant);
 static long         deserializeLong     (Const* constant);
 static Const*       serializeString     (const char* s);
 static Const*       serializeLong       (long i);
@@ -45,9 +46,9 @@ DB2FdwState* deserializePlanData (List* list) {
   /* user */
   state->user              = deserializeString(list_nth(list, idx++));
   /* password */
-  state->password          = deserializeString(list_nth(list, idx++));
+  state->password          = deserializeSecretString(list_nth(list, idx++));
   /* jwt-token */
-  state->jwt_token         = deserializeString(list_nth(list, idx++));
+  state->jwt_token         = deserializeSecretString(list_nth(list, idx++));
   /* query */
   state->query             = deserializeString(list_nth(list, idx++));
   /* DB2 prefetch count */
@@ -198,6 +199,20 @@ static char* deserializeString (Const* constant) {
   if (!constant->constisnull)
     result = text_to_cstring (DatumGetTextP (constant->constvalue));
   db2Exit5(": '%s'", result);
+  return result;
+}
+
+/** deserializeSecretString
+ *   Like deserializeString, but for values that must never appear in the
+ *   server log (password, jwt_token): the debug trace logs a fixed
+ *   placeholder instead of the actual decoded value.
+ */
+static char* deserializeSecretString (Const* constant) {
+  char* result = NULL;
+  db2Entry5();
+  if (!constant->constisnull)
+    result = text_to_cstring (DatumGetTextP (constant->constvalue));
+  db2Exit5(": '%s'", result ? "***" : "(null)");
   return result;
 }
 

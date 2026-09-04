@@ -71,12 +71,12 @@ void db2EntryExit(int level, int entry, const char* message, ...) {
     vsnprintf (cBuffer, sizeof(cBuffer), message, arg_marker);
 
     if (entry == 1) {
-        db2Debug(level, cBuffer);
+        db2Debug(level, "%s", cBuffer);
         ++debug_depth;
 
     } else {
       --debug_depth;
-      db2Debug(level, cBuffer);
+      db2Debug(level, "%s", cBuffer);
     }
   }
 }

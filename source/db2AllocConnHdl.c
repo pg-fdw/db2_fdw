@@ -24,7 +24,7 @@ DB2ConnEntry* db2AllocConnHdl(DB2EnvEntry* envp,const char* srvname, char* user,
   SQLRETURN     rc      = 0;
   SQLHDBC       hdbc    = SQL_NULL_HDBC;
 
-  db2Entry1("(envp: %x, srvname: %s, user: %s, password: %s, jwt_token: %s)", envp, srvname,user, password, jwt_token ? "***" : "NULL");
+  db2Entry1("(envp: %x, srvname: %s, user: %s, password: %s, jwt_token: %s)", envp, srvname,user, password ? "***" : "NULL", jwt_token ? "***" : "NULL");
   /* search user session for this server in cache */
   connp = findconnEntry(envp->connlist, srvname, user, jwt_token);
   if (connp == NULL) {
@@ -98,7 +98,7 @@ DB2ConnEntry* db2AllocConnHdl(DB2EnvEntry* envp,const char* srvname, char* user,
       rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
       if (rc != SQL_SUCCESS) {
         db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection User: %s ,%s"            , user    , db2Message);
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection password: %s ,%s"        , password, db2Message);
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection password: %s ,%s"        , password ? "***" : "NULL", db2Message);
         db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection connectstring: %s ,%s"   , srvname , db2Message);
         db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection to foreign DB2 server,%s"          , db2Message);
       }
