@@ -36,7 +36,17 @@ jobs:
 
       - name: start DB2 (background)
         run: |
-          docker-compose up -d db2
+          n=0
+          until [ "$n" -ge 5 ]; do
+            docker-compose up -d db2 && break
+            n=$((n+1))
+            echo "docker-compose up -d db2 failed (attempt $n/5), retrying in 30s..."
+            sleep 30
+          done
+          if [ "$n" -ge 5 ]; then
+            echo "docker-compose up -d db2 failed after $n attempts"
+            exit 1
+          fi
         env:
           PGVERSION: ${{ matrix.pgversion }}
 
