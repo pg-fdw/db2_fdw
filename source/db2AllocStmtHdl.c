@@ -12,10 +12,6 @@
 /** external variables */
 extern DB2EnvEntry* rootenvEntry;          /* Cached handle for the (at most one) DB2 environment per backend. */
 
-/** external prototypes */
-extern void      db2Error             (db2error sqlstate, const char* message);
-extern void      db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
-
 /** inetrnal prototypes */
 HdlEntry*  db2AllocStmtHdl     (SQLSMALLINT type, DB2ConnEntry* connp, db2error error, const char* errmsg);
 
@@ -58,7 +54,7 @@ HdlEntry* db2AllocStmtHdl (SQLSMALLINT type, DB2ConnEntry* connp, db2error error
   }
   /* create entry for linked list */
   if ((entry = malloc (sizeof (HdlEntry))) == NULL) {
-    db2Error_d (FDW_OUT_OF_MEMORY, "error allocating handle:"," failed to allocate %d bytes of memory", sizeof (HdlEntry));
+    db2Error_df (FDW_OUT_OF_MEMORY, "error allocating handle:"," failed to allocate %zu bytes of memory", sizeof (HdlEntry));
   }
   db2Debug2("HdlEntry allocated: %x",entry);
   rc = SQLAllocHandle(type, connp->hdbc, &(entry->hsql));

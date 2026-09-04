@@ -225,6 +225,21 @@ extern int  isLogLevel  (int level);
 extern void db2EntryExit(int level, int entry, const char* message, ...) __attribute__ ((format (gnu_printf, 3, 0)));
 extern void db2Debug    (int level, const char* message, ...) __attribute__ ((format (gnu_printf, 2, 0)));
 
+/* db2Error/db2Error_d/db2Warning_d are declared centrally here (rather than
+ * redeclared ad hoc in every caller .c file) so the format-string attribute
+ * below is actually visible to the compiler at every call site, not just
+ * inside db2Debug.c where the functions are defined.
+ *
+ * db2Error_d takes its "detail" as a plain string - it is NOT a printf
+ * format string, so a DB2-supplied message (which may itself contain '%')
+ * can never be misinterpreted as one. Callers that genuinely need to
+ * interpolate values into the detail message must use db2Error_df, whose
+ * "fmt" argument is a real, compiler-checked printf format string. */
+extern void db2Error    (db2error sqlstate, const char* message);
+extern void db2Error_d  (db2error sqlstate, const char* message, const char* detail);
+extern void db2Error_df (db2error sqlstate, const char* message, const char* fmt, ...) __attribute__ ((format (gnu_printf, 3, 4)));
+extern void db2Warning_d(const char* message, const char* detail, ...) __attribute__ ((format (gnu_printf, 2, 3)));
+
 #define db2IsLogEnabled(level) \
     isLogLevel(level)
 

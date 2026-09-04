@@ -7,7 +7,6 @@
 extern char          db2Message[ERRBUFSIZE];/* contains DB2 error messages, set by db2CheckErr()             */
 
 /** external prototypes */
-extern void          db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern SQLRETURN     db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 extern HdlEntry*     db2AllocStmtHdl      (SQLSMALLINT type, DB2ConnEntry* connp, db2error error, const char* errmsg);
 extern void          db2FreeStmtHdl       (HdlEntry* handlep, DB2ConnEntry* connp);

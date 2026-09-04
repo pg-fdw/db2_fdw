@@ -9,8 +9,6 @@ extern char         db2Message[ERRBUFSIZE];/* contains DB2 error messages, set b
 
 /** external prototypes */
 extern SQLRETURN    db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
-extern void         db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
-
 /** internal prototypes */
 void                db2GetLob            (DB2Session* session, DB2ResultColumn* column, char** value, long* value_len);
 

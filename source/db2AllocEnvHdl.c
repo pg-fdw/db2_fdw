@@ -10,7 +10,6 @@ extern char         db2Message[ERRBUFSIZE];/* contains DB2 error messages, set b
 
 /** external prototypes */
 extern void      db2SetHandlers       (void);
-extern void      db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern SQLRETURN db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 
 /** local prototypes */
@@ -50,7 +49,7 @@ DB2EnvEntry* db2AllocEnvHdl(void){
   /* cache the (single) environment handle */
   envp           = malloc(sizeof(DB2EnvEntry));
   if (envp == NULL) {
-    db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %zu bytes of memory", sizeof (DB2EnvEntry));
+    db2Error_df (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %zu bytes of memory", sizeof (DB2EnvEntry));
   }
   envp->henv     = henv;
   envp->connlist = NULL;

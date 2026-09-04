@@ -12,7 +12,6 @@ extern int          err_code;              /* error code, set by db2CheckErr()  
 /** external prototypes */
 extern char*        db2CopyText           (const char* string, int size, int quote);
 extern SQLRETURN    db2CheckErr           (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
-extern void         db2Error_d            (db2error sqlstate, const char* message, const char* detail, ...);
 extern char*        c2name                (short fcType);
 extern HdlEntry*    db2AllocStmtHdl       (SQLSMALLINT type, DB2ConnEntry* connp, db2error error, const char* errmsg);
 extern void         db2FreeStmtHdl        (HdlEntry* handlep, DB2ConnEntry* connp);
@@ -256,8 +255,8 @@ DB2Table* describeForeignTable (DB2Session* session, char* schema, char* tabname
   rc= db2CheckErr(rc, stmthp->hsql, stmthp->type, __LINE__, __FILE__);
   if (rc != SQL_SUCCESS) {
     if (err_code == 942)
-      db2Error_d (FDW_TABLE_NOT_FOUND, "table not found",
-                  "DB2 table %s does not exist or does not allow read access;%s", tablename,
+      db2Error_df (FDW_TABLE_NOT_FOUND, "table not found",
+                  "DB2 table %s does not exist or does not allow read access;%s,%s", tablename,
                   db2Message, "DB2 table names are case sensitive (normally all uppercase).");
     else
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: SQLExecute failed to describe table", db2Message);

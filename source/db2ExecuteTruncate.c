@@ -10,7 +10,6 @@ extern int          err_code;              /* error code, set by db2CheckErr()  
 
 /** external prototypes */
 extern SQLRETURN    db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
-extern void         db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern HdlEntry*    db2AllocStmtHdl      (SQLSMALLINT type, DB2ConnEntry* connp, db2error error, const char* errmsg);
 
 /** internal prototypes */

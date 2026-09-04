@@ -5,8 +5,6 @@ extern char         db2Message[ERRBUFSIZE];/* contains DB2 error messages, set b
 extern DB2EnvEntry* rootenvEntry;          /* Cached handle for the (at most one) DB2 environment per backend. */
 
 /** external prototypes */
-extern void      db2Error             (db2error sqlstate, const char* message);
-extern void      db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern SQLRETURN db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 extern void      db2FreeStmtHdl       (HdlEntry* handlep, DB2ConnEntry* connp);
 

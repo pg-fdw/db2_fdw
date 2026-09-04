@@ -11,7 +11,6 @@ extern int          err_code;              /* error code, set by db2CheckErr()  
 
 /** external prototypes */
 extern SQLRETURN    db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
-extern void         db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern SQLSMALLINT  param2c              (SQLSMALLINT fcType);
 extern char*        c2name               (short fcType);
 extern void         db2BindParameter     (DB2Session* session, ParamDesc* param, SQLLEN* indicators, int param_count, int col_num);

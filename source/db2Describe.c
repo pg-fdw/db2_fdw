@@ -12,7 +12,6 @@ extern int          err_code;              /* error code, set by db2CheckErr()  
 /** external prototypes */
 extern bool         optionIsTrue         (const char* value);
 extern SQLRETURN    db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
-extern void         db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern char*        db2CopyText          (const char* string, int size, int quote);
 extern char*        c2name               (short fcType);
 extern HdlEntry*    db2AllocStmtHdl      (SQLSMALLINT type, DB2ConnEntry* connp, db2error error, const char* errmsg);
@@ -84,7 +83,7 @@ DB2Table* db2Describe (DB2Session* session, char* schema, char* table, char* pgn
   rc = db2CheckErr(rc, stmthp->hsql, stmthp->type, __LINE__, __FILE__);
   if (rc != SQL_SUCCESS) {
     if (err_code == 942)
-      db2Error_d (FDW_TABLE_NOT_FOUND, "table not found",
+      db2Error_df (FDW_TABLE_NOT_FOUND, "table not found",
                   "DB2 table %s for foreign table \"%s\" does not exist or does not allow read access;%s,%s", tablename, pgname,
                   db2Message, "DB2 table names are case sensitive (normally all uppercase).");
     else

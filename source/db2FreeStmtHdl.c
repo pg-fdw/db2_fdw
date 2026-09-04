@@ -3,7 +3,6 @@
 /** external variables */
 
 /** external prototypes */
-extern void      db2Error             (db2error sqlstate, const char* message);
 extern SQLRETURN db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 
 /** local prototypes */

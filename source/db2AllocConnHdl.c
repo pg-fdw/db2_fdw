@@ -7,11 +7,9 @@
 extern char      db2Message[ERRBUFSIZE];/* contains DB2 error messages, set by db2CheckErr()             */
 
 /** external prototypes */
-extern void      db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern void      db2RegisterCallback  (void* arg);
 extern SQLRETURN db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 extern int       guessDb2ClientCodepage(void);
-extern void      db2Warning_d         (const char* message, const char* detail, ...);
 
 /** local prototypes */
        DB2ConnEntry*    db2AllocConnHdl      (DB2EnvEntry* envp,const char* srvname, char* user, char* password, char* jwt_token);
@@ -87,8 +85,8 @@ DB2ConnEntry* db2AllocConnHdl(DB2EnvEntry* envp,const char* srvname, char* user,
       db2Debug2("connect to database(%s) with JWT token - rc: %d, hdbc: %d", srvname, rc, hdbc);
       rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
       if (rc != SQL_SUCCESS) {
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate with JWT token", " connection connectstring: %s ,%s", srvname, db2Message);
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate", " connection to foreign DB2 server,%s", db2Message);
+        db2Error_df (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate with JWT token", " connection connectstring: %s ,%s", srvname, db2Message);
+        db2Error_df (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate", " connection to foreign DB2 server,%s", db2Message);
       }
     } else {
       /* Traditional user/password authentication */
@@ -97,10 +95,10 @@ DB2ConnEntry* db2AllocConnHdl(DB2EnvEntry* envp,const char* srvname, char* user,
       db2Debug2("connect to database(%s) - rc: %d, hdbc: %d",srvname, rc, hdbc);
       rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
       if (rc != SQL_SUCCESS) {
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection User: %s ,%s"            , user    , db2Message);
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection password: %s ,%s"        , password ? "***" : "NULL", db2Message);
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection connectstring: %s ,%s"   , srvname , db2Message);
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection to foreign DB2 server,%s"          , db2Message);
+        db2Error_df (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection User: %s ,%s"            , user    , db2Message);
+        db2Error_df (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection password: %s ,%s"        , password ? "***" : "NULL", db2Message);
+        db2Error_df (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection connectstring: %s ,%s"   , srvname , db2Message);
+        db2Error_df (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection to foreign DB2 server,%s"          , db2Message);
       }
     }
 
@@ -112,7 +110,7 @@ DB2ConnEntry* db2AllocConnHdl(DB2EnvEntry* envp,const char* srvname, char* user,
       rc = SQLSetConnectAttr(hdbc, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER)SQL_AUTOCOMMIT_OFF, SQL_IS_UINTEGER);
       rc = db2CheckErr(rc, hdbc, SQL_HANDLE_DBC, __LINE__, __FILE__);
       if (rc != SQL_SUCCESS) {
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "failed to set autocommit=off"," connection to foreign DB2 server,%s", db2Message);
+        db2Error_df (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "failed to set autocommit=off"," connection to foreign DB2 server,%s", db2Message);
       }
       /* register callback for PostgreSQL transaction events */
       db2RegisterCallback (connp);

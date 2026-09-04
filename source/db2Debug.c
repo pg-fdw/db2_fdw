@@ -15,23 +15,36 @@ _Thread_local static int debug_depth = 0;
   (x==FDW_OUT_OF_MEMORY ? ERRCODE_FDW_OUT_OF_MEMORY : \
   (x==FDW_SERIALIZATION_FAILURE ? ERRCODE_T_R_SERIALIZATION_FAILURE : ERRCODE_FDW_ERROR))))))
 
-/** local prototype */
-void db2Error    (db2error sqlstate, const char* message);
-void db2Error_d  (db2error sqlstate, const char* message, const char* detail, ...) __attribute__ ((format (gnu_printf, 2, 0)));
-void db2Warning_d(const char* message, const char* detail, ...) __attribute__ ((format (gnu_printf, 2, 0)));
+/* db2Error/db2Error_d/db2Error_df/db2Warning_d are declared in db2_fdw.h,
+ * which is included above; that's also where the format-string attributes
+ * live, so they apply at every call site, not just here. */
 
 /* db2Error_d
- * Report a PostgreSQL error with a detail message.
+ * Report a PostgreSQL error with a detail message. "detail" is taken
+ * verbatim, as plain data - never as a printf format string - so a
+ * DB2-supplied or otherwise dynamic message can never be misinterpreted
+ * as one. Use db2Error_df for the (rarer) case that genuinely needs to
+ * interpolate values into the detail message.
  */
-void db2Error_d (db2error sqlstate, const char *message, const char *detail, ...) {
-  char    cBuffer [4000];
-  va_list arg_marker;
+void db2Error_d (db2error sqlstate, const char *message, const char *detail) {
   /* if the backend was terminated, report that rather than the DB2 error */
   CHECK_FOR_INTERRUPTS ();
-  va_start(arg_marker, detail);
-  vsnprintf(cBuffer, sizeof(cBuffer), detail, arg_marker);
-  ereport (ERROR, (errcode (to_sqlstate (sqlstate)), errmsg ("%s", message), errdetail ("%s", cBuffer)));
+  ereport (ERROR, (errcode (to_sqlstate (sqlstate)), errmsg ("%s", message), errdetail ("%s", detail)));
+}
+
+/* db2Error_df
+ * Like db2Error_d, but "fmt" is a real printf-style format string with
+ * its own arguments - for the cases that need to interpolate values into
+ * the detail message rather than just passing one value through verbatim.
+ */
+void db2Error_df (db2error sqlstate, const char *message, const char *fmt, ...) {
+  char    cBuffer [4000];
+  va_list arg_marker;
+  CHECK_FOR_INTERRUPTS ();
+  va_start(arg_marker, fmt);
+  vsnprintf(cBuffer, sizeof(cBuffer), fmt, arg_marker);
   va_end  (arg_marker);
+  ereport (ERROR, (errcode (to_sqlstate (sqlstate)), errmsg ("%s", message), errdetail ("%s", cBuffer)));
 }
 
 /* db2Warning_d

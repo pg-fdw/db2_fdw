@@ -10,8 +10,6 @@ extern char         db2Message[ERRBUFSIZE];/* contains DB2 error messages, set b
 extern DB2EnvEntry* rootenvEntry;          /* Cached handle for the (at most one) DB2 environment per backend. */
 
 /** external prototypes */
-extern void      db2Error             (db2error sqlstate, const char* message);
-extern void      db2Error_d           (db2error sqlstate, const char* message, const char* detail, ...);
 extern SQLRETURN db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 
 /** local prototypes */
@@ -33,7 +31,7 @@ void db2FreeEnvHdl(DB2EnvEntry* envp){
     db2Debug3("release env handle - rc: %d, henv: %d", rc, envp->henv);
     rc = db2CheckErr(rc, envp->henv, SQL_HANDLE_ENV,__LINE__, __FILE__);
     if (rc != SQL_SUCCESS) {
-      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot release environment handle","%s", db2Message);
+      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot release environment handle",db2Message);
     }
     db2Debug3("DB2Enventry freed: %x", envp);
     free (envp);
