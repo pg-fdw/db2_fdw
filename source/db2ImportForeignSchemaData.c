@@ -18,7 +18,7 @@ extern void         db2FreeStmtHdl        (HdlEntry* handlep, DB2ConnEntry* conn
 
 /** internal prototypes */
        bool         isForeignSchema       (DB2Session* session, char* schema);
-       char**       getForeignTableList   (DB2Session* session, char* schema, int list_type, char* table_list);
+       char**       getForeignTableList   (DB2Session* session, char* schema, int list_type, char* table_list, char* importtype);
        DB2Table*    describeForeignTable  (DB2Session* session, char* schema, char* tabname);
 static void         describeForeignColumns(DB2Session* session, char* schema, char* tabname, DB2Table* db2Table);
 
@@ -91,7 +91,7 @@ bool isForeignSchema(DB2Session* session, char* schema) {
  * Get the list of tables in the given schema on the remote DB2 database.
  * Returns an allocated array of table names, terminated by a NULL entry.
  */
-char** getForeignTableList(DB2Session* session, char* schema, int list_type, char* table_list){
+char** getForeignTableList(DB2Session* session, char* schema, int list_type, char* table_list, char* importtype){
   SQLRETURN   rc            = 0;
   HdlEntry*   stmtp         = NULL;
   SQLLEN      ind_s         = SQL_NTS;
@@ -100,27 +100,32 @@ char** getForeignTableList(DB2Session* session, char* schema, int list_type, cha
   SQLLEN      ind_tab;
   int         tabidx        = 0;
   char**      tabnames      = NULL;
-   db2Entry1("(schema: '%s', list_type: %d, table_list: '%s')", schema, list_type, table_list);
+  db2Entry1("(schema: '%s', list_type: %d, table_list: '%s')", schema, list_type, table_list);
+
+  if (importtype == NULL) {
+    importtype = "T','V";
+  }
+
   switch(list_type){
       case 0: {   /* FDW_IMPORT_SCHEMA_ALL      */
-        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T  WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('T','V') ORDER BY T.TABNAME";
-        int   s_len     = strlen(query_str)+1;
+        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T  WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('%s') ORDER BY T.TABNAME";
+        int   s_len     = strlen(query_str)+strlen(importtype)+1;
         column_query = db2alloc(s_len, "column_query");
-        strncpy(column_query,query_str,s_len);
+        snprintf(column_query,s_len,query_str,importtype);
       }
       break;
       case 1: {   /* FDW_IMPORT_SCHEMA_LIMIT_TO */
-        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('T','V') AND UPPER(T.TABNAME) IN (%s) ORDER BY T.TABNAME";
-        int   s_len     = strlen(query_str) + strlen(table_list) + 1;
+        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('%s') AND UPPER(T.TABNAME) IN (%s) ORDER BY T.TABNAME";
+        int   s_len     = strlen(query_str) + strlen(importtype) + strlen(table_list) + 1;
         column_query = db2alloc(s_len, "column_query");
-        snprintf(column_query,s_len,query_str,table_list);
+        snprintf(column_query,s_len,query_str,importtype,table_list);
       }
       break;
       case 2: {   /* FDW_IMPORT_SCHEMA_EXCEPT   */
-        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('T','V') AND UPPER(T.TABNAME) NOT IN (%s) ORDER BY T.TABNAME";
-        int   s_len     = strlen(query_str) + strlen(table_list) + 1;
+        char* query_str = "SELECT T.TABNAME FROM SYSCAT.TABLES T WHERE UPPER(T.TABSCHEMA) = UPPER(?) AND T.TYPE IN ('%s') AND UPPER(T.TABNAME) NOT IN (%s) ORDER BY T.TABNAME";
+        int   s_len     = strlen(query_str) + strlen(importtype) + strlen(table_list) + 1;
         column_query = db2alloc(s_len, "column_query");
-        snprintf(column_query,s_len,query_str,table_list);
+        snprintf(column_query,s_len,query_str,importtype,table_list);
       }
       break;
       default:
@@ -271,6 +276,7 @@ DB2Table* describeForeignTable (DB2Session* session, char* schema, char* tabname
   reply->batchsz = DEFAULT_BATCHSZ;
 
   /* get the number of columns */
+  /* TODO: Implement column count retrieval via Catalog Query */
   rc = SQLNumResultCols(stmthp->hsql, &ncols);
   rc = db2CheckErr(rc, stmthp->hsql, stmthp->type, __LINE__, __FILE__);
   if (rc  != SQL_SUCCESS) {

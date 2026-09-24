@@ -10,7 +10,7 @@
 extern DB2Session*    db2GetSession             (const char* connectstring, char* user, char* password, char* jwt_token, int curlevel);
 extern short          c2dbType                  (short fcType);
 extern bool           isForeignSchema           (DB2Session* session, char* schema);
-extern char**         getForeignTableList       (DB2Session* session, char* schema, int list_type, char* table_list);
+extern char**         getForeignTableList       (DB2Session* session, char* schema, int list_type, char* table_list, char* importtype);
 extern DB2Table*      describeForeignTable      (DB2Session* session, char* schema, char* tabname);
 extern bool           optionIsTrue              (const char* value);
 
@@ -24,18 +24,19 @@ static ForeignServer* getOptions                (Oid serverOid, List** options);
  * Returns a List of CREATE FOREIGN TABLE statements.
  */
 List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
-  char*               user      = NULL;
-  char*               password  = NULL;
-  char*               jwt_token = NULL;
-  char*               dbserver  = NULL;
-  List*               options   = NULL;
-  ListCell*           cell      = NULL;
-  DB2Session*         session   = NULL;
-  fold_t              foldcase  = CASE_SMART;
+  char*               user       = NULL;
+  char*               password   = NULL;
+  char*               jwt_token  = NULL;
+  char*               dbserver   = NULL;
+  List*               options    = NULL;
+  ListCell*           cell       = NULL;
+  DB2Session*         session    = NULL;
+  fold_t              foldcase   = CASE_SMART;
   StringInfoData      buf;
-  bool                readonly  = false;
-  List*               result    = NIL;
-  ForeignServer*      server    = NULL;
+  bool                readonly   = false;
+  char*               importtype = NULL;
+  List*               result     = NIL;
+  ForeignServer*      server     = NULL;
 
   db2Entry1();
   /* process the server options */
@@ -71,7 +72,14 @@ List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
       else
         ereport (ERROR, (errcode (ERRCODE_FDW_INVALID_ATTRIBUTE_VALUE), errmsg ("invalid value for option \"%s\"", def->defname),errhint ("Valid values in this context are: %s", "on, yes, true, off, no, false")));
       continue;
-    }
+    } else if (strcmp (def->defname, "importtype") == 0 ) {
+      char *s = STRVAL(def->arg);
+      if (pg_strcasecmp (s, "T") != 0 || pg_strcasecmp (s, "V") != 0 )
+        importtype = s;
+      else
+        ereport (ERROR, (errcode (ERRCODE_FDW_INVALID_ATTRIBUTE_VALUE), errmsg ("invalid value for option \"%s\"", def->defname),errhint ("Valid values in this context are: %s", "T, V")));
+      continue;
+    } else
     ereport (ERROR, (errcode (ERRCODE_FDW_INVALID_OPTION_NAME), errmsg ("invalid option \"%s\"", def->defname), errhint ("Valid options in this context are: %s", "case, readonly")));
   }
 
@@ -126,7 +134,7 @@ List* db2ImportForeignSchema (ImportForeignSchemaStmt* stmt, Oid serverOid) {
       }
       db2Debug2("import table_list: %s",tblist.data);
     }
-    tablist  = getForeignTableList(session, stmt->remote_schema, stmt->list_type, tblist.data);
+    tablist  = getForeignTableList(session, stmt->remote_schema, stmt->list_type, tblist.data, importtype);
     db2free (tblist.data,"tblist.data");
     for (int i = 0; tablist[i] != NULL; i++) {
       DB2Table* db2Table = describeForeignTable(session, stmt->remote_schema, tablist[i]);

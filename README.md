@@ -253,6 +253,27 @@ Foreign table options
   Providing this on a table level sets all columns to this value, diffenent from the system wide setting given
   explicitly or implicitly on the server.
 
+IMPORT FOREIGN SCHEMA ... OPTIONS options 
+---------------------------------------
+
+- **importtype** (optional)
+
+  If set to 'T' only tables will be imported.
+  If set to 'V' only views will be imported.
+  Just do not specify this option if both tables and views need to be imported.
+
+Examples:
+
+    -- Only import tables of schema DB2INST1
+    IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO sample2 OPTIONS (importtype 'T');
+    
+    -- Only import views of schema DB2INST1
+    IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO sample2 OPTIONS (importtype 'V');
+
+    -- Import both tables and views of schema DB2INST1
+    IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO sample2;
+
+
 
 Column options (from PostgreSQL 9.2 on)
 ---------------------------------------
