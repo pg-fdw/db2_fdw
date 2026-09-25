@@ -202,6 +202,9 @@ char** getForeignTableList(DB2Session* session, char* schema, int list_type, cha
 /* describeForeignTable
  * Find the remote DB2 table and describe it from the catalog (SYSCAT.COLUMNS).
  * Returns an allocated data structure with the results.
+ * The import deliberately reads only the catalog, so that tables the user has no SELECT privilege on can be
+ * imported as well. Reading such a table still fails, since the describe at query time (db2Describe.c) uses
+ * SQLDescribeCol on the actual query and thus checks the privilege.
  */
 DB2Table* describeForeignTable (DB2Session* session, char* schema, char* tabname) {
   DB2Table* reply = NULL;
