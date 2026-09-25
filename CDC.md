@@ -16,30 +16,30 @@ This creates separate tracking tables in the default schema (or a specified one)
 Because SYSPROC.AUDIT_DELIM_EXTRACT writes raw .del files directly to the file system, you cannot SELECT from them until they are ingested into the tables created in Step 1. [1, 4] 
 The following automated compound SQL block loops through your archived logs, extracts them, and loads them directly into the database tables. [1, 5] 
 
-BEGIN
-  DECLARE v_archive_dir VARCHAR(1024) DEFAULT '/home/db2inst1/audit_archive';
-  DECLARE v_extract_dir VARCHAR(1024) DEFAULT '/home/db2inst1/audit_extract';
-  DECLARE v_load_cmd    VARCHAR(2048);
+    BEGIN
+      DECLARE v_archive_dir VARCHAR(1024) DEFAULT '/home/db2inst1/audit_archive';
+      DECLARE v_extract_dir VARCHAR(1024) DEFAULT '/home/db2inst1/audit_extract';
+      DECLARE v_load_cmd    VARCHAR(2048);
 
-  -- 1. Archive the active log file (Generates a timestamped binary file)
-  CALL SYSPROC.AUDIT_ARCHIVE(v_archive_dir, -2);
+      -- 1. Archive the active log file (Generates a timestamped binary file)
+      CALL SYSPROC.AUDIT_ARCHIVE(v_archive_dir, -2);
 
-  -- 2. Process each archived file found in the directory
-  FOR log_row AS 
-    SELECT FILENAME FROM TABLE(SYSPROC.AUDIT_LIST_LOGS(v_archive_dir, -2)) AS T
-  DO
-    -- 3. Extract binary logs into flat .del files inside the extract directory
-    CALL SYSPROC.AUDIT_DELIM_EXTRACT('"', v_extract_dir, v_archive_dir, log_row.FILENAME, NULL);
-    
-    -- 4. Dynamically load the extracted category logs into your target tables.
-    -- (Repeat this block or loop through for other active categories like CONTEXT, CHECKING, etc.)
-    SET v_load_cmd = 'LOAD FROM ' || v_extract_dir || '/execute.del OF DEL INSERT INTO EXECUTE';
-    CALL SYSPROC.ADMIN_CMD(v_load_cmd);
-    
-    SET v_load_cmd = 'LOAD FROM ' || v_extract_dir || '/objmaint.del OF DEL INSERT INTO OBJMAINT';
-    CALL SYSPROC.ADMIN_CMD(v_load_cmd);
+      -- 2. Process each archived file found in the directory
+      FOR log_row AS 
+        SELECT FILENAME FROM TABLE(SYSPROC.AUDIT_LIST_LOGS(v_archive_dir, -2)) AS T
+      DO
+        -- 3. Extract binary logs into flat .del files inside the extract directory
+        CALL SYSPROC.AUDIT_DELIM_EXTRACT('"', v_extract_dir, v_archive_dir, log_row.FILENAME, NULL);
+        
+        -- 4. Dynamically load the extracted category logs into your target tables.
+        -- (Repeat this block or loop through for other active categories like CONTEXT, CHECKING, etc.)
+        SET v_load_cmd = 'LOAD FROM ' || v_extract_dir || '/execute.del OF DEL INSERT INTO EXECUTE';
+        CALL SYSPROC.ADMIN_CMD(v_load_cmd);
+        
+        SET v_load_cmd = 'LOAD FROM ' || v_extract_dir || '/objmaint.del OF DEL INSERT INTO OBJMAINT';
+        CALL SYSPROC.ADMIN_CMD(v_load_cmd);
 
-  END FOR;END @
+      END FOR;END @
 
 ## Parameter Breakdown for Stored Procedures:
 
@@ -73,3 +73,23 @@ To refine this automation, let me know:
 [7] [https://www.ibm.com](https://www.ibm.com/docs/en/db2-big-sql/7.1.0?topic=auditing-loading-analyzing-log-data-from-database-tables)
 [8] [https://www.ibm.com](https://www.ibm.com/docs/en/db2/11.1.0?topic=procedures-audit-delim-extract-performs-extract-delimited-file)
 [9] [https://www.ibm.com](https://www.ibm.com/docs/hu/SSEPGG_11.1.0/com.ibm.db2.luw.apdv.sample.doc/doc/admin_scripts/s-audit_UNIX-db2.html?view=kc)
+
+------------------------------
+## Step 4: Manual Test in local test environment
+
+    db2audit configure datapath /home/db2inst1/sqllib/security/auditdata archivepath /home/db2inst1/audit_archive
+    db2 connect to sample
+    db2 "CREATE AUDIT POLICY LOGALL CATEGORIES ALL STATUS BOTH ERROR TYPE AUDIT"
+    db2 "AUDIT DATABASE USING POLICY LOGALL"
+    db2 "CALL SYSPROC.AUDIT_DELIM_EXTRACT(NULL, NULL, NULL, NULL, NULL)"
+    db2 "CALL SYSPROC.ADMIN_CMD('LOAD FROM /home/db2inst1/audit_extract/audit.del OF DEL MODIFIED BY DELPRIORITYCHAR LOBSINFILE INSERT INTO DB2INST1.AUDIT');"
+    db2 "CALL SYSPROC.ADMIN_CMD('LOAD FROM /home/db2inst1/audit_extract/checking.del OF DEL MODIFIED BY DELPRIORITYCHAR LOBSINFILE INSERT INTO DB2INST1.CHECKING');"
+    db2 "CALL SYSPROC.ADMIN_CMD('LOAD FROM /home/db2inst1/audit_extract/context.del OF DEL MODIFIED BY DELPRIORITYCHAR LOBSINFILE INSERT INTO DB2INST1.CONTEXT');"
+    db2 "CALL SYSPROC.ADMIN_CMD('LOAD FROM /home/db2inst1/audit_extract/execute.del OF DEL MODIFIED BY DELPRIORITYCHAR LOBSINFILE INSERT INTO DB2INST1.EXECUTE');"
+    db2 "CALL SYSPROC.ADMIN_CMD('LOAD FROM /home/db2inst1/audit_extract/secmaint.del OF DEL MODIFIED BY DELPRIORITYCHAR LOBSINFILE INSERT INTO DB2INST1.SECMAINT');"
+    db2 "CALL SYSPROC.ADMIN_CMD('LOAD FROM /home/db2inst1/audit_extract/objmaint.del OF DEL MODIFIED BY DELPRIORITYCHAR LOBSINFILE INSERT INTO DB2INST1.OBJMAINT');"
+    db2 "CALL SYSPROC.ADMIN_CMD('LOAD FROM /home/db2inst1/audit_extract/validate.del OF DEL MODIFIED BY DELPRIORITYCHAR LOBSINFILE INSERT INTO DB2INST1.VALIDATE');"
+    db2 "AUDIT DATABASE REMOVE POLICY"
+    db2 "DROP AUDIT POLICY LOGALL"
+    db2audit stop
+    db2audit configure reset
