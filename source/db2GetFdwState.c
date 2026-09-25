@@ -352,7 +352,7 @@ static DB2Table* describeForeignTable (Oid foreigntableid, char* schema, char* t
         case SQL_BINARY:
         case SQL_VARBINARY:
         case SQL_LONGVARBINARY:
-          db2Table->cols[cidx]->val_size = bin_size;
+          db2Table->cols[cidx]->val_size = bin_size + 1;
         break;
         default:
         break;

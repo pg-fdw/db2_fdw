@@ -253,7 +253,7 @@ DB2Table* db2Describe (DB2Session* session, char* schema, char* table, char* pgn
       case SQL_BINARY:
       case SQL_VARBINARY:
       case SQL_LONGVARBINARY:
-        reply->cols[i - 1]->val_size = bin_size;
+        reply->cols[i - 1]->val_size = bin_size + 1;
       break;
       default:
       break;

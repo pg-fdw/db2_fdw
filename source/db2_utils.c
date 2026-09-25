@@ -84,6 +84,13 @@ SQLSMALLINT c2param (SQLSMALLINT fcType) {
       fparamType = SQL_C_CLOB_LOCATOR;
       db2Debug5("SQL_COB => SQL_C_CLOB_LOCATOR");
       break;
+    case SQL_BINARY:
+    case SQL_VARBINARY:
+    case SQL_LONGVARBINARY:
+      /* as SQL_C_CHAR, DB2 would deliver the bytes as hex text */
+      fparamType = SQL_C_BINARY;
+      db2Debug5("%s => SQL_C_BINARY",c2name(fcType));
+      break;
     default:
       /* all other columns are converted to strings */
       fparamType = SQL_C_CHAR;

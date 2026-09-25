@@ -215,16 +215,6 @@ void convertTuple (DB2Session* session, DB2ResultColumn* reslist, DB2TupleIndexM
           db2GetLob (session, res, &value, &value_len);
         }
         break;
-        case DB2_LONGVARBINARY: {
-          db2Debug5("DB2_LONGBINARY datatypes");
-          /* for LONG and LONG RAW, the first 4 bytes contain the length */
-          value_len = *((int32*) res->val);
-          /* the rest is the actual data */
-          value = res->val;
-          /* terminating zero byte (needed for LONGs) */
-          value[value_len] = '\0';
-        }
-        break;
         case DB2_FLOAT:
         case DB2_DECIMAL:
         case DB2_SMALLINT:

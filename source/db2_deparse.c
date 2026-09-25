@@ -503,7 +503,7 @@ static bool foreign_expr_walker(Node* node, foreign_glob_cxt* glob_cxt, foreign_
          * such constants, so reject every non-NULL constant that the deparser
          * cannot represent before it can leave an empty operand in remote SQL.
          */
-        if (!c->constisnull && canHandleType(c->consttype)) {
+        if (!c->constisnull && (canHandleType(c->consttype) || c->consttype == BYTEAOID)) {
           char* rendered = datumToString(c->constvalue, c->consttype);
 
           if (rendered == NULL)
@@ -2318,7 +2318,7 @@ static void deparseConstExpr         (Const*             expr, deparse_expr_cxt*
   db2Entry1();
   if (expr->constisnull) {
     /* only translate NULLs of a type DB2 can handle */
-    if (canHandleType (expr->consttype)) {
+    if (canHandleType (expr->consttype) || expr->consttype == BYTEAOID) {
       appendStringInfo (ctx->buf, "NULL");
     }
   } else {
@@ -3395,6 +3395,20 @@ static char* datumToString (Datum datum, Oid type) {
         return NULL;
       initStringInfo (&result);
       appendStringInfo (&result, "%s", str);
+    break;
+    case BYTEAOID: {
+      bytea* val = DatumGetByteaPP (datum);
+      int    len = VARSIZE_ANY_EXHDR (val);
+      int    i;
+      /* a DB2 hexadecimal binary literal holds at most 32672 hex digits */
+      if (len > 16336)
+        return NULL;
+      initStringInfo (&result);
+      appendStringInfoString (&result, "BX'");
+      for (i = 0; i < len; i++)
+        appendStringInfo (&result, "%02X", (unsigned char) VARDATA_ANY (val)[i]);
+      appendStringInfoChar (&result, '\'');
+    }
     break;
     default:
       return NULL;

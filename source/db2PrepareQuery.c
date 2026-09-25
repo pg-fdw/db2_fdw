@@ -146,6 +146,15 @@ void db2PrepareQuery (DB2Session* session, const char *query, DB2ResultColumn* r
     if (res->pgtype == UUIDOID) {
       fparamType = SQL_C_CHAR;
     }
+    /* binary columns mapped to a string type keep DB2's hex text representation, two characters per byte */
+    if (fparamType == SQL_C_BINARY && res->pgtype != BYTEAOID) {
+      fparamType = SQL_C_CHAR;
+      needed     = 2 * res->colBytes + 1;
+      if (res->val_size < needed) {
+        res->val = (char*) db2realloc(needed, res->val, "res->val");
+        res->val_size = needed;
+      }
+    }
 
     /*
      * For DECIMAL/NUMERIC/DECFLOAT results, avoid binding with SQLBindCol.

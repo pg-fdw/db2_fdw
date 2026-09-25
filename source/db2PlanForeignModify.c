@@ -416,6 +416,12 @@ void addParam (ParamDesc **paramList, DB2Column* db2col, int colnum, int txts) {
     case DB2_BLOB:
       param->bindType = BIND_LONGRAW;
     break;
+    case DB2_BINARY:
+    case DB2_VARBINARY:
+    case DB2_LONGVARBINARY:
+      /* bytea is sent as raw bytes, string types keep being sent as text */
+      param->bindType = (db2col->pgtype == BYTEAOID) ? BIND_LONGRAW : BIND_STRING;
+    break;
     default:
       param->bindType = BIND_STRING;
   }
@@ -443,8 +449,8 @@ void checkDataType (short sqltype, int scale, Oid pgtype, const char *tablename,
   db2Entry4();
   db2Debug4("checkDataType: %s.%s of sqltype: %d, db2type: %d, pgtype: %d",tablename,colname,sqltype, db2type, pgtype);
   /* the binary DB2 types can be converted to bytea */
-  if (db2type == DB2_BLOB && pgtype == BYTEAOID) {
-    db2Debug5("DB2_BLOB can be converted into BYTEAOID");
+  if ((db2type == DB2_BLOB || db2type == DB2_BINARY || db2type == DB2_VARBINARY || db2type == DB2_LONGVARBINARY) && pgtype == BYTEAOID) {
+    db2Debug5("DB2_BLOB, BINARY, VARBINARY, LONGVARBINARY can be converted into BYTEAOID");
   } else if (db2type == DB2_XML && pgtype == XMLOID) {
     db2Debug5("DB2_XML can be converted into XMLOID");
   } else if (db2type != DB2_UNKNOWN_TYPE && db2type != DB2_BLOB && (pgtype == TEXTOID || pgtype == VARCHAROID || pgtype == BPCHAROID)) {

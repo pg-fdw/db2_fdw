@@ -195,8 +195,10 @@ void setModifyParameters (ParamDesc *paramList, TupleTableSlot * newslot, TupleT
           datum = (Datum) PG_DETOAST_DATUM (datum);
           /* the first 4 bytes contain the length */
           value_len = VARSIZE (datum) - VARHDRSZ;
-          param->value = db2alloc(value_len,"param->value");
+          /* one extra (zeroed) byte terminates BIND_LONG values, which are bound with SQL_NTS */
+          param->value = db2alloc(value_len + 1,"param->value");
           memcpy (param->value, VARDATA(datum), value_len);
+          param->value_len = value_len;
           db2Debug2("param->value: %s (ought to be a LONG or LONGRAW)",param->value);
         }
       }

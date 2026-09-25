@@ -151,17 +151,18 @@ void db2BindParameter (DB2Session* session, ParamDesc* param, SQLLEN* indicator,
       break;
       case BIND_LONGRAW: {
         db2Debug3("param->bindType: BIND_LONGRAW");
-        *indicator = (SQLLEN) ((param->value == NULL) ? SQL_NULL_DATA : SQL_NTS);
+        /* binary data may contain zero bytes, so pass the real length instead of SQL_NTS */
+        *indicator = (SQLLEN) ((param->value == NULL) ? SQL_NULL_DATA : (SQLLEN) param->value_len);
         db2Debug2("param_ind       : %d",*indicator);
         rc = SQLBindParameter( session->stmtp->hsql
                              , col_num
                              , SQL_PARAM_INPUT
                              , SQL_C_BINARY
-                             , SQL_LONGVARBINARY
+                             , (param->colType == SQL_BLOB) ? SQL_LONGVARBINARY : param->colType
                              , param->colSize
                              , 0
                              , (SQLPOINTER) param->value
-                             , 0
+                             , (SQLLEN) param->value_len
                              , indicator
                              );
       }
