@@ -56,11 +56,14 @@ TupleTableSlot* db2IterateForeignScan (ForeignScanState* node) {
     /* convert result to arrays of values and null indicators */
     db2Debug2("slot->tts_tupleDescriptor->natts: %d",slot->tts_tupleDescriptor->natts);
     /*
-     * db2GetForeignPlan() supplies an fdw_scan_tlist, so PostgreSQL builds this
-     * slot in that list's order.  That is the DB2 SELECT/result order, not
-     * necessarily the base table's physical pgattnum order.
+     * With an fdw_scan_tlist, PostgreSQL builds this slot in that list's order,
+     * which is the DB2 SELECT/result order, not necessarily the base table's
+     * physical pgattnum order.  db2GetForeignPlan() omits the fdw_scan_tlist
+     * for scans needing a whole-row reference; then the slot has the table's
+     * own layout.
      */
-    convertTuple (fdw_state->session, fdw_state->resultList, DB2_TUPLE_INDEX_RESULT,
+    convertTuple (fdw_state->session, fdw_state->resultList,
+                  (((ForeignScan*) node->ss.ps.plan)->fdw_scan_tlist == NIL) ? DB2_TUPLE_INDEX_ATTRIBUTE : DB2_TUPLE_INDEX_RESULT,
                   slot->tts_tupleDescriptor->natts, slot->tts_values, slot->tts_isnull);
     /* store the virtual tuple */
     ExecStoreVirtualTuple (slot);

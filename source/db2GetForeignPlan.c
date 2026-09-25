@@ -11,6 +11,8 @@
 #include <optimizer/tlist.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
+#include <access/table.h>
+#include <utils/rel.h>
 #include "db2_fdw.h"
 #include "DB2FdwState.h"
 
@@ -53,6 +55,7 @@ ForeignScan* db2GetForeignPlan(PlannerInfo* root, RelOptInfo* foreignrel, Oid fo
   ListCell*      lc                = NULL;
   bool           has_final_sort    = false;
   bool           has_limit         = false;
+  bool           use_scan_tlist    = true;
   Index          scan_relid;
   StringInfoData sql;
 
@@ -166,6 +169,57 @@ ForeignScan* db2GetForeignPlan(PlannerInfo* root, RelOptInfo* foreignrel, Oid fo
             tlist = lappend(tlist, tle);
           }
         }
+      }
+    }
+
+    /*
+     * A whole-row reference (e.g. the "wholerow" junk column PostgreSQL adds to the scan of every UPDATE
+     * that is not pushed down) cannot be sent to DB2, which has no ROW() constructor.  If the scan list
+     * consists of plain columns of this relation only, select every column of the table instead and
+     * omit the fdw_scan_tlist: the scan tuple then has the table's own layout and PostgreSQL builds
+     * the whole-row value from it locally, like postgres_fdw does for base relations.
+     */
+    {
+      bool      has_wholerow = false;
+      bool      only_vars    = true;
+      ListCell* c            = NULL;
+
+      foreach (c, ptlist) {
+        Expr* e = (Expr*) lfirst(c);
+
+        if (IsA(e, TargetEntry))
+          e = ((TargetEntry*) e)->expr;
+        if (IsA(e, Var) && ((Var*) e)->varno == scan_relid && ((Var*) e)->varlevelsup == 0) {
+          if (((Var*) e)->varattno == 0)
+            has_wholerow = true;
+        } else {
+          only_vars = false;
+        }
+      }
+      if (has_wholerow && only_vars) {
+        Relation  rel     = table_open(foreigntableid, NoLock);
+        TupleDesc tupdesc = RelationGetDescr(rel);
+        List*     vars    = NIL;
+        int       attnum;
+
+        db2Debug3("whole-row reference: select all columns and use the relation's tuple layout");
+        for (attnum = 1; attnum <= tupdesc->natts; attnum++) {
+          Form_pg_attribute att    = TupleDescAttr(tupdesc, attnum - 1);
+          bool              in_db2 = false;
+          int               k;
+
+          if (att->attisdropped)
+            continue;
+          /* columns without a DB2 counterpart stay NULL in the scan tuple */
+          for (k = 0; k < fpinfo->db2Table->ncols && !in_db2; k++)
+            in_db2 = (fpinfo->db2Table->cols[k]->pgattnum == attnum);
+          if (in_db2)
+            vars = lappend(vars, makeVar(scan_relid, attnum, att->atttypid, att->atttypmod, att->attcollation, 0));
+        }
+        table_close(rel, NoLock);
+        ptlist         = add_to_flat_tlist(NIL, vars);
+        ptlist_len     = list_length(ptlist);
+        use_scan_tlist = false;
       }
     }
 
@@ -384,7 +438,7 @@ ForeignScan* db2GetForeignPlan(PlannerInfo* root, RelOptInfo* foreignrel, Oid fo
    * field of the finished plan node; we can't keep them in private state
    * because then they wouldn't be subject to later planner processing.
    */
-  fscan = make_foreignscan(tlist, local_exprs, scan_relid, params_list, fdw_private, ptlist, fdw_recheck_quals, outer_plan);
+  fscan = make_foreignscan(tlist, local_exprs, scan_relid, params_list, fdw_private, use_scan_tlist ? ptlist : NIL, fdw_recheck_quals, outer_plan);
   db2Exit1(": %x",fscan);
   return fscan;
 }

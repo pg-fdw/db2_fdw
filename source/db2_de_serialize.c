@@ -27,6 +27,7 @@ DB2FdwState* deserializePlanData (List* list) {
   int          i      = 0; 
   int          len    = 0;
   ParamDesc*   param  = NULL;
+  ParamDesc*   param_tail = NULL;
 
   db2Entry1();
   /* session will be set upon connect */
@@ -135,8 +136,13 @@ DB2FdwState* deserializePlanData (List* list) {
     db2Debug3("deserialize param[%d].colnum: %d"  ,i, param->colnum);
     param->txts      = (int) DatumGetInt32(((Const*)list_nth(list, idx++))->constvalue);
     db2Debug3("deserialize param[%d].txts: %d"  ,i, param->txts);
-    param->next      = state->paramList;
-    state->paramList = param;
+    /* keep the serialized order: it is the order of the '?' placeholders, db2ExecuteQuery() binds in list order */
+    param->next      = NULL;
+    if (param_tail == NULL)
+      state->paramList = param;
+    else
+      param_tail->next = param;
+    param_tail       = param;
   }
 
     /* length of parameter list */

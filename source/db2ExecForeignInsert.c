@@ -11,6 +11,8 @@ extern bool dml_in_transaction;
 
 /** external prototypes */
 extern int          db2ExecuteInsert          (DB2Session* session, ParamDesc* paramList);
+extern int          db2FetchNext              (DB2Session* session, DB2ResultColumn* resultList);
+extern void         db2CloseCursor            (DB2Session* session);
 extern void         setModifyParameters       (ParamDesc* paramList, TupleTableSlot* newslot, TupleTableSlot* oldslot, DB2Table* db2Table, DB2Session* session);
 extern void         convertTuple              (DB2Session* session, DB2ResultColumn* reslist, DB2TupleIndexMode index_mode, int natts, Datum* values, bool* nulls);
 
@@ -36,10 +38,17 @@ TupleTableSlot* db2ExecForeignInsert (EState* estate, ResultRelInfo* rinfo, Tupl
   oldcontext = MemoryContextSwitchTo (fdw_state->temp_cxt);
 
   /* extract the values from the slot and store them in the parameters */
-  setModifyParameters (fdw_state->paramList, slot, planSlot, fdw_state->db2Table, fdw_state->session);
+  /* an INSERT has no old row: all values, key columns included, come from the new row */
+  setModifyParameters (fdw_state->paramList, slot, NULL, fdw_state->db2Table, fdw_state->session);
 
-  /* execute the INSERT statement and store RETURNING values in db2Table's columns */
+  /* execute the INSERT statement */
   rows = db2ExecuteInsert (fdw_state->session, fdw_state->paramList);
+
+  /* with a RETURNING clause the statement is a SELECT ... FROM NEW/OLD TABLE (...): fetch its row, then close the cursor for the next execution */
+  if (fdw_state->resultList != NULL) {
+    rows = db2FetchNext (fdw_state->session, fdw_state->resultList);
+    db2CloseCursor (fdw_state->session);
+  }
 
   if (rows != 1)
     ereport (ERROR, (errcode (ERRCODE_FDW_UNABLE_TO_CREATE_EXECUTION), errmsg ("INSERT on DB2 table added %d rows instead of one in iteration %lu", rows, fdw_state->rowcount)));

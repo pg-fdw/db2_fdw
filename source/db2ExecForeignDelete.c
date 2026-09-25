@@ -11,6 +11,8 @@ extern regproc* output_funcs;
 
 /** external prototypes */
 extern int             db2ExecuteQuery           (DB2Session* session, ParamDesc* paramList);
+extern int          db2FetchNext              (DB2Session* session, DB2ResultColumn* resultList);
+extern void         db2CloseCursor            (DB2Session* session);
 extern void            db2Debug                  (int level, const char* message, ...);
 extern void            convertTuple              (DB2Session* session, DB2ResultColumn* reslist, DB2TupleIndexMode index_mode, int natts, Datum* values, bool* nulls);
 extern char*           deparseDate               (Datum datum);
@@ -41,8 +43,14 @@ TupleTableSlot* db2ExecForeignDelete (EState* estate, ResultRelInfo* rinfo, Tupl
   /* extract the values from the slot and store them in the parameters */
   setModifyParameters (fdw_state->paramList, slot, planSlot, fdw_state->db2Table, fdw_state->session);
 
-  /* execute the DELETE statement and store RETURNING values in db2Table's columns */
+  /* execute the DELETE statement */
   rows = db2ExecuteQuery (fdw_state->session, fdw_state->paramList);
+
+  /* with a RETURNING clause the statement is a SELECT ... FROM NEW/OLD TABLE (...): fetch its row, then close the cursor for the next execution */
+  if (fdw_state->resultList != NULL) {
+    rows = db2FetchNext (fdw_state->session, fdw_state->resultList);
+    db2CloseCursor (fdw_state->session);
+  }
 
   if (rows != 1)
     ereport ( ERROR
@@ -91,7 +99,8 @@ void setModifyParameters (ParamDesc *paramList, TupleTableSlot * newslot, TupleT
       continue;
     }
     db2Debug3("db2Table->cols[%d]->colPrimKeyPart: %d  ",param->colnum,db2Table->cols[param->colnum]->colPrimKeyPart);
-    if (db2Table->cols[param->colnum]->colPrimKeyPart != 0) {
+    /* key values come from the old row's junk columns, only UPDATE and DELETE have one (oldslot is NULL for INSERT) */
+    if (oldslot != NULL && db2Table->cols[param->colnum]->colPrimKeyPart != 0) {
       if (AttributeNumberIsValid(db2Table->cols[param->colnum]->pkey)) {
         db2Debug2("db2Table->cols[%d]->pkey: %d",param->colnum,db2Table->cols[param->colnum]->pkey);
         datum = ExecGetJunkAttribute (oldslot, db2Table->cols[param->colnum]->pkey, &isnull);
