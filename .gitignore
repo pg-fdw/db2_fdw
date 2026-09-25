@@ -3,5 +3,6 @@
 test.bash
 *.bc
 .vscode/
+.claude/
 rpms
 CLAUDE.md
