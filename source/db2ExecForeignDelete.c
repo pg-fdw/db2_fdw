@@ -11,6 +11,8 @@ extern regproc* output_funcs;
 
 /** external prototypes */
 extern int             db2ExecuteQuery           (DB2Session* session, ParamDesc* paramList);
+extern int          db2FetchNext              (DB2Session* session, DB2ResultColumn* resultList);
+extern void         db2CloseCursor            (DB2Session* session);
 extern void            db2Debug                  (int level, const char* message, ...);
 extern void            convertTuple              (DB2Session* session, DB2ResultColumn* reslist, DB2TupleIndexMode index_mode, int natts, Datum* values, bool* nulls);
 extern char*           deparseDate               (Datum datum);
@@ -41,8 +43,14 @@ TupleTableSlot* db2ExecForeignDelete (EState* estate, ResultRelInfo* rinfo, Tupl
   /* extract the values from the slot and store them in the parameters */
   setModifyParameters (fdw_state->paramList, slot, planSlot, fdw_state->db2Table, fdw_state->session);
 
-  /* execute the DELETE statement and store RETURNING values in db2Table's columns */
+  /* execute the DELETE statement */
   rows = db2ExecuteQuery (fdw_state->session, fdw_state->paramList);
+
+  /* with a RETURNING clause the statement is a SELECT ... FROM NEW/OLD TABLE (...): fetch its row, then close the cursor for the next execution */
+  if (fdw_state->resultList != NULL) {
+    rows = db2FetchNext (fdw_state->session, fdw_state->resultList);
+    db2CloseCursor (fdw_state->session);
+  }
 
   if (rows != 1)
     ereport ( ERROR
@@ -85,13 +93,9 @@ void setModifyParameters (ParamDesc *paramList, TupleTableSlot * newslot, TupleT
     db2Debug2("param->txts    : %d",param->txts);
     db2Debug2("param->type    : %d",param->type);
     db2Debug2("param->value   : %s - initial",param->value);
-    /* don't do anything for output parameters */
-    if (param->bindType == BIND_OUTPUT) {
-      db2Debug2("param->bindType: %d - BIND_OUTPUT - skipped",param->bindType);
-      continue;
-    }
     db2Debug3("db2Table->cols[%d]->colPrimKeyPart: %d  ",param->colnum,db2Table->cols[param->colnum]->colPrimKeyPart);
-    if (db2Table->cols[param->colnum]->colPrimKeyPart != 0) {
+    /* key values come from the old row's junk columns, only UPDATE and DELETE have one (oldslot is NULL for INSERT) */
+    if (oldslot != NULL && db2Table->cols[param->colnum]->colPrimKeyPart != 0) {
       if (AttributeNumberIsValid(db2Table->cols[param->colnum]->pkey)) {
         db2Debug2("db2Table->cols[%d]->pkey: %d",param->colnum,db2Table->cols[param->colnum]->pkey);
         datum = ExecGetJunkAttribute (oldslot, db2Table->cols[param->colnum]->pkey, &isnull);
@@ -195,8 +199,10 @@ void setModifyParameters (ParamDesc *paramList, TupleTableSlot * newslot, TupleT
           datum = (Datum) PG_DETOAST_DATUM (datum);
           /* the first 4 bytes contain the length */
           value_len = VARSIZE (datum) - VARHDRSZ;
-          param->value = db2alloc(value_len,"param->value");
+          /* one extra (zeroed) byte terminates BIND_LONG values, which are bound with SQL_NTS */
+          param->value = db2alloc(value_len + 1,"param->value");
           memcpy (param->value, VARDATA(datum), value_len);
+          param->value_len = value_len;
           db2Debug2("param->value: %s (ought to be a LONG or LONGRAW)",param->value);
         }
       }

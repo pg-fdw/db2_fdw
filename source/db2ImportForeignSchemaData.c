@@ -7,12 +7,11 @@
 
 /** external variables */
 extern char         db2Message[ERRBUFSIZE];/* contains DB2 error messages, set by db2CheckErr()             */
-extern int          err_code;              /* error code, set by db2CheckErr()                              */
 
 /** external prototypes */
-extern char*        db2CopyText           (const char* string, int size, int quote);
 extern SQLRETURN    db2CheckErr           (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
 extern char*        c2name                (short fcType);
+extern short        name2c                (char* typename);
 extern HdlEntry*    db2AllocStmtHdl       (SQLSMALLINT type, DB2ConnEntry* connp, db2error error, const char* errmsg);
 extern void         db2FreeStmtHdl        (HdlEntry* handlep, DB2ConnEntry* connp);
 
@@ -21,6 +20,9 @@ extern void         db2FreeStmtHdl        (HdlEntry* handlep, DB2ConnEntry* conn
        char**       getForeignTableList   (DB2Session* session, char* schema, int list_type, char* table_list, char* importtype);
        DB2Table*    describeForeignTable  (DB2Session* session, char* schema, char* tabname);
 static void         describeForeignColumns(DB2Session* session, char* schema, char* tabname, DB2Table* db2Table);
+static void         catalog2Column        (DB2Column* col, char* colname, char* typename, int length, short scale, int codepage, char* stringunits, int unitslength, char nulls);
+static void         setValSize            (DB2Column* col);
+static int          getForeignTableColNum (DB2Session* session, char* schema, char* tabname);
 
 /* isForeignSchema
  * Check if the given schema exists in the remote DB2 database.
@@ -198,246 +200,43 @@ char** getForeignTableList(DB2Session* session, char* schema, int list_type, cha
 }
 
 /* describeForeignTable
- * Find the remote DB2 table and describes it.
+ * Find the remote DB2 table and describe it from the catalog (SYSCAT.COLUMNS).
  * Returns an allocated data structure with the results.
+ * The import deliberately reads only the catalog, so that tables the user has no SELECT privilege on can be
+ * imported as well. Reading such a table still fails, since the describe at query time (db2Describe.c) uses
+ * SQLDescribeCol on the actual query and thus checks the privilege.
  */
 DB2Table* describeForeignTable (DB2Session* session, char* schema, char* tabname) {
-  DB2Table*   reply;
-  HdlEntry*   stmthp;
-  char*       qtable    = NULL;
-  char*       qschema   = NULL;
-  char*       tablename = NULL;
-  SQLCHAR*    query     = NULL;
-  int         i;
-  int         length;
-  SQLSMALLINT ncols;
-  SQLCHAR     colName[128];
-  SQLSMALLINT nameLen;
-  SQLSMALLINT dataType;
-  SQLULEN     colSize;
-  SQLLEN      charlen;
-  SQLLEN      bin_size;
-  SQLSMALLINT scale;
-  SQLSMALLINT nullable;
-  SQLINTEGER  codepage = 0;
-  SQLRETURN   rc = 0;
+  DB2Table* reply = NULL;
+  int       ncols = 0;
 
   db2Entry1("(schema: %s, tablename: %s)", schema, tabname);
-  /* get a complete quoted table name */
-  qtable = db2CopyText (tabname, strlen (tabname), 1);
-  length = strlen (qtable);
-  if (schema != NULL) {
-    qschema = db2CopyText (schema, strlen (schema), 1);
-    length += strlen (qschema) + 1;
+  /* the number of columns also tells whether the table exists */
+  ncols = getForeignTableColNum(session, schema, tabname);
+  if (ncols == 0) {
+    db2Error_df (FDW_TABLE_NOT_FOUND, "table not found",
+                 "DB2 table \"%s\".\"%s\" does not exist or has no columns;%s", schema, tabname,
+                 "DB2 table names are case sensitive (normally all uppercase).");
   }
-  tablename = db2alloc (length + 1,"tablename");
-  tablename[0] = '\0';		/* empty */
-  if (schema != NULL) {
-    strncat (tablename, qschema,length);
-    strncat (tablename, ".",length);
-  }
-  strncat (tablename, qtable,length);
-  db2free (qtable,"qtable");
-  if (schema != NULL)
-    db2free (qschema,"qschema");
-
-  /* construct a "SELECT * FROM ..." query to describe columns */
-  length += 40;
-  query = db2alloc (length + 1, "query");
-  snprintf ((char*)query, length+1, (char*)"SELECT * FROM %s FETCH FIRST 1 ROW ONLY", tablename);
-
-  /* create statement handle */
-  stmthp = db2AllocStmtHdl(SQL_HANDLE_STMT, session->connp, FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: failed to allocate statement handle");
-
-  /* prepare the query */
-  rc = SQLPrepare(stmthp->hsql, query, SQL_NTS);
-  rc = db2CheckErr(rc, stmthp->hsql,stmthp->type, __LINE__, __FILE__);
-  if (rc != SQL_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: SQLPrepare failed to prepare query", db2Message);
-  }
-  /* execute the query */
-  rc = SQLExecute(stmthp->hsql);
-  rc= db2CheckErr(rc, stmthp->hsql, stmthp->type, __LINE__, __FILE__);
-  if (rc != SQL_SUCCESS) {
-    if (err_code == 942)
-      db2Error_df (FDW_TABLE_NOT_FOUND, "table not found",
-                  "DB2 table %s does not exist or does not allow read access;%s,%s", tablename,
-                  db2Message, "DB2 table names are case sensitive (normally all uppercase).");
-    else
-      db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: SQLExecute failed to describe table", db2Message);
-  }
-  db2free(query,"query");
 
   /* allocate an db2Table struct for the results */
   reply          = db2alloc (sizeof (DB2Table),"DB2Table* reply");
   reply->name    = tabname;
-  db2Debug2("table description");
-  db2Debug2("reply->name   : '%s'", reply->name);
   reply->batchsz = DEFAULT_BATCHSZ;
-
-  /* get the number of columns */
-  /* TODO: Implement column count retrieval via Catalog Query */
-  rc = SQLNumResultCols(stmthp->hsql, &ncols);
-  rc = db2CheckErr(rc, stmthp->hsql, stmthp->type, __LINE__, __FILE__);
-  if (rc  != SQL_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: SQLNumResultCols failed to get number of columns", db2Message);
-  }
-
-  reply->ncols = ncols;
-  reply->cols = (DB2Column**) db2alloc (sizeof (DB2Column*) *reply->ncols,"reply->cols(%d)",reply->ncols);
+  reply->ncols   = ncols;
+  reply->cols    = (DB2Column**) db2alloc (sizeof (DB2Column*) * reply->ncols,"reply->cols(%d)",reply->ncols);
+  db2Debug2("reply->name   : '%s'", reply->name);
   db2Debug2("reply->ncols  : %d", reply->ncols);
 
-  /* loop through the column list */
-  for (i = 1; i <= reply->ncols; ++i) {
-    /* allocate an db2Column struct for the column */
-    reply->cols[i - 1]                 = (DB2Column *) db2alloc (sizeof (DB2Column), "reply->cols[%d - 1]", i);
-    reply->cols[i - 1]->colPrimKeyPart = 0;
-    reply->cols[i - 1]->colCodepage    = 0;
-    reply->cols[i - 1]->pgname         = NULL;
-    reply->cols[i - 1]->pgattnum       = 0;
-    reply->cols[i - 1]->pgtype         = 0;
-    reply->cols[i - 1]->pgtypmod       = 0;
-    reply->cols[i - 1]->used           = 0;
-    reply->cols[i - 1]->pkey           = 0;
-    reply->cols[i - 1]->noencerr       = NO_ENC_ERR_NULL;
-
-    /* get the parameter descriptor for the column */
-    rc = SQLDescribeCol(stmthp->hsql
-                       , i                  // index of column in table
-                       , (SQLCHAR*)&colName // column name
-                       , sizeof(colName)    // buffer length
-                       , &nameLen           // column name length
-                       , &dataType          // column data type
-                       , &colSize           // column data type size
-                       , &scale             // column data type precision
-                       , &nullable          // column nullable
-                       );
-    rc = db2CheckErr(rc, stmthp->hsql, stmthp->type, __LINE__, __FILE__);
-    if (rc != SQL_SUCCESS) {
-      db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: SQLDescribeCol failed to get column data", db2Message);
-    }
-    reply->cols[i - 1]->colName  = db2strdup((char*)colName,"reply->cols[%d - 1]->colName",i);
-    db2Debug2("reply->cols[%d]->colName  : '%s'", (i-1), reply->cols[i - 1]->colName);
-    db2Debug2("dataType: %d", dataType);
-    reply->cols[i - 1]->colType  = (short)  dataType;
-    if (dataType == -7){
-      // datatype -7 does not exist it seems to be used for SQL_BOOLEAN wrongly
-      reply->cols[i - 1]->colType = SQL_BOOLEAN;
-    }
-    db2Debug2("reply->cols[%d]->colType  : %d (%s)", (i-1), reply->cols[i - 1]->colType,c2name(reply->cols[i - 1]->colType));
-    reply->cols[i - 1]->colSize  = (size_t) colSize;
-    db2Debug2("reply->cols[%d]->colSize  : %ld", (i-1), reply->cols[i - 1]->colSize);
-    reply->cols[i - 1]->colScale = (short)  scale;
-    db2Debug2("reply->cols[%d]->colScale : %d", (i-1), reply->cols[i - 1]->colScale);
-    reply->cols[i - 1]->colNulls = (short)  nullable;
-    db2Debug2("reply->cols[%d]->colNulls : %d", (i-1), reply->cols[i - 1]->colNulls);
-
-    /* get the number of characters for string fields */
-    rc = SQLColAttribute (stmthp->hsql, i, SQL_DESC_PRECISION, NULL, 0, NULL, &charlen);
-    rc = db2CheckErr(rc, stmthp->hsql, stmthp->type, __LINE__, __FILE__);
-    if (rc != SQL_SUCCESS) {
-      db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: SQLColAttribute failed to get column length", db2Message);
-    }
-    reply->cols[i - 1]->colChars = (size_t) charlen;
-    db2Debug2("reply->cols[%d]->colChars : %ld", (i-1), reply->cols[i - 1]->colChars);
-
-    /* get the binary length for RAW fields */
-    rc = SQLColAttribute (stmthp->hsql, i, SQL_DESC_OCTET_LENGTH, NULL, 0, NULL, &bin_size);
-    rc = db2CheckErr(rc, stmthp->hsql, stmthp->type, __LINE__, __FILE__);
-    if (rc != SQL_SUCCESS) {
-      db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: SQLColAttribute failed to get column size", db2Message);
-    }
-    reply->cols[i - 1]->colBytes = (size_t) bin_size;
-    db2Debug2("reply->cols[%d]->colBytes : %ld", (i-1), reply->cols[i - 1]->colBytes);
-
-    /* get the columns codepage */
-    rc = SQLColAttribute(stmthp->hsql, i, SQL_DESC_CODEPAGE, NULL, 0, NULL, (SQLPOINTER)&codepage);
-    rc = db2CheckErr(rc, stmthp->hsql, stmthp->type, __LINE__, __FILE__);
-    if (rc != SQL_SUCCESS) {
-      db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: SQLColAttribute failed to get column codepage", db2Message);
-    }
-    reply->cols[i - 1]->colCodepage = (int) codepage;
-    db2Debug2("reply->cols[%d]->colCodepage : %d", (i-1), reply->cols[i - 1]->colCodepage);
-
-    /* Unfortunately a LONG VARBINARY is of type LONG VARCHAR but the codepage is set to 0 */
-    if (reply->cols[i-1]->colType == SQL_LONGVARCHAR && reply->cols[i-1]->colCodepage == 0){
-      reply->cols[i-1]->colType = SQL_LONGVARBINARY;
-    }
-
-    /* determine db2Type and length to allocate */
-    switch (reply->cols[i - 1]->colType) {
-      case SQL_CHAR:
-      case SQL_VARCHAR:
-      case SQL_LONGVARCHAR:
-        reply->cols[i - 1]->val_size = bin_size + 1;
-      break;
-      case SQL_BLOB:
-      case SQL_CLOB:
-        reply->cols[i - 1]->val_size = bin_size + 1;
-      break;
-      case SQL_GRAPHIC:
-      case SQL_VARGRAPHIC:
-      case SQL_LONGVARGRAPHIC:
-      case SQL_WCHAR:
-      case SQL_WVARCHAR:
-      case SQL_WLONGVARCHAR:
-      case SQL_DBCLOB:
-        reply->cols[i - 1]->val_size = bin_size + 1;
-      break;
-      case SQL_BOOLEAN:
-        reply->cols[i - 1]->val_size = bin_size + 1;
-      break;
-      case SQL_INTEGER:
-      case SQL_SMALLINT:
-          reply->cols[i - 1]->val_size = charlen + 2;
-      break;
-      case SQL_NUMERIC:
-      case SQL_DECIMAL:
-        if (scale == 0)
-          reply->cols[i - 1]->val_size = bin_size + 1;
-        else
-          reply->cols[i - 1]->val_size = (scale > colSize ? scale : colSize) + 5;
-      break;
-      case SQL_REAL:
-      case SQL_DOUBLE:
-      case SQL_FLOAT:
-      case SQL_DECFLOAT:
-        reply->cols[i - 1]->val_size = 24 + 1;
-      break;
-      case SQL_TYPE_DATE:
-      case SQL_TYPE_TIME:
-      case SQL_TYPE_TIMESTAMP:
-      case SQL_TYPE_TIMESTAMP_WITH_TIMEZONE:
-        reply->cols[i - 1]->val_size = colSize + 1;
-      break;
-      case SQL_BIGINT:
-        reply->cols[i - 1]->val_size = 24 + 1;
-      break;
-      case SQL_XML:
-        reply->cols[i - 1]->val_size = LOB_CHUNK_SIZE + 1;
-      break;
-      case SQL_BINARY:
-      case SQL_VARBINARY:
-      case SQL_LONGVARBINARY:
-        reply->cols[i - 1]->val_size = bin_size;
-      break;
-      default:
-      break;
-    }
-    db2Debug2("reply->cols[%d]->val_size : %d", (i-1), reply->cols[i - 1]->val_size);
-  }
-  /* release statement handle, this takes care of the parameter handles */
-  db2FreeStmtHdl(stmthp, session->connp);
-  if (reply != NULL) {
-    /* get the primary key information for the table and mark the columns in the reply */
-    describeForeignColumns(session, schema, tabname, reply);
-  }
+  /* describe the columns */
+  describeForeignColumns(session, schema, tabname, reply);
   db2Exit1(": %x", reply);
   return reply;
 }
 
 /* describeForeignColumns
- * Get the primary key information for the given table and mark the columns in the reply.
+ * Describe the columns of the given table from SYSCAT.COLUMNS, including the primary key information.
+ * db2Table->cols must be allocated for db2Table->ncols columns; ncols is reduced if the catalog returns fewer rows.
  */
 static void describeForeignColumns(DB2Session* session, char* schema, char* tabname, DB2Table* db2Table) {
   int          colidx  = 0;
@@ -445,11 +244,39 @@ static void describeForeignColumns(DB2Session* session, char* schema, char* tabn
   SQLRETURN    rc      = 0;
   SQLSMALLINT  keyseq_val;
   SQLLEN       ind_key;
+  SQLCHAR      name_val[129];
+  SQLLEN       ind_name;
+  SQLCHAR      type_val[129];
+  SQLLEN       ind_type;
+  SQLINTEGER   len_val;
+  SQLLEN       ind_len;
+  SQLSMALLINT  scale_val;
+  SQLLEN       ind_scale;
   SQLSMALLINT  cp_val;
   SQLLEN       ind_cp;
+  SQLCHAR      units_val[12];
+  SQLLEN       ind_units;
+  SQLINTEGER   ulen_val;
+  SQLLEN       ind_ulen;
+  SQLCHAR      nulls_val[2];
+  SQLLEN       ind_nulls;
+  DB2Column*   col;
   SQLLEN       ind_s  = SQL_NTS;
   SQLLEN       ind_t  = SQL_NTS;
-  char*        query  = "SELECT COALESCE(C.KEYSEQ, 0) AS KEY, C.CODEPAGE FROM SYSCAT.COLUMNS C WHERE UPPER(C.TABSCHEMA) = UPPER(?) AND UPPER(C.TABNAME) = UPPER(?) AND COALESCE(C.HIDDEN,'') = '' ORDER BY C.COLNO";
+  /* The BASE* columns resolve a distinct type (METATYPE 'T') to its built-in source type, e.g. DB2SECURITYLABEL -> VARCHAR,
+   * so name2c() can map it; structured types (e.g. ST_GEOMETRY) keep their own name and map to SQL_UNKNOWN_TYPE.
+   * TYPEMODULENAME IS NULL excludes module-scoped types, which can share a name (e.g. CONNECTION) and are never column types.
+   * Schema and table name are compared exactly, like the quoted names of a SELECT: MYTAB and MyTab are different tables.
+   */
+  char*        query  = "SELECT COALESCE(C.KEYSEQ, 0) AS KEY, C.COLNAME"
+                        ", CASE WHEN D.METATYPE = 'T' THEN D.SOURCENAME ELSE C.TYPENAME END AS BASETYPE"
+                        ", CASE WHEN D.METATYPE = 'T' THEN D.LENGTH     ELSE C.LENGTH   END AS BASELENGTH"
+                        ", CASE WHEN D.METATYPE = 'T' THEN D.SCALE      ELSE C.SCALE    END AS BASESCALE"
+                        ", CASE WHEN D.METATYPE = 'T' THEN D.CODEPAGE   ELSE C.CODEPAGE END AS BASECODEPAGE"
+                        ", C.TYPESTRINGUNITS, C.STRINGUNITSLENGTH, C.NULLS"
+                        " FROM SYSCAT.COLUMNS C"
+                        " LEFT JOIN SYSCAT.DATATYPES D ON D.TYPESCHEMA = C.TYPESCHEMA AND D.TYPENAME = C.TYPENAME AND D.TYPEMODULENAME IS NULL"
+                        " WHERE C.TABSCHEMA = ? AND C.TABNAME = ? AND COALESCE(C.HIDDEN,'') = '' ORDER BY C.COLNO";
 
   db2Entry1("(schema: %s, tabname: %s)", schema, tabname);
   db2Debug2("query : '%s'", query);
@@ -485,12 +312,61 @@ static void describeForeignColumns(DB2Session* session, char* schema, char* tabn
   if (rc != SQL_SUCCESS) {
     db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindCol failed to define result for primary key", db2Message);
   }
-  /* bind result column 2 - CODEPAGE */
-  rc = SQLBindCol(stmtp->hsql, 2, SQL_C_SHORT, &cp_val, 0, &ind_cp);
+  /* bind result column 2 - COLNAME */
+  rc = SQLBindCol(stmtp->hsql, 2, SQL_C_CHAR, name_val, sizeof(name_val), &ind_name);
   db2Debug2("SQLBindCol2 rc : %d",rc);
   rc = db2CheckErr(rc, stmtp->hsql, stmtp->type,  __LINE__, __FILE__);
   if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindCol failed to define result for column name", db2Message);
+  }
+  /* bind result column 3 - BASETYPE */
+  rc = SQLBindCol(stmtp->hsql, 3, SQL_C_CHAR, type_val, sizeof(type_val), &ind_type);
+  db2Debug2("SQLBindCol3 rc : %d",rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type,  __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindCol failed to define result for base type", db2Message);
+  }
+  /* bind result column 4 - BASELENGTH */
+  rc = SQLBindCol(stmtp->hsql, 4, SQL_C_LONG, &len_val, 0, &ind_len);
+  db2Debug2("SQLBindCol4 rc : %d",rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type,  __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindCol failed to define result for length", db2Message);
+  }
+  /* bind result column 5 - BASESCALE */
+  rc = SQLBindCol(stmtp->hsql, 5, SQL_C_SHORT, &scale_val, 0, &ind_scale);
+  db2Debug2("SQLBindCol5 rc : %d",rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type,  __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindCol failed to define result for scale", db2Message);
+  }
+  /* bind result column 6 - BASECODEPAGE */
+  rc = SQLBindCol(stmtp->hsql, 6, SQL_C_SHORT, &cp_val, 0, &ind_cp);
+  db2Debug2("SQLBindCol6 rc : %d",rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type,  __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
     db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindCol failed to define result for codepage", db2Message);
+  }
+  /* bind result column 7 - TYPESTRINGUNITS */
+  rc = SQLBindCol(stmtp->hsql, 7, SQL_C_CHAR, units_val, sizeof(units_val), &ind_units);
+  db2Debug2("SQLBindCol7 rc : %d",rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type,  __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindCol failed to define result for string units", db2Message);
+  }
+  /* bind result column 8 - STRINGUNITSLENGTH */
+  rc = SQLBindCol(stmtp->hsql, 8, SQL_C_LONG, &ulen_val, 0, &ind_ulen);
+  db2Debug2("SQLBindCol8 rc : %d",rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type,  __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindCol failed to define result for string units length", db2Message);
+  }
+  /* bind result column 9 - NULLS */
+  rc = SQLBindCol(stmtp->hsql, 9, SQL_C_CHAR, nulls_val, sizeof(nulls_val), &ind_nulls);
+  db2Debug2("SQLBindCol9 rc : %d",rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type,  __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindCol failed to define result for nulls", db2Message);
   }
   /* execute the query and get the first result row */
   rc = SQLExecute (stmtp->hsql);
@@ -508,22 +384,38 @@ static void describeForeignColumns(DB2Session* session, char* schema, char* tabn
     db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLFetch failed to fetch result row", db2Message);
   }
   while(rc == SQL_SUCCESS || rc == SQL_SUCCESS_WITH_INFO) {
+    /* the columns were counted by a separate query, a concurrent ALTER TABLE could have added one since */
+    if (colidx >= db2Table->ncols) {
+      db2Debug2("catalog returned more columns than counted (%d), ignoring the rest", db2Table->ncols);
+      break;
+    }
 
-    db2Debug2("keyseq_val: %d, ind: %d", keyseq_val, ind_key);
-    db2Table->cols[colidx]->colPrimKeyPart = (ind_key   == SQL_NULL_DATA) ? 0 : (int) keyseq_val;
-    db2Debug2("cp_val    : %d, ind: %d", cp_val, ind_cp);
-    db2Table->cols[colidx]->colCodepage    = (ind_cp    == SQL_NULL_DATA) ? 0 : (int) cp_val;
+    col = (DB2Column*) db2alloc (sizeof (DB2Column), "db2Table->cols[%d]", colidx);
+    catalog2Column( col
+                  , (ind_name  == SQL_NULL_DATA) ? ""   : (char*) name_val
+                  , (ind_type  == SQL_NULL_DATA) ? ""   : (char*) type_val
+                  , (ind_len   == SQL_NULL_DATA) ? 0    : (int)   len_val
+                  , (ind_scale == SQL_NULL_DATA) ? 0    : (short) scale_val
+                  , (ind_cp    == SQL_NULL_DATA) ? 0    : (int)   cp_val
+                  , (ind_units == SQL_NULL_DATA) ? ""   : (char*) units_val
+                  , (ind_ulen  == SQL_NULL_DATA) ? 0    : (int)   ulen_val
+                  , (ind_nulls == SQL_NULL_DATA) ? 'Y'  : (char)  nulls_val[0]
+                  );
+    col->colPrimKeyPart = (ind_key == SQL_NULL_DATA) ? 0 : (int) keyseq_val;
+    col->noencerr       = NO_ENC_ERR_NULL;
+    setValSize(col);
+    db2Table->cols[colidx] = col;
 
-    db2Debug2("db2Table->cols[%d]->colName       : %s "     , colidx, db2Table->cols[colidx]->colName );
-    db2Debug2("db2Table->cols[%d]->colType       : %d - %s,", colidx, db2Table->cols[colidx]->colType, c2name(db2Table->cols[colidx]->colType));
-    db2Debug2("db2Table->cols[%d]->colSize       : %d"      , colidx, db2Table->cols[colidx]->colSize );
-    db2Debug2("db2Table->cols[%d]->colBytes      : %d"      , colidx, db2Table->cols[colidx]->colBytes );
-    db2Debug2("db2Table->cols[%d]->colChars      : %d"      , colidx, db2Table->cols[colidx]->colChars );
-    db2Debug2("db2Table->cols[%d]->colScale      : %d"      , colidx, db2Table->cols[colidx]->colScale);
-    db2Debug2("db2Table->cols[%d]->colNulls      : %d"      , colidx, db2Table->cols[colidx]->colNulls);
-    db2Debug2("db2Table->cols[%d]->colPrimKeyPart: %d"      , colidx, db2Table->cols[colidx]->colPrimKeyPart);
-    db2Debug2("db2Table->cols[%d]->colCodepage   : %d"      , colidx, db2Table->cols[colidx]->colCodepage);
-    db2Debug2("db2Table->cols[%d]->val_size      : %d"      , colidx, db2Table->cols[colidx]->val_size);
+    db2Debug2("db2Table->cols[%d]->colName       : %s "     , colidx, col->colName );
+    db2Debug2("db2Table->cols[%d]->colType       : %d - %s,", colidx, col->colType, c2name(col->colType));
+    db2Debug2("db2Table->cols[%d]->colSize       : %d"      , colidx, col->colSize );
+    db2Debug2("db2Table->cols[%d]->colBytes      : %d"      , colidx, col->colBytes );
+    db2Debug2("db2Table->cols[%d]->colChars      : %d"      , colidx, col->colChars );
+    db2Debug2("db2Table->cols[%d]->colScale      : %d"      , colidx, col->colScale);
+    db2Debug2("db2Table->cols[%d]->colNulls      : %d"      , colidx, col->colNulls);
+    db2Debug2("db2Table->cols[%d]->colPrimKeyPart: %d"      , colidx, col->colPrimKeyPart);
+    db2Debug2("db2Table->cols[%d]->colCodepage   : %d"      , colidx, col->colCodepage);
+    db2Debug2("db2Table->cols[%d]->val_size      : %d"      , colidx, col->val_size);
 
     /* fetch the next result row */
     rc = SQLFetch(stmtp->hsql);
@@ -533,8 +425,261 @@ static void describeForeignColumns(DB2Session* session, char* schema, char* tabn
     }
     colidx++;
   } 
+  /* or a concurrent ALTER TABLE dropped one */
+  if (colidx < db2Table->ncols) {
+    db2Debug2("catalog returned fewer columns (%d) than counted (%d)", colidx, db2Table->ncols);
+    db2Table->ncols = colidx;
+  }
   db2Debug3("End of Data reached");
   /* release the statement handle */
   db2FreeStmtHdl(stmtp, session->connp);
   db2Exit1();
+}
+
+/* setValSize
+ * Determine the size of the result buffer for a column.
+ */
+static void setValSize(DB2Column* col) {
+  db2Entry4();
+  switch (col->colType) {
+    case SQL_CHAR:
+    case SQL_VARCHAR:
+    case SQL_LONGVARCHAR:
+    case SQL_BLOB:
+    case SQL_CLOB:
+    case SQL_GRAPHIC:
+    case SQL_VARGRAPHIC:
+    case SQL_LONGVARGRAPHIC:
+    case SQL_WCHAR:
+    case SQL_WVARCHAR:
+    case SQL_WLONGVARCHAR:
+    case SQL_DBCLOB:
+    case SQL_BOOLEAN:
+    case SQL_BINARY:
+    case SQL_VARBINARY:
+    case SQL_LONGVARBINARY:
+      /* one spare byte, the fetch path always terminates the buffer */
+      col->val_size = col->colBytes + 1;
+    break;
+    case SQL_INTEGER:
+    case SQL_SMALLINT:
+      col->val_size = col->colChars + 2;
+    break;
+    case SQL_NUMERIC:
+    case SQL_DECIMAL:
+      if (col->colScale == 0)
+        col->val_size = col->colBytes + 1;
+      else
+        col->val_size = ((size_t) col->colScale > col->colSize ? (size_t) col->colScale : col->colSize) + 5;
+    break;
+    case SQL_REAL:
+    case SQL_DOUBLE:
+    case SQL_FLOAT:
+    case SQL_DECFLOAT:
+    case SQL_BIGINT:
+      col->val_size = 24 + 1;
+    break;
+    case SQL_TYPE_DATE:
+    case SQL_TYPE_TIME:
+    case SQL_TYPE_TIMESTAMP:
+    case SQL_TYPE_TIMESTAMP_WITH_TIMEZONE:
+      col->val_size = col->colSize + 1;
+    break;
+    case SQL_XML:
+      col->val_size = LOB_CHUNK_SIZE + 1;
+    break;
+    default:
+    break;
+  }
+  db2Exit4(": %ld", col->val_size);
+}
+
+/* catalog2Column
+ * Build the DB2-side column description from a SYSCAT.COLUMNS row (distinct types already resolved to their source type),
+ * with the values SQLDescribeCol and SQLColAttribute (SQL_DESC_PRECISION, SQL_DESC_OCTET_LENGTH) deliver, which the
+ * db2size/db2bytes/db2chars options have always been based on:
+ *   colSize  - SQLDescribeCol column size (precision for numerics, display size for datetime)
+ *   colChars - SQL_DESC_PRECISION, only set for numerics, TIMESTAMP and BOOLEAN
+ *   colBytes - SQL_DESC_OCTET_LENGTH, ODBC transfer octet length
+ * Verified against the DB2 SAMPLE schema and TC030; distinct types are not verified yet.
+ */
+static void catalog2Column(DB2Column* col, char* colname, char* typename, int length, short scale, int codepage, char* stringunits, int unitslength, char nulls) {
+  db2Entry4("(colname: %s, typename: %s, length: %d, scale: %d, codepage: %d, stringunits: %s, unitslength: %d, nulls: %c)", colname, typename, length, scale, codepage, stringunits, unitslength, nulls);
+  col->colName     = db2strdup(colname, "col->colName");
+  col->colType     = name2c(typename);
+  col->colScale    = scale;
+  col->colNulls    = (nulls == 'N') ? SQL_NO_NULLS : SQL_NULLABLE;
+  col->colCodepage = codepage;
+
+  /* FOR BIT DATA columns are stored as character types with codepage 0 */
+  if (codepage == 0) {
+    switch (col->colType) {
+      case SQL_CHAR:        col->colType = SQL_BINARY;        break;
+      case SQL_VARCHAR:     col->colType = SQL_VARBINARY;     break;
+      case SQL_LONGVARCHAR: col->colType = SQL_LONGVARBINARY; break;
+      default:                                                break;
+    }
+  }
+
+  switch (col->colType) {
+    case SQL_CHAR:
+    case SQL_VARCHAR:
+    case SQL_LONGVARCHAR:
+    case SQL_CLOB:
+      /* CODEUNITS32 (unitslength) unverified */
+      col->colSize  = length;
+      col->colBytes = length;
+      col->colChars = 0;
+    break;
+    case SQL_GRAPHIC:
+    case SQL_VARGRAPHIC:
+    case SQL_LONGVARGRAPHIC:
+    case SQL_DBCLOB:
+      /* LENGTH counts double-byte characters */
+      col->colSize  = length;
+      col->colBytes = (size_t) length * 2;
+      col->colChars = 0;
+    break;
+    case SQL_BINARY:
+    case SQL_VARBINARY:
+    case SQL_LONGVARBINARY:
+    case SQL_BLOB:
+      col->colSize  = length;
+      col->colBytes = length;
+      col->colChars = 0;
+    break;
+    case SQL_SMALLINT:
+      col->colSize  = 5;
+      col->colBytes = 2;
+      col->colChars = 5;
+    break;
+    case SQL_INTEGER:
+      col->colSize  = 10;
+      col->colBytes = 4;
+      col->colChars = 10;
+    break;
+    case SQL_BIGINT:
+      col->colSize  = 19;
+      col->colBytes = 8;
+      col->colChars = 19;
+    break;
+    case SQL_REAL:
+      col->colSize  = 7;
+      col->colBytes = 4;
+      col->colChars = 7;
+    break;
+    case SQL_DOUBLE:
+      col->colSize  = 15;
+      col->colBytes = 8;
+      col->colChars = 15;
+    break;
+    case SQL_DECIMAL:
+      /* LENGTH is the precision; octet length adds sign and decimal point */
+      col->colSize  = length;
+      col->colBytes = length + 2;
+      col->colChars = length;
+    break;
+    case SQL_DECFLOAT:
+      /* LENGTH is 8 or 16 bytes for DECFLOAT(16) / DECFLOAT(34) */
+      col->colSize  = (length == 8) ? 16 : 34;
+      col->colBytes = length;
+      col->colChars = col->colSize;
+    break;
+    case SQL_TYPE_DATE:
+      col->colSize  = 10;
+      col->colBytes = 6;
+      col->colChars = 0;
+    break;
+    case SQL_TYPE_TIME:
+      col->colSize  = 8;
+      col->colBytes = 6;
+      col->colChars = 0;
+    break;
+    case SQL_TYPE_TIMESTAMP:
+      /* SCALE holds the fractional second digits; SQL_DESC_PRECISION reports the display size here */
+      col->colSize  = 19 + ((scale > 0) ? scale + 1 : 0);
+      col->colBytes = 16;
+      col->colChars = col->colSize;
+    break;
+    case SQL_BOOLEAN:
+      col->colSize  = 1;
+      col->colBytes = 1;
+      col->colChars = 1;
+    break;
+    default:
+      /* XML and anything else */
+      col->colSize  = length;
+      col->colBytes = length;
+      col->colChars = 0;
+    break;
+  }
+  db2Exit4();
+}
+
+/* getForeignTableColNum
+ * Number of (not hidden) columns of the given table in SYSCAT.COLUMNS, 0 if the table does not exist.
+ */
+static int getForeignTableColNum(DB2Session* session, char* schema, char* tabname) {
+  HdlEntry*   stmtp    = NULL;
+  SQLRETURN   rc       = 0;
+  SQLLEN      ind_s    = SQL_NTS;
+  SQLLEN      ind_t    = SQL_NTS;
+  SQLLEN      ind_cnt  = SQL_NTS;
+  SQLSMALLINT clcnt    = 0;
+  char*       query    = "SELECT COUNT(*) AS COLCOUNT FROM SYSCAT.COLUMNS C WHERE C.TABSCHEMA = ? AND C.TABNAME = ? AND COALESCE(C.HIDDEN,'') = ''";
+  int         colcount = 0;
+
+  db2Entry1("(schema: %s, tabname: %s)", schema, tabname);
+  db2Debug2("query : '%s'", query);
+  /* create statement handle */
+  stmtp = db2AllocStmtHdl(SQL_HANDLE_STMT, session->connp, FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: failed to allocate statement handle");
+
+  /* prepare the query */
+  rc = SQLPrepare(stmtp->hsql, (SQLCHAR*)query, SQL_NTS);
+  db2Debug2("SQLPrepare rc : %d",rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type,  __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLPrepare failed to prepare remote query", db2Message);
+  }
+  /* bind the parameter */
+  rc = SQLBindParameter(stmtp->hsql, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 128, 0, schema, sizeof(schema), &ind_s);
+  db2Debug2("SQLBindParameter table_schema = '%s' rc : %d",schema, rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type, __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindParameter failed to bind parameter", db2Message);
+  }
+  /* bind the parameter */
+  rc = SQLBindParameter(stmtp->hsql, 2, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 128, 0, tabname, sizeof(tabname), &ind_t);
+  db2Debug2("SQLBindParameter table_name = '%s' rc : %d",tabname, rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type, __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindParameter failed to bind parameter", db2Message);
+  }
+  rc = SQLBindCol(stmtp->hsql, 1, SQL_C_SHORT, &clcnt, 0, &ind_cnt);
+  db2Debug2("SQLBindCol1 rc : %d",rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type,  __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLBindCol failed to define result for table colcount", db2Message);
+  }
+    /* execute the query and get the first result row */
+  rc = SQLExecute (stmtp->hsql);
+  db2Debug2("SQLExecute rc : %d",rc);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type, __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS && rc != SQL_NO_DATA) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLExecute failed to execute query", db2Message);
+  }
+  rc = SQLFetch(stmtp->hsql);
+  rc = db2CheckErr(rc, stmtp->hsql, stmtp->type, __LINE__, __FILE__);
+  if (rc != SQL_SUCCESS && rc != SQL_NO_DATA) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: SQLFetch failed to execute query", db2Message);
+  }  
+  /* release the statement handle */
+  db2FreeStmtHdl(stmtp, session->connp);
+  stmtp = NULL;
+
+  db2Debug2("clcnt    : %d, ind: %d", clcnt, ind_cnt);
+  colcount = (ind_cnt == SQL_NULL_DATA) ? 0 : (int) clcnt;
+
+  db2Exit1(": [%d]", colcount);
+  return colcount;
 }

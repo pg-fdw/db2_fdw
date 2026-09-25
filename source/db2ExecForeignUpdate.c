@@ -11,6 +11,8 @@ extern bool dml_in_transaction;
 
 /** external prototypes */
 extern int          db2ExecuteQuery           (DB2Session* session, ParamDesc* paramList);
+extern int          db2FetchNext              (DB2Session* session, DB2ResultColumn* resultList);
+extern void         db2CloseCursor            (DB2Session* session);
 extern void         setModifyParameters       (ParamDesc* paramList, TupleTableSlot* newslot, TupleTableSlot* oldslot, DB2Table* db2Table, DB2Session* session);
 extern void         convertTuple              (DB2Session* session, DB2ResultColumn* reslist, DB2TupleIndexMode index_mode, int natts, Datum* values, bool* nulls);
 
@@ -38,8 +40,14 @@ TupleTableSlot* db2ExecForeignUpdate (EState* estate, ResultRelInfo* rinfo, Tupl
   /* extract the values from the slot and store them in the parameters */
   setModifyParameters (fdw_state->paramList, slot, planSlot, fdw_state->db2Table, fdw_state->session);
 
-  /* execute the UPDATE statement and store RETURNING values in db2Table's columns */
+  /* execute the UPDATE statement */
   rows = db2ExecuteQuery (fdw_state->session, fdw_state->paramList);
+
+  /* with a RETURNING clause the statement is a SELECT ... FROM NEW/OLD TABLE (...): fetch its row, then close the cursor for the next execution */
+  if (fdw_state->resultList != NULL) {
+    rows = db2FetchNext (fdw_state->session, fdw_state->resultList);
+    db2CloseCursor (fdw_state->session);
+  }
 
   if (rows != 1)
     ereport ( ERROR

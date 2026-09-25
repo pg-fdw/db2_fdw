@@ -85,6 +85,10 @@ typedef struct db2Session DB2Session;
 #ifndef UUIDOID
 #define UUIDOID 2950
 #endif
+/* files on the DB2 CLI side do not include the PostgreSQL catalog headers */
+#ifndef BYTEAOID
+#define BYTEAOID 17
+#endif
 
 typedef enum {
   NO_ENC_ERR_NULL,
@@ -100,8 +104,7 @@ typedef enum {
   BIND_STRING,
   BIND_NUMBER,
   BIND_LONG,
-  BIND_LONGRAW,
-  BIND_OUTPUT
+  BIND_LONGRAW
 } db2BindType;
 
 /* PostgreSQL error messages we need */

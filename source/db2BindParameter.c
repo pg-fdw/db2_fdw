@@ -10,7 +10,6 @@ extern char         db2Message[ERRBUFSIZE];/* contains DB2 error messages, set b
 
 /** external prototypes */
 extern SQLRETURN    db2CheckErr          (SQLRETURN status, SQLHANDLE handle, SQLSMALLINT handleType, int line, char* file);
-extern SQLSMALLINT  param2c              (SQLSMALLINT fcType);
 extern char*        c2name               (short fcType);
 
 /** internal prototypes */
@@ -151,17 +150,18 @@ void db2BindParameter (DB2Session* session, ParamDesc* param, SQLLEN* indicator,
       break;
       case BIND_LONGRAW: {
         db2Debug3("param->bindType: BIND_LONGRAW");
-        *indicator = (SQLLEN) ((param->value == NULL) ? SQL_NULL_DATA : SQL_NTS);
+        /* binary data may contain zero bytes, so pass the real length instead of SQL_NTS */
+        *indicator = (SQLLEN) ((param->value == NULL) ? SQL_NULL_DATA : (SQLLEN) param->value_len);
         db2Debug2("param_ind       : %d",*indicator);
         rc = SQLBindParameter( session->stmtp->hsql
                              , col_num
                              , SQL_PARAM_INPUT
                              , SQL_C_BINARY
-                             , SQL_LONGVARBINARY
+                             , (param->colType == SQL_BLOB) ? SQL_LONGVARBINARY : param->colType
                              , param->colSize
                              , 0
                              , (SQLPOINTER) param->value
-                             , 0
+                             , (SQLLEN) param->value_len
                              , indicator
                              );
       }
@@ -180,32 +180,6 @@ void db2BindParameter (DB2Session* session, ParamDesc* param, SQLLEN* indicator,
                              , 0
                              , (SQLPOINTER) param->value
                              , 0
-                             , indicator
-                             );
-      }
-      break;
-      case BIND_OUTPUT: {
-        SQLSMALLINT fcType;
-        SQLSMALLINT fParamType;
-        db2Debug2("param->bindType: BIND_OUTPUT");
-        *indicator = (SQLLEN) ((param->value == NULL) ? SQL_NULL_DATA : 0);
-        db2Debug2("param_ind       : %d",*indicator);
-        if (param->type == UUIDOID) {
-          /* the type input function will interpret the string value correctly */
-          fcType = SQL_CHAR;
-        } else {
-          fcType = param->colType;
-        }
-        fParamType = param2c(fcType);
-        rc = SQLBindParameter( session->stmtp->hsql
-                             , param_count
-                             , SQL_PARAM_OUTPUT
-                             , fParamType
-                             , fcType
-                             , param->colSize
-                             , 0
-                             , (SQLPOINTER) param->value
-                             , param->val_size
                              , indicator
                              );
       }

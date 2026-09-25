@@ -14,6 +14,7 @@ typedef struct paramDesc {
   Oid                 type;      // PG data type
   db2BindType         bindType;  // which type to use for binding to DB2 statement
   char*               value;     // value rendered for DB2
+  size_t              value_len; // length of value in bytes, only set for BIND_LONGRAW
   size_t              val_size;  // size to allocate val with in bytes
   void*               node;      // the executable expression
   int                 colnum;    // corresponding column in DB2Table (-1 in SELECT queries unless output column)

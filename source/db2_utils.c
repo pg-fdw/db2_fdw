@@ -5,31 +5,9 @@
 /** local prototypes */
 SQLSMALLINT   c2param              (SQLSMALLINT fparamType);
 char*         param2name           (SQLSMALLINT fparamType);
-SQLSMALLINT   param2c              (SQLSMALLINT fcType);
 short         c2dbType             (short fcType);
 char*         c2name               (short fcType);
-
-/** c2param
- *   Find db2's c-Type (SQL_) from a fParamType (SQL_C_).
- *   We are only mapping BLOB and CLOB.
- *   Everything else is mapped to a String.
- */
-SQLSMALLINT param2c(SQLSMALLINT fparamType) {
-  SQLSMALLINT fcType = SQL_UNKNOWN_TYPE;
-  switch (fparamType) {
-    case SQL_C_BLOB_LOCATOR:
-      fcType = SQL_BLOB;
-      break;
-    case SQL_C_CLOB_LOCATOR:
-      fcType = SQL_CLOB;
-      break;
-    default:
-      /* all other columns are converted to strings */
-      fcType = SQL_CHAR;
-      break;
-  }
-  return fcType;
-}
+short         name2c               (char* typename);
 
 /** param2name
  *    For debugging purposes, this function provides a human readable
@@ -65,11 +43,10 @@ char* param2name(SQLSMALLINT fparamType){
 
 }
 
-/** param2c
+/** c2param
  *   Find db2's paramType (SQL_C_) from a cTyp (SQL_).
- *   We are only mapping BLOB and CLOB.
+ *   BLOB and CLOB are mapped to locators, binary types to SQL_C_BINARY.
  *   Everything else is mapped to a String.
- *   It is the counter function of param2c.
  */
 SQLSMALLINT c2param (SQLSMALLINT fcType) {
   SQLSMALLINT fparamType = SQL_C_CHAR;
@@ -82,6 +59,13 @@ SQLSMALLINT c2param (SQLSMALLINT fcType) {
     case SQL_CLOB:
       fparamType = SQL_C_CLOB_LOCATOR;
       db2Debug5("SQL_COB => SQL_C_CLOB_LOCATOR");
+      break;
+    case SQL_BINARY:
+    case SQL_VARBINARY:
+    case SQL_LONGVARBINARY:
+      /* as SQL_C_CHAR, DB2 would deliver the bytes as hex text */
+      fparamType = SQL_C_BINARY;
+      db2Debug5("%s => SQL_C_BINARY",c2name(fcType));
       break;
     default:
       /* all other columns are converted to strings */
@@ -308,10 +292,62 @@ char* c2name(short fcType){
     case SQL_LONGVARBINARY:
       name = "SQL_LONGVARBINARY";
     break;
+    case SQL_CURSORHANDLE:
+      name = "SQL_CURSORHANDLE";
+    break;
     case SQL_UNKNOWN_TYPE:
     default: 
       name = "SQL_UNKNOWN_TYPE";
     break;
   }
   return name;
+}
+
+/** name2c
+ *   Find db2's c-Type (SQL_) from a DB2 type name (e.g. SYSCAT.COLUMNS.TYPENAME).
+ *   C cannot switch on strings, so the names are looked up in a table.
+ */
+short name2c(char* typename){
+  static const struct {
+    const char* name;
+    short       fcType;
+  } typemap[] = {
+    { "SMALLINT",        SQL_SMALLINT        },
+    { "INTEGER",         SQL_INTEGER         },
+    { "DECIMAL",         SQL_DECIMAL         },
+    { "DOUBLE",          SQL_DOUBLE          },
+    { "CHARACTER",       SQL_CHAR            },
+    { "VARCHAR",         SQL_VARCHAR         },
+    { "LONG VARCHAR",    SQL_LONGVARCHAR     },
+    { "CLOB",            SQL_CLOB            },
+    { "GRAPHIC",         SQL_GRAPHIC         },
+    { "VARGRAPHIC",      SQL_VARGRAPHIC      },
+    { "LONG VARGRAPHIC", SQL_LONGVARGRAPHIC  },
+    { "DBCLOB",          SQL_DBCLOB          },
+    { "DATE",            SQL_TYPE_DATE       },
+    { "TIME",            SQL_TYPE_TIME       },
+    { "TIMESTAMP",       SQL_TYPE_TIMESTAMP  },
+    { "BOOLEAN",         SQL_BOOLEAN         },
+    { "BLOB",            SQL_BLOB            },
+    { "REAL",            SQL_REAL            },
+    { "BIGINT",          SQL_BIGINT          },
+    { "XML",             SQL_XML             },
+    { "BINARY",          SQL_BINARY          },
+    { "VARBINARY",       SQL_VARBINARY       },
+    { "DECFLOAT",        SQL_DECFLOAT        },
+    { "ROW",             SQL_ROW             },
+    { "CURSOR",          SQL_CURSORHANDLE    }
+  };
+  short  fcType = SQL_UNKNOWN_TYPE;
+  size_t i;
+
+  if (typename != NULL) {
+    for (i = 0; i < sizeof(typemap) / sizeof(typemap[0]); i++) {
+      if (strcmp(typename, typemap[i].name) == 0) {
+        fcType = typemap[i].fcType;
+        break;
+      }
+    }
+  }
+  return fcType;
 }

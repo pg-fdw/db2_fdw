@@ -19,6 +19,7 @@ extern List*        serializePlanData         (DB2FdwState* fdwState);
 static DB2FdwState* copyPlanData        (DB2FdwState* orig);
 static ParamDesc*   reverseParamList    (ParamDesc* head);
        void         addParam            (ParamDesc** paramList, DB2Column* db2col, int colnum, int txts);
+       void         db2AddReturning     (DB2FdwState* fdwState, StringInfo sql, CmdType operation);
        void         checkDataType       (short db2type, int scale, Oid pgtype, const char* tablename, const char* colname);
 
 /* db2PlanForeignModify
@@ -38,7 +39,6 @@ List* db2PlanForeignModify (PlannerInfo* root, ModifyTable* plan, Index resultRe
   int               i             = 0;
   ListCell*         cell          = NULL;
   bool              has_trigger   = false, firstcol;
-  ParamDesc*        param         = NULL;
   TupleDesc         tupdesc;
   Bitmapset*        updated_cols  = NULL;
   AttrNumber        col;
@@ -124,20 +124,6 @@ List* db2PlanForeignModify (PlannerInfo* root, ModifyTable* plan, Index resultRe
     /* all attributes are needed for the RETURNING clause */
     for (i = 0; i < fdwState->db2Table->ncols; ++i) {
       if (fdwState->db2Table->cols[i]->pgname != NULL) {
-        /* throw an error if it is a LONG or LONG RAW column */
-        short dbType = c2dbType(fdwState->db2Table->cols[i]->colType);
-        if (dbType == DB2_BIGINT) {
-          ereport ( ERROR
-                  , ( errcode (ERRCODE_FDW_INVALID_DATA_TYPE)
-                    , errmsg ("columns with DB2 type LONG or LONG RAW cannot be used in RETURNING clause")
-                    , errdetail ("Column \"%s\" of foreign table \"%s\" is of DB2 type LONG%s."
-                                , fdwState->db2Table->cols[i]->pgname
-                                , fdwState->db2Table->pgname
-                                , dbType == DB2_BIGINT ? "" : " RAW"
-                                )
-                    )
-                  );
-        }
         fdwState->db2Table->cols[i]->used = 1;
       }
     }
@@ -155,7 +141,6 @@ List* db2PlanForeignModify (PlannerInfo* root, ModifyTable* plan, Index resultRe
         if (fdwState->db2Table->cols[i]->pgname == NULL)
           continue;
         if (bms_is_member (fdwState->db2Table->cols[i]->pgattnum - FirstLowInvalidHeapAttributeNumber, attrs_used)) {
-          /* throw an error if it is a LONG or LONG RAW column */
           fdwState->db2Table->cols[i]->used = 1;
         }
       }
@@ -258,48 +243,11 @@ List* db2PlanForeignModify (PlannerInfo* root, ModifyTable* plan, Index resultRe
       }
     }
   }
-  /* add RETURNING clause if appropriate */
-  firstcol = true;
-  for (i = 0; i < fdwState->db2Table->ncols; ++i) {
-    if (fdwState->db2Table->cols[i]->used) {
-      if (firstcol) {
-        firstcol = false;
-        appendStringInfo (&sql, " RETURNING ");
-      } else {
-        appendStringInfo (&sql, ", ");
-      }
-      appendStringInfo (&sql, "%s", fdwState->db2Table->cols[i]->colName);
-    }
-  }
-    /* add the parameters for the RETURNING clause */
-  firstcol = true;
-  for (i = 0; i < fdwState->db2Table->ncols; ++i) {
-    if (fdwState->db2Table->cols[i]->used) {
-      /* check that the data types can be converted */
-      checkDataType (fdwState->db2Table->cols[i]->colType, fdwState->db2Table->cols[i]->colScale, fdwState->db2Table->cols[i]->pgtype, fdwState->db2Table->pgname, fdwState->db2Table->cols[i]->pgname);
-
-      /* create a new entry in the parameter list */
-      param = (ParamDesc *) db2alloc(sizeof (ParamDesc),"param");
-      param->type         = fdwState->db2Table->cols[i]->pgtype;
-      param->bindType     = BIND_OUTPUT;
-      param->value        = NULL;
-      param->node         = NULL;
-      param->colnum       = i;
-      param->next         = fdwState->paramList;
-      fdwState->paramList = param;
-
-      if (firstcol) {
-        firstcol = false;
-        appendStringInfo (&sql, " INTO ");
-      } else {
-        appendStringInfo (&sql, ", ");
-      }
-      appendStringInfo (&sql, "?");
-    }
-  }
+  /* wrap the statement to return the used columns, if any */
+  db2AddReturning (fdwState, &sql, operation);
 
   /*
-   * addParam() and the output-param builder above currently prepend to
+   * addParam() currently prepends to
    * fdwState->paramList.
    *
    * db2ExecuteQuery() binds parameters in list traversal order (1..N). If we
@@ -329,6 +277,64 @@ static ParamDesc* reverseParamList(ParamDesc* head) {
   }
 
   return prev;
+}
+
+/* db2AddReturning
+ * DB2 has no RETURNING clause: the returned values are selected from the data-change statement instead,
+ *   SELECT ... FROM NEW TABLE (INSERT/UPDATE ...)  or  SELECT ... FROM OLD TABLE (DELETE ...)
+ * and fetched as a normal result row. NEW TABLE (rather than FINAL TABLE) is used since FINAL TABLE is
+ * rejected by DB2 if an AFTER trigger or referential constraint modifies the target table.
+ * Wraps "sql" accordingly for all columns of fdwState->db2Table marked as used and builds fdwState->resultList.
+ * Leaves "sql" untouched if no column is used.
+ */
+void db2AddReturning (DB2FdwState* fdwState, StringInfo sql, CmdType operation) {
+  StringInfoData returning;
+  bool           firstcol   = true;
+  int            nreturning = 0;
+  int            i;
+
+  db2Entry1();
+  for (i = 0; i < fdwState->db2Table->ncols; ++i) {
+    DB2Column*       col    = fdwState->db2Table->cols[i];
+    DB2ResultColumn* resCol = NULL;
+
+    if (!col->used)
+      continue;
+    /* check that the data types can be converted */
+    checkDataType (col->colType, col->colScale, col->pgtype, fdwState->db2Table->pgname, col->pgname);
+
+    if (firstcol) {
+      firstcol = false;
+      initStringInfo (&returning);
+      appendStringInfo (&returning, "SELECT %s", col->colName);
+    } else {
+      appendStringInfo (&returning, ", %s", col->colName);
+    }
+    /* describe the result column, it is converted into the slot by its pgattnum */
+    resCol                 = (DB2ResultColumn*) db2alloc (sizeof (DB2ResultColumn), "resCol");
+    resCol->colName        = db2strdup (col->colName, "resCol->colName");
+    resCol->colType        = col->colType;
+    resCol->colSize        = col->colSize;
+    resCol->colScale       = col->colScale;
+    resCol->colNulls       = col->colNulls;
+    resCol->colChars       = col->colChars;
+    resCol->colBytes       = col->colBytes;
+    resCol->colCodepage    = col->colCodepage;
+    resCol->pgname         = db2strdup (col->pgname, "resCol->pgname");
+    resCol->pgattnum       = col->pgattnum;
+    resCol->pgtype         = col->pgtype;
+    resCol->pgtypmod       = col->pgtypmod;
+    resCol->val_size       = col->val_size;
+    resCol->noencerr       = col->noencerr;
+    resCol->resnum         = ++nreturning;
+    resCol->next           = fdwState->resultList;
+    fdwState->resultList   = resCol;
+  }
+  if (!firstcol) {
+    appendStringInfo (&returning, " FROM %s TABLE (%s)", (operation == CMD_DELETE) ? "OLD" : "NEW", sql->data);
+    *sql = returning;
+  }
+  db2Exit1(": %s", sql->data);
 }
 
 /** copyPlanData
@@ -416,6 +422,12 @@ void addParam (ParamDesc **paramList, DB2Column* db2col, int colnum, int txts) {
     case DB2_BLOB:
       param->bindType = BIND_LONGRAW;
     break;
+    case DB2_BINARY:
+    case DB2_VARBINARY:
+    case DB2_LONGVARBINARY:
+      /* bytea is sent as raw bytes, string types keep being sent as text */
+      param->bindType = (db2col->pgtype == BYTEAOID) ? BIND_LONGRAW : BIND_STRING;
+    break;
     default:
       param->bindType = BIND_STRING;
   }
@@ -443,8 +455,8 @@ void checkDataType (short sqltype, int scale, Oid pgtype, const char *tablename,
   db2Entry4();
   db2Debug4("checkDataType: %s.%s of sqltype: %d, db2type: %d, pgtype: %d",tablename,colname,sqltype, db2type, pgtype);
   /* the binary DB2 types can be converted to bytea */
-  if (db2type == DB2_BLOB && pgtype == BYTEAOID) {
-    db2Debug5("DB2_BLOB can be converted into BYTEAOID");
+  if ((db2type == DB2_BLOB || db2type == DB2_BINARY || db2type == DB2_VARBINARY || db2type == DB2_LONGVARBINARY) && pgtype == BYTEAOID) {
+    db2Debug5("DB2_BLOB, BINARY, VARBINARY, LONGVARBINARY can be converted into BYTEAOID");
   } else if (db2type == DB2_XML && pgtype == XMLOID) {
     db2Debug5("DB2_XML can be converted into XMLOID");
   } else if (db2type != DB2_UNKNOWN_TYPE && db2type != DB2_BLOB && (pgtype == TEXTOID || pgtype == VARCHAROID || pgtype == BPCHAROID)) {
