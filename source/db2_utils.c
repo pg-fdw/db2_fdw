@@ -8,6 +8,7 @@ char*         param2name           (SQLSMALLINT fparamType);
 SQLSMALLINT   param2c              (SQLSMALLINT fcType);
 short         c2dbType             (short fcType);
 char*         c2name               (short fcType);
+short         name2c               (char* typename);
 
 /** c2param
  *   Find db2's c-Type (SQL_) from a fParamType (SQL_C_).
@@ -308,10 +309,62 @@ char* c2name(short fcType){
     case SQL_LONGVARBINARY:
       name = "SQL_LONGVARBINARY";
     break;
+    case SQL_CURSORHANDLE:
+      name = "SQL_CURSORHANDLE";
+    break;
     case SQL_UNKNOWN_TYPE:
     default: 
       name = "SQL_UNKNOWN_TYPE";
     break;
   }
   return name;
+}
+
+/** name2c
+ *   Find db2's c-Type (SQL_) from a DB2 type name (e.g. SYSCAT.COLUMNS.TYPENAME).
+ *   C cannot switch on strings, so the names are looked up in a table.
+ */
+short name2c(char* typename){
+  static const struct {
+    const char* name;
+    short       fcType;
+  } typemap[] = {
+    { "SMALLINT",        SQL_SMALLINT        },
+    { "INTEGER",         SQL_INTEGER         },
+    { "DECIMAL",         SQL_DECIMAL         },
+    { "DOUBLE",          SQL_DOUBLE          },
+    { "CHARACTER",       SQL_CHAR            },
+    { "VARCHAR",         SQL_VARCHAR         },
+    { "LONG VARCHAR",    SQL_LONGVARCHAR     },
+    { "CLOB",            SQL_CLOB            },
+    { "GRAPHIC",         SQL_GRAPHIC         },
+    { "VARGRAPHIC",      SQL_VARGRAPHIC      },
+    { "LONG VARGRAPHIC", SQL_LONGVARGRAPHIC  },
+    { "DBCLOB",          SQL_DBCLOB          },
+    { "DATE",            SQL_TYPE_DATE       },
+    { "TIME",            SQL_TYPE_TIME       },
+    { "TIMESTAMP",       SQL_TYPE_TIMESTAMP  },
+    { "BOOLEAN",         SQL_BOOLEAN         },
+    { "BLOB",            SQL_BLOB            },
+    { "REAL",            SQL_REAL            },
+    { "BIGINT",          SQL_BIGINT          },
+    { "XML",             SQL_XML             },
+    { "BINARY",          SQL_BINARY          },
+    { "VARBINARY",       SQL_VARBINARY       },
+    { "DECFLOAT",        SQL_DECFLOAT        },
+    { "ROW",             SQL_ROW             },
+    { "CURSOR",          SQL_CURSORHANDLE    }
+  };
+  short  fcType = SQL_UNKNOWN_TYPE;
+  size_t i;
+
+  if (typename != NULL) {
+    for (i = 0; i < sizeof(typemap) / sizeof(typemap[0]); i++) {
+      if (strcmp(typename, typemap[i].name) == 0) {
+        fcType = typemap[i].fcType;
+        break;
+      }
+    }
+  }
+  return fcType;
 }
