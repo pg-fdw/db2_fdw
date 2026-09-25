@@ -123,10 +123,7 @@ DB2FdwState* deserializePlanData (List* list) {
     db2Debug3("deserialize param[%d].type: %d"  ,i, param->type);
     param->bindType  = (db2BindType) DatumGetInt32(((Const*)list_nth(list, idx++))->constvalue);
     db2Debug3("deserialize param[%d].bindType: %d"  ,i, param->bindType);
-    if (param->bindType == BIND_OUTPUT)
-      param->value   = (void *) 42;	/* something != NULL */
-    else
-      param->value   = NULL;
+    param->value     = NULL;
     db2Debug3("deserialize param[%d].value: %x"  ,i, param->value);
     param->val_size  = deserializeLong(list_nth(list, idx++));
     db2Debug3("deserialize param[%d].val_size: %ld"  ,i, param->val_size);

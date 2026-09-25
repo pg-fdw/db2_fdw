@@ -35,10 +35,6 @@ void db2BeginForeignModifyCommon(ModifyTableState* mtstate, ResultRelInfo* rinfo
   /* get the type output functions for the parameters */
   output_funcs = (regproc*) db2alloc(fdw_state->db2Table->ncols * sizeof(regproc *), "output_funcs");
   for (param = fdw_state->paramList; param != NULL; param = param->next) {
-    /* ignore output parameters */
-    if (param->bindType == BIND_OUTPUT)
-      continue;
-    
     tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(fdw_state->db2Table->cols[param->colnum]->pgtype));
     if (!HeapTupleIsValid(tuple))
       elog(ERROR, "cache lookup failed for type %u", fdw_state->db2Table->cols[param->colnum]->pgtype);

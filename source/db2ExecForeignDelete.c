@@ -93,11 +93,6 @@ void setModifyParameters (ParamDesc *paramList, TupleTableSlot * newslot, TupleT
     db2Debug2("param->txts    : %d",param->txts);
     db2Debug2("param->type    : %d",param->type);
     db2Debug2("param->value   : %s - initial",param->value);
-    /* don't do anything for output parameters */
-    if (param->bindType == BIND_OUTPUT) {
-      db2Debug2("param->bindType: %d - BIND_OUTPUT - skipped",param->bindType);
-      continue;
-    }
     db2Debug3("db2Table->cols[%d]->colPrimKeyPart: %d  ",param->colnum,db2Table->cols[param->colnum]->colPrimKeyPart);
     /* key values come from the old row's junk columns, only UPDATE and DELETE have one (oldslot is NULL for INSERT) */
     if (oldslot != NULL && db2Table->cols[param->colnum]->colPrimKeyPart != 0) {

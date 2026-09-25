@@ -104,8 +104,7 @@ typedef enum {
   BIND_STRING,
   BIND_NUMBER,
   BIND_LONG,
-  BIND_LONGRAW,
-  BIND_OUTPUT
+  BIND_LONGRAW
 } db2BindType;
 
 /* PostgreSQL error messages we need */

@@ -5,32 +5,9 @@
 /** local prototypes */
 SQLSMALLINT   c2param              (SQLSMALLINT fparamType);
 char*         param2name           (SQLSMALLINT fparamType);
-SQLSMALLINT   param2c              (SQLSMALLINT fcType);
 short         c2dbType             (short fcType);
 char*         c2name               (short fcType);
 short         name2c               (char* typename);
-
-/** c2param
- *   Find db2's c-Type (SQL_) from a fParamType (SQL_C_).
- *   We are only mapping BLOB and CLOB.
- *   Everything else is mapped to a String.
- */
-SQLSMALLINT param2c(SQLSMALLINT fparamType) {
-  SQLSMALLINT fcType = SQL_UNKNOWN_TYPE;
-  switch (fparamType) {
-    case SQL_C_BLOB_LOCATOR:
-      fcType = SQL_BLOB;
-      break;
-    case SQL_C_CLOB_LOCATOR:
-      fcType = SQL_CLOB;
-      break;
-    default:
-      /* all other columns are converted to strings */
-      fcType = SQL_CHAR;
-      break;
-  }
-  return fcType;
-}
 
 /** param2name
  *    For debugging purposes, this function provides a human readable
@@ -66,11 +43,10 @@ char* param2name(SQLSMALLINT fparamType){
 
 }
 
-/** param2c
+/** c2param
  *   Find db2's paramType (SQL_C_) from a cTyp (SQL_).
- *   We are only mapping BLOB and CLOB.
+ *   BLOB and CLOB are mapped to locators, binary types to SQL_C_BINARY.
  *   Everything else is mapped to a String.
- *   It is the counter function of param2c.
  */
 SQLSMALLINT c2param (SQLSMALLINT fcType) {
   SQLSMALLINT fparamType = SQL_C_CHAR;
