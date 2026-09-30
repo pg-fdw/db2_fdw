@@ -48,6 +48,8 @@ IMPORT FOREIGN SCHEMA
 --------+---------------------+--------+----------------------------------------------------+-------------
  sample | act                 | sample | (schema 'DB2INST1', "table" 'ACT')                 | [NULL]
  sample | audit               | sample | (schema 'DB2INST1', "table" 'AUDIT')               | [NULL]
+ sample | audit_archive       | sample | (schema 'DB2INST1', "table" 'AUDIT_ARCHIVE')       | [NULL]
+ sample | audit_list_logs     | sample | (schema 'DB2INST1', "table" 'AUDIT_LIST_LOGS')     | [NULL]
  sample | bintypes            | sample | (schema 'DB2INST1', "table" 'BINTYPES')            | [NULL]
  sample | catalog             | sample | (schema 'DB2INST1', "table" 'CATALOG')             | [NULL]
  sample | checking            | sample | (schema 'DB2INST1', "table" 'CHECKING')            | [NULL]
@@ -112,7 +114,7 @@ IMPORT FOREIGN SCHEMA
  sample | vpstrde2            | sample | (schema 'DB2INST1', "table" 'VPSTRDE2')            | [NULL]
  sample | vstafac1            | sample | (schema 'DB2INST1', "table" 'VSTAFAC1')            | [NULL]
  sample | vstafac2            | sample | (schema 'DB2INST1', "table" 'VSTAFAC2')            | [NULL]
-(66 rows)
+(68 rows)
 
 -- Prepare a local schema
 CREATE SCHEMA IF NOT EXISTS sample1;
@@ -245,6 +247,8 @@ IMPORT FOREIGN SCHEMA
                                           List of foreign tables
  Schema  |        Table        | Server |                    FDW options                     | Description 
 ---------+---------------------+--------+----------------------------------------------------+-------------
+ sample2 | audit_archive       | sample | (schema 'DB2INST1', "table" 'AUDIT_ARCHIVE')       | [NULL]
+ sample2 | audit_list_logs     | sample | (schema 'DB2INST1', "table" 'AUDIT_LIST_LOGS')     | [NULL]
  sample2 | tbcfileentry_sample | sample | (schema 'DB2INST1', "table" 'TBCFILEENTRY_SAMPLE') | [NULL]
  sample2 | vact                | sample | (schema 'DB2INST1', "table" 'VACT')                | [NULL]
  sample2 | vastrde1            | sample | (schema 'DB2INST1', "table" 'VASTRDE1')            | [NULL]
@@ -266,11 +270,13 @@ IMPORT FOREIGN SCHEMA
  sample2 | vpstrde2            | sample | (schema 'DB2INST1', "table" 'VPSTRDE2')            | [NULL]
  sample2 | vstafac1            | sample | (schema 'DB2INST1', "table" 'VSTAFAC1')            | [NULL]
  sample2 | vstafac2            | sample | (schema 'DB2INST1', "table" 'VSTAFAC2')            | [NULL]
-(21 rows)
+(23 rows)
 
 DROP SCHEMA sample2 CASCADE;
-psql:test/sql/tcstart.sql:29: HINWEIS:  Löschvorgang löscht ebenfalls 21 weitere Objekte
-DETAIL:  Löschvorgang löscht ebenfalls Fremdtabelle sample2.tbcfileentry_sample
+psql:test/sql/tcstart.sql:29: HINWEIS:  Löschvorgang löscht ebenfalls 23 weitere Objekte
+DETAIL:  Löschvorgang löscht ebenfalls Fremdtabelle sample2.audit_archive
+Löschvorgang löscht ebenfalls Fremdtabelle sample2.audit_list_logs
+Löschvorgang löscht ebenfalls Fremdtabelle sample2.tbcfileentry_sample
 Löschvorgang löscht ebenfalls Fremdtabelle sample2.vact
 Löschvorgang löscht ebenfalls Fremdtabelle sample2.vastrde1
 Löschvorgang löscht ebenfalls Fremdtabelle sample2.vastrde2
@@ -624,7 +630,7 @@ select * from sample.sales;
 explain (analyze,verbose) select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=7.184..76.718 rows=41.00 loops=1)
+ Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=7.427..78.225 rows=41.00 loops=1)
    Output: a.empno, a.firstnme, a.midinit, a.lastname, a.workdept, a.phoneno, a.hiredate, a.job, a.edlevel, a.sex, a.birthdate, a.salary, a.bonus, a.comm, b.sales_date, b.sales_person, b.region, b.sales
    DB2 query: SELECT r1."EMPNO", r1."FIRSTNME", r1."MIDINIT", r1."LASTNAME", r1."WORKDEPT", r1."PHONENO", r1."HIREDATE", r1."JOB", r1."EDLEVEL", r1."SEX", r1."BIRTHDATE", r1."SALARY", r1."BONUS", r1."COMM", r2."SALES_DATE", r2."SALES_PERSON", r2."REGION", r2."SALES" FROM ("DB2INST1"."EMPLOYEE" r1 INNER JOIN "DB2INST1"."SALES" r2 ON (((r1."LASTNAME" = r2."SALES_PERSON"))))
    DB2 plan: 
@@ -714,8 +720,8 @@ explain (analyze,verbose) select * from sample.employee a, sample.sales b where 
    DB2 plan: 
  Planning:
    Buffers: shared hit=8
- Planning Time: 4.850 ms
- Execution Time: 78.799 ms
+ Planning Time: 4.692 ms
+ Execution Time: 82.783 ms
 (92 rows)
 
 select * from sample.employee a, sample.sales b where a.lastname = b.sales_person;
@@ -768,7 +774,7 @@ select * from sample.employee a, sample.sales b where a.lastname = b.sales_perso
 explain (analyze,verbose) select * from sample.employee a join sample.sales b on a.lastname = b.sales_person;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=5.365..75.304 rows=41.00 loops=1)
+ Foreign Scan  (cost=200.00..424.60 rows=928 width=362) (actual time=5.013..74.645 rows=41.00 loops=1)
    Output: a.empno, a.firstnme, a.midinit, a.lastname, a.workdept, a.phoneno, a.hiredate, a.job, a.edlevel, a.sex, a.birthdate, a.salary, a.bonus, a.comm, b.sales_date, b.sales_person, b.region, b.sales
    DB2 query: SELECT r1."EMPNO", r1."FIRSTNME", r1."MIDINIT", r1."LASTNAME", r1."WORKDEPT", r1."PHONENO", r1."HIREDATE", r1."JOB", r1."EDLEVEL", r1."SEX", r1."BIRTHDATE", r1."SALARY", r1."BONUS", r1."COMM", r2."SALES_DATE", r2."SALES_PERSON", r2."REGION", r2."SALES" FROM ("DB2INST1"."EMPLOYEE" r1 INNER JOIN "DB2INST1"."SALES" r2 ON (((r1."LASTNAME" = r2."SALES_PERSON"))))
    DB2 plan: 
@@ -856,8 +862,8 @@ explain (analyze,verbose) select * from sample.employee a join sample.sales b on
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 4.693 ms
- Execution Time: 77.361 ms
+ Planning Time: 4.698 ms
+ Execution Time: 76.698 ms
 (90 rows)
 
 select * from sample.employee a join sample.sales b on a.lastname = b.sales_person;
@@ -992,7 +998,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
                                                                  QUERY PLAN                                                                 
 --------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=4.020..4.232 rows=1.00 loops=1)
+ Foreign Scan  (cost=121.72..144.35 rows=1 width=136) (actual time=3.966..4.185 rows=1.00 loops=1)
    Output: (min(salary)), (max(salary)), (avg(salary)), (sum(((salary + comm) + bonus))), (count(*))
    DB2 query: SELECT MIN("SALARY"), MAX("SALARY"), AVG("SALARY"), SUM((("SALARY" + "COMM") + "BONUS")), COUNT(*) FROM "DB2INST1"."EMPLOYEE"
    DB2 plan: 
@@ -1061,8 +1067,8 @@ explain (analyze,verbose) select min(salary),max(salary),avg(salary),sum(salary 
    DB2 plan: 
  Planning:
    Buffers: shared hit=20
- Planning Time: 3.371 ms
- Execution Time: 5.361 ms
+ Planning Time: 3.321 ms
+ Execution Time: 5.306 ms
 (71 rows)
 
 select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) from sample.employee;
@@ -1075,7 +1081,7 @@ select min(salary),max(salary),avg(salary),sum(salary +comm + bonus),count(*) fr
 explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
                                                                                    QUERY PLAN                                                                                    
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=5.162..7.722 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..116.89 rows=1 width=150) (actual time=4.008..5.637 rows=3.00 loops=1)
    Output: empno, firstnme, lastname, ((salary + bonus) + comm)
    DB2 query: SELECT "EMPNO", "FIRSTNME", "LASTNAME", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" > 43840.01)) AND (("LASTNAME" LIKE 'L%' ESCAPE '\'))
    DB2 plan: 
@@ -1144,8 +1150,8 @@ explain (analyze,verbose) select empno, firstnme,lastname, salary + bonus + comm
    DB2 plan: 
  Planning:
    Buffers: shared hit=3
- Planning Time: 7.755 ms
- Execution Time: 10.618 ms
+ Planning Time: 11.635 ms
+ Execution Time: 8.180 ms
 (71 rows)
 
 select empno, firstnme,lastname, salary + bonus + comm from sample.employee where salary > 43840.01 and lastname like 'L%';
@@ -1388,7 +1394,7 @@ SELECT count(*) FROM sample.employee;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee WHERE workdept IN ('A00','B01','E21') AND salary BETWEEN 40000 AND 70000 AND (lastname LIKE 'L%' OR lastname LIKE 'G%');
                                                                                                                                  QUERY PLAN                                                                                                                                 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..127.26 rows=1 width=90) (actual time=4.624..5.917 rows=3.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..127.26 rows=1 width=90) (actual time=4.597..5.746 rows=3.00 loops=1)
    Output: empno, lastname, salary, workdept
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY", "WORKDEPT" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" >= 40000)) AND (("SALARY" <= 70000)) AND (("WORKDEPT"  IN ('A00', 'B01', 'E21'))) AND ((("LASTNAME" LIKE 'L%' ESCAPE '\') OR ("LASTNAME" LIKE 'G%' ESCAPE '\')))
    DB2 plan: 
@@ -1464,8 +1470,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee WH
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.988 ms
- Execution Time: 6.994 ms
+ Planning Time: 3.930 ms
+ Execution Time: 6.812 ms
 (78 rows)
 
 SELECT empno, lastname, salary FROM sample.employee WHERE workdept IN ('A00','B01','E21') AND salary BETWEEN 40000 AND 70000 AND (lastname LIKE 'L%' OR lastname LIKE 'G%') ORDER BY empno;
@@ -1498,7 +1504,7 @@ FROM sample.employee;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..101.11 rows=5 width=90) (actual time=3.089..4.863 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..101.11 rows=5 width=90) (actual time=2.980..4.757 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" FETCH FIRST 5 ROWS ONLY
    DB2 plan: 
@@ -1560,8 +1566,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LI
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.382 ms
- Execution Time: 5.890 ms
+ Planning Time: 2.286 ms
+ Execution Time: 5.764 ms
 (64 rows)
 
 SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
@@ -1577,7 +1583,7 @@ SELECT empno, lastname, salary FROM sample.employee LIMIT 5;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.05..101.16 rows=5 width=90) (actual time=4.069..6.513 rows=5.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.05..101.16 rows=5 width=90) (actual time=3.563..5.414 rows=5.00 loops=1)
    Output: empno, lastname, salary
    DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY
    DB2 plan: 
@@ -1641,8 +1647,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee LI
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 2.698 ms
- Execution Time: 7.670 ms
+ Planning Time: 2.575 ms
+ Execution Time: 6.439 ms
 (66 rows)
 
 SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
@@ -1658,9 +1664,9 @@ SELECT empno, lastname, salary FROM sample.employee LIMIT 5 OFFSET 2;
 EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
                                                                   QUERY PLAN                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=100.47..101.64 rows=5 width=90) (actual time=5.509..8.339 rows=5.00 loops=1)
+ Limit  (cost=100.47..101.64 rows=5 width=90) (actual time=4.324..5.933 rows=5.00 loops=1)
    Output: empno, lastname, salary
-   ->  Foreign Scan on sample.employee  (cost=100.00..267.96 rows=718 width=90) (actual time=4.340..8.332 rows=7.00 loops=1)
+   ->  Foreign Scan on sample.employee  (cost=100.00..267.96 rows=718 width=90) (actual time=3.481..5.929 rows=7.00 loops=1)
          Output: empno, lastname, salary
          DB2 query: SELECT "EMPNO", "LASTNAME", "SALARY" FROM "DB2INST1"."EMPLOYEE" ORDER BY "SALARY" DESC NULLS FIRST, "EMPNO" ASC NULLS LAST
          DB2 plan: 
@@ -1743,8 +1749,8 @@ EXPLAIN (analyze,verbose) SELECT empno, lastname, salary FROM sample.employee OR
          DB2 plan: 
  Planning:
    Buffers: shared hit=12
- Planning Time: 4.713 ms
- Execution Time: 10.039 ms
+ Planning Time: 3.025 ms
+ Execution Time: 7.124 ms
 (87 rows)
 
 SELECT empno, lastname, salary FROM sample.employee ORDER BY salary DESC, empno LIMIT 5 OFFSET 2;
@@ -1771,7 +1777,7 @@ PREPARE
 EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=2.870..3.076 rows=1.00 loops=1)
+ Foreign Scan on sample.act  (cost=100.00..119.98 rows=4 width=88) (actual time=2.868..3.076 rows=1.00 loops=1)
    Output: actno, actkwd, actdesc
    DB2 query: SELECT "ACTNO", "ACTKWD", "ACTDESC" FROM "DB2INST1"."ACT" WHERE (("ACTNO" = 10))
    DB2 plan: 
@@ -1844,8 +1850,8 @@ EXPLAIN (analyze,verbose) EXECUTE act_by_no(10);
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 1.273 ms
- Execution Time: 3.518 ms
+ Planning Time: 1.271 ms
+ Execution Time: 3.499 ms
 (75 rows)
 
 EXECUTE act_by_no(10);
@@ -1958,9 +1964,9 @@ INSERT 0 1
 SELECT * FROM sample.remotetable;
   col1  |   col2   |   col3   |   col4   |  col5  |  col6  |   col7   |    col8    |   col9   |   col10    |  col11   | col12 | col13 | col14  | col15  | col16  | col17  | col18  | col19  | col20  | col21  | col22  | col23  |           col24            |  col25   | col26  | col27  | col28  
 --------+----------+----------+----------+--------+--------+----------+------------+----------+------------+----------+-------+-------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+----------------------------+----------+--------+--------+--------
+ 581927 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2026-09-30 | 10:07:10 | 2026-09-30 | 10:07:10 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2026-09-30 10:07:10.180396 | sometext | [NULL] | [NULL] | [NULL]
  581928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988    | sometext | [NULL] | [NULL] | [NULL]
  681928 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2025-12-31 | 12:24:00 | 2025-12-31 | 12:24:00 |   998 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2025-12-31 12:24:00.988    | sometext | [NULL] | [NULL] | [NULL]
- 581927 | sometext | sometext | sometext | [NULL] | [NULL] | sometext | 2026-09-25 | 11:20:19 | 2026-09-25 | 11:20:19 |   999 | AA    | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | [NULL] | 2026-09-25 11:20:18.552311 | sometext | [NULL] | [NULL] | [NULL]
 (3 rows)
 
 DELETE FROM sample.remotetable where col1 = 581927;
@@ -2024,7 +2030,7 @@ FDW options: (schema 'DB2INST1', "table" 'TBCFILEENTRY_SAMPLE')
 EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry_sample;
                                                                                             QUERY PLAN                                                                                             
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.tbcfileentry_sample  (cost=100.00..124.74 rows=67 width=1196) (actual time=9.360..1517.930 rows=627.00 loops=1)
+ Foreign Scan on sample.tbcfileentry_sample  (cost=100.00..124.74 rows=67 width=1196) (actual time=13.205..2402.215 rows=1053.00 loops=1)
    Output: tbcfientid, filename, filepath, filesize, filetype, checksum, owner, created_at, modified_at, status, description
    DB2 query: SELECT "TBCFIENTID", "FILENAME", "FILEPATH", "FILESIZE", "FILETYPE", "CHECKSUM", "OWNER", "CREATED_AT", "MODIFIED_AT", "STATUS", "DESCRIPTION" FROM "DB2INST1"."TBCFILEENTRY_SAMPLE"
    DB2 plan: 
@@ -2074,8 +2080,8 @@ EXPLAIN (analyze,verbose)  SELECT * from sample.tbcfileentry_sample;
    DB2 plan: 
  Planning:
    Buffers: shared hit=59
- Planning Time: 2.718 ms
- Execution Time: 1519.461 ms
+ Planning Time: 2.698 ms
+ Execution Time: 2403.837 ms
 (52 rows)
 
 EXPLAIN (verbose) SELECT PERCENTILE_CONT(0.5)
@@ -2436,7 +2442,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select * from sample.employee where lastname between 'LUTZ' and 'LEE' order by lastname;
                                                                                                                                          QUERY PLAN                                                                                                                                          
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..114.56 rows=1 width=258) (actual time=4.594..4.594 rows=0.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..114.56 rows=1 width=258) (actual time=4.556..4.556 rows=0.00 loops=1)
    Output: empno, firstnme, midinit, lastname, workdept, phoneno, hiredate, job, edlevel, sex, birthdate, salary, bonus, comm
    DB2 query: SELECT "EMPNO", "FIRSTNME", "MIDINIT", "LASTNAME", "WORKDEPT", "PHONENO", "HIREDATE", "JOB", "EDLEVEL", "SEX", "BIRTHDATE", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("LASTNAME" >= 'LUTZ')) AND (("LASTNAME" <= 'LEE')) ORDER BY "LASTNAME" ASC NULLS LAST
    DB2 plan: 
@@ -2490,8 +2496,8 @@ explain (analyze,verbose) select * from sample.employee where lastname between '
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 4.550 ms
- Execution Time: 6.259 ms
+ Planning Time: 4.360 ms
+ Execution Time: 6.152 ms
 (56 rows)
 
 select * from sample.employee where lastname between 'LEE' and 'LUTZ' order by lastname;
@@ -2506,7 +2512,7 @@ select * from sample.employee where lastname between 'LEE' and 'LUTZ' order by l
 explain (analyze,verbose) select * from sample.employee where salary between 10000.00 and 60000.00 order by salary;
                                                                                                                                          QUERY PLAN                                                                                                                                         
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..114.56 rows=1 width=258) (actual time=6.280..41.754 rows=26.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..114.56 rows=1 width=258) (actual time=6.128..41.447 rows=26.00 loops=1)
    Output: empno, firstnme, midinit, lastname, workdept, phoneno, hiredate, job, edlevel, sex, birthdate, salary, bonus, comm
    DB2 query: SELECT "EMPNO", "FIRSTNME", "MIDINIT", "LASTNAME", "WORKDEPT", "PHONENO", "HIREDATE", "JOB", "EDLEVEL", "SEX", "BIRTHDATE", "SALARY", "BONUS", "COMM" FROM "DB2INST1"."EMPLOYEE" WHERE (("SALARY" >= 10000.00)) AND (("SALARY" <= 60000.00)) ORDER BY "SALARY" ASC NULLS LAST
    DB2 plan: 
@@ -2592,8 +2598,8 @@ explain (analyze,verbose) select * from sample.employee where salary between 100
    DB2 plan: 
  Planning:
    Buffers: shared hit=4
- Planning Time: 4.378 ms
- Execution Time: 43.392 ms
+ Planning Time: 4.314 ms
+ Execution Time: 43.071 ms
 (88 rows)
 
 select * from sample.employee where salary between 10000.00 and 60000.00 order by salary;
@@ -2746,8 +2752,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where subs
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.039 ms
- Execution Time: 5.054 ms
+ Planning Time: 3.017 ms
+ Execution Time: 5.009 ms
 (84 rows)
 
 select empno, lastname from sample.employee where substr(lastname,1,1) = 'L' order by empno;
@@ -2762,7 +2768,7 @@ select empno, lastname from sample.employee where substr(lastname,1,1) = 'L' ord
 explain (analyze,verbose) select empno, lastname from sample.employee where substr(lastname,2,3) = 'UTZ' order by empno;
                                                                   QUERY PLAN                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.383..3.590 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.366..3.592 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((substr("LASTNAME", 2, 3) = 'UTZ')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -2844,8 +2850,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where subs
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.273 ms
- Execution Time: 4.540 ms
+ Planning Time: 3.870 ms
+ Execution Time: 4.555 ms
 (84 rows)
 
 select empno, lastname from sample.employee where substr(lastname,2,3) = 'UTZ' order by empno;
@@ -2858,7 +2864,7 @@ select empno, lastname from sample.employee where substr(lastname,2,3) = 'UTZ' o
 explain (analyze,verbose) select empno, lastname from sample.employee where replace(lastname,'E','X') = 'LXX' order by empno;
                                                                      QUERY PLAN                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.349..3.555 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.406..3.636 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((replace("LASTNAME", 'E', 'X') = 'LXX')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -2940,8 +2946,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where repl
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.605 ms
- Execution Time: 4.533 ms
+ Planning Time: 3.087 ms
+ Execution Time: 4.815 ms
 (84 rows)
 
 select empno, lastname from sample.employee where replace(lastname,'E','X') = 'LXX' order by empno;
@@ -2954,7 +2960,7 @@ select empno, lastname from sample.employee where replace(lastname,'E','X') = 'L
 explain (analyze,verbose) select empno, lastname from sample.employee where lpad(lastname,10,'*') = '******LUTZ' order by empno;
                                                                       QUERY PLAN                                                                       
 -------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.212..3.452 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.240..3.444 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((lpad("LASTNAME", 10, '*') = '******LUTZ')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3036,8 +3042,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where lpad
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.352 ms
- Execution Time: 4.448 ms
+ Planning Time: 3.659 ms
+ Execution Time: 4.404 ms
 (84 rows)
 
 select empno, lastname from sample.employee where lpad(lastname,10,'*') = '******LUTZ' order by empno;
@@ -3050,7 +3056,7 @@ select empno, lastname from sample.employee where lpad(lastname,10,'*') = '*****
 explain (analyze,verbose) select empno, lastname from sample.employee where rpad(lastname,10,'*') = 'LUTZ******' order by empno;
                                                                       QUERY PLAN                                                                       
 -------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.299..3.504 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.159..3.351 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((rpad("LASTNAME", 10, '*') = 'LUTZ******')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3132,8 +3138,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where rpad
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.298 ms
- Execution Time: 4.547 ms
+ Planning Time: 3.040 ms
+ Execution Time: 4.937 ms
 (84 rows)
 
 select empno, lastname from sample.employee where rpad(lastname,10,'*') = 'LUTZ******' order by empno;
@@ -3146,7 +3152,7 @@ select empno, lastname from sample.employee where rpad(lastname,10,'*') = 'LUTZ*
 explain (analyze,verbose) select empno, lastname from sample.employee where strpos(lastname,'EE') = 2 order by empno;
                                                                 QUERY PLAN                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.325..3.534 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.289..3.482 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((INSTR("LASTNAME", 'EE') = 2)) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3228,8 +3234,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where strp
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.042 ms
- Execution Time: 4.520 ms
+ Planning Time: 3.191 ms
+ Execution Time: 4.444 ms
 (84 rows)
 
 select empno, lastname from sample.employee where strpos(lastname,'EE') = 2 order by empno;
@@ -3242,7 +3248,7 @@ select empno, lastname from sample.employee where strpos(lastname,'EE') = 2 orde
 explain (analyze,verbose) select empno, edlevel from sample.employee where mod(edlevel,2) = 0 order by empno;
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..138.23 rows=8 width=30) (actual time=3.387..12.323 rows=34.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..138.23 rows=8 width=30) (actual time=3.318..11.793 rows=34.00 loops=1)
    Output: empno, edlevel
    DB2 query: SELECT "EMPNO", "EDLEVEL" FROM "DB2INST1"."EMPLOYEE" WHERE ((mod("EDLEVEL", 2) = 0)) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3324,8 +3330,8 @@ explain (analyze,verbose) select empno, edlevel from sample.employee where mod(e
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.072 ms
- Execution Time: 13.385 ms
+ Planning Time: 2.976 ms
+ Execution Time: 12.737 ms
 (84 rows)
 
 select empno, edlevel from sample.employee where mod(edlevel,2) = 0 order by empno;
@@ -3407,7 +3413,7 @@ FDW options: (schema 'DB2INST1', "table" 'EMPLOYEE')
 explain (analyze,verbose) select empno, lastname from sample.employee where translate(lastname,'AEIOU','12345') = 'L5TZ' order by empno;
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.333..3.536 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=3.304..3.515 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((TRANSLATE("LASTNAME", '12345', 'AEIOU') = 'L5TZ')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3489,8 +3495,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where tran
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.078 ms
- Execution Time: 4.518 ms
+ Planning Time: 3.014 ms
+ Execution Time: 4.459 ms
 (84 rows)
 
 select empno, lastname from sample.employee where translate(lastname,'AEIOU','12345') = 'L5TZ' order by empno;
@@ -3503,7 +3509,7 @@ select empno, lastname from sample.employee where translate(lastname,'AEIOU','12
 explain (analyze,verbose) select empno, lastname from sample.employee where translate(lastname,'AEIOU','12345') = translate('LUTZ','AEIOU','12345') order by empno;
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=1.719..1.936 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.12 rows=4 width=76) (actual time=1.711..1.946 rows=1.00 loops=1)
    Output: empno, lastname
    DB2 query: SELECT "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((TRANSLATE("LASTNAME", '12345', 'AEIOU') = 'L5TZ')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3585,8 +3591,8 @@ explain (analyze,verbose) select empno, lastname from sample.employee where tran
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.076 ms
- Execution Time: 2.939 ms
+ Planning Time: 3.157 ms
+ Execution Time: 2.889 ms
 (84 rows)
 
 select empno, lastname from sample.employee where translate(lastname,'AEIOU','12345') = translate('LUTZ','AEIOU','12345') order by empno;
@@ -3599,7 +3605,7 @@ select empno, lastname from sample.employee where translate(lastname,'AEIOU','12
 explain (analyze,verbose) select empno, translate(lastname,'AEIOU','12345') from sample.employee where translate(lastname,'AEIOU','12345') = translate('LUTZ','AEIOU','12345') order by empno;
                                                                                                QUERY PLAN                                                                                               
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.employee  (cost=100.00..123.14 rows=4 width=60) (actual time=3.552..3.759 rows=1.00 loops=1)
+ Foreign Scan on sample.employee  (cost=100.00..123.14 rows=4 width=60) (actual time=3.400..3.605 rows=1.00 loops=1)
    Output: empno, (translate((lastname)::text, 'AEIOU'::text, '12345'::text))
    DB2 query: SELECT TRANSLATE("LASTNAME", '12345', 'AEIOU'), "EMPNO", "LASTNAME" FROM "DB2INST1"."EMPLOYEE" WHERE ((TRANSLATE("LASTNAME", '12345', 'AEIOU') = 'L5TZ')) ORDER BY "EMPNO" ASC NULLS LAST
    DB2 plan: 
@@ -3680,8 +3686,8 @@ explain (analyze,verbose) select empno, translate(lastname,'AEIOU','12345') from
    DB2 plan: End of section
    DB2 plan: 
    DB2 plan: 
- Planning Time: 3.534 ms
- Execution Time: 4.811 ms
+ Planning Time: 3.408 ms
+ Execution Time: 4.603 ms
 (83 rows)
 
 select empno, translate(lastname,'AEIOU','12345') from sample.employee where translate(lastname,'AEIOU','12345') = translate('LUTZ','AEIOU','12345') order by empno;
@@ -3720,7 +3726,7 @@ FDW options: ("table" '(SELECT PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY TBCFI
 explain (analyze,verbose) select * from sample.percent;
                                                                 QUERY PLAN                                                                 
 -------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.percent  (cost=100.00..431.64 rows=1462 width=32) (actual time=2.951..3.163 rows=1.00 loops=1)
+ Foreign Scan on sample.percent  (cost=100.00..431.64 rows=1462 width=32) (actual time=2.691..2.894 rows=1.00 loops=1)
    Output: percent
    DB2 query: SELECT "PERCENT" FROM (SELECT PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY TBCFIENTID) AS percent FROM DB2INST1.TBCFILEENTRY)
    DB2 plan: 
@@ -3794,8 +3800,8 @@ explain (analyze,verbose) select * from sample.percent;
    DB2 plan: 
  Planning:
    Buffers: shared hit=9
- Planning Time: 3.821 ms
- Execution Time: 3.395 ms
+ Planning Time: 3.499 ms
+ Execution Time: 3.127 ms
 (76 rows)
 
 select * from sample.percent;
@@ -3840,7 +3846,7 @@ FDW options: ("table" '(SELECT PERCENTILE_CONT(0.10) WITHIN GROUP (ORDER BY TBCF
 explain (analyze,verbose) select * from sample.percent3;
                                                                                                                                                                        QUERY PLAN                                                                                                                                                                        
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan on sample.percent3  (cost=100.00..228.36 rows=538 width=128) (actual time=4.040..4.248 rows=1.00 loops=1)
+ Foreign Scan on sample.percent3  (cost=100.00..228.36 rows=538 width=128) (actual time=4.675..5.000 rows=1.00 loops=1)
    Output: p10, p11, p12, p13
    DB2 query: SELECT "P10", "P11", "P12", "P13" FROM (SELECT PERCENTILE_CONT(0.10) WITHIN GROUP (ORDER BY TBCFIENTID) AS p10,PERCENTILE_CONT(0.11) WITHIN GROUP (ORDER BY TBCFIENTID) AS p11,PERCENTILE_CONT(0.12) WITHIN GROUP (ORDER BY TBCFIENTID) AS p12,PERCENTILE_CONT(0.13) WITHIN GROUP (ORDER BY TBCFIENTID) AS p13 FROM DB2INST1.TBCFILEENTRY)
    DB2 plan: 
@@ -3917,8 +3923,8 @@ explain (analyze,verbose) select * from sample.percent3;
    DB2 plan: 
  Planning:
    Buffers: shared hit=24
- Planning Time: 6.255 ms
- Execution Time: 4.798 ms
+ Planning Time: 8.238 ms
+ Execution Time: 6.338 ms
 (79 rows)
 
 select * from sample.percent3;
@@ -5552,8 +5558,8 @@ UPDATE sample.coldesctest SET txt_cu32 = txt_cu32 || '!' WHERE id >= 5 AND txt_c
    ->  Foreign Scan on coldesctest
          Filter: ((txt_cu32)::text ~ '^s'::text)
          DB2 query: SELECT "ID", "TXT_CU32", "CHR_CU32", "BIN_CHAR", "TXT_LVG", "TS0", "BIN_VAR" FROM "DB2INST1"."COLDESCTEST" WHERE (("ID" >= 5)) FOR UPDATE
-         DB2 plan: Estimated Cost = 6,809474
-         DB2 plan: Estimated Cardinality = 3,000000
+         DB2 plan: Estimated Cost = 4,540654
+         DB2 plan: Estimated Cardinality = 0,666667
 (7 rows)
 
 UPDATE sample.coldesctest SET txt_cu32 = txt_cu32 || '!' WHERE id >= 5 AND txt_cu32 ~ '^s';
@@ -5684,6 +5690,404 @@ DROP FUNCTION sample.tc031_trg_ins();
 DROP FUNCTION
 --
 -- END of TC031
+--
+-- running tc032.sql
+\i ./test/sql/tc032.sql
+--
+-- TC032: IMPORT FOREIGN SCHEMA with DB2 names that differ only in case
+--
+-- DB2 folds ordinary identifiers to upper case, but delimited identifiers keep
+-- their case, so FDWCASE, "fdwcase" and "FdwCase" are three different schemas,
+-- and a schema can hold MYTAB, "MyTab" and "mytab" side by side.
+-- IMPORT FOREIGN SCHEMA resolves the remote schema name and every LIMIT TO /
+-- EXCEPT entry the same way: an exact match wins, otherwise the name matches
+-- ignoring case, but only if that is unambiguous. Each imported table must
+-- describe the right DB2 table (columns) and point to it (schema/table options).
+--
+-- Requires these DB2 objects to pre-exist in the SAMPLE database:
+--   CREATE SCHEMA FDWCASE;
+--   CREATE SCHEMA "fdwcase";
+--   CREATE SCHEMA "FdwCase";
+--   CREATE SCHEMA FDWUNIQ;
+--   CREATE TABLE FDWCASE.T1        (ID INTEGER NOT NULL PRIMARY KEY, SRC VARCHAR(30));
+--   CREATE TABLE FDWCASE.MYTAB     (ID INTEGER NOT NULL PRIMARY KEY, SRC VARCHAR(30));
+--   CREATE TABLE FDWCASE."MyTab"   (ID INTEGER NOT NULL PRIMARY KEY, SRC VARCHAR(30), EXTRA INTEGER);
+--   CREATE TABLE FDWCASE."mytab"   (ID INTEGER NOT NULL PRIMARY KEY, SRC VARCHAR(30), D DATE);
+--   CREATE TABLE "fdwcase".T1      (ID INTEGER NOT NULL PRIMARY KEY, SRC VARCHAR(30), LOWERONLY INTEGER);
+--   CREATE TABLE "FdwCase".T1      (ID INTEGER NOT NULL PRIMARY KEY, SRC VARCHAR(30), MIXEDONLY CHAR(3));
+--   CREATE TABLE FDWUNIQ.ORDERS    (ID INTEGER NOT NULL PRIMARY KEY, SRC VARCHAR(30));
+--   CREATE TABLE FDWUNIQ."Items"   (ID INTEGER NOT NULL PRIMARY KEY, SRC VARCHAR(30));
+--   INSERT INTO FDWCASE.T1        VALUES (1, 'FDWCASE.T1');
+--   INSERT INTO FDWCASE.MYTAB     VALUES (1, 'FDWCASE.MYTAB');
+--   INSERT INTO FDWCASE."MyTab"   VALUES (1, 'FDWCASE.MyTab', 42);
+--   INSERT INTO FDWCASE."mytab"   VALUES (1, 'FDWCASE.mytab', '2026-09-30');
+--   INSERT INTO "fdwcase".T1      VALUES (1, 'fdwcase.T1', 7);
+--   INSERT INTO "FdwCase".T1      VALUES (1, 'FdwCase.T1', 'abc');
+--   INSERT INTO FDWUNIQ.ORDERS    VALUES (1, 'FDWUNIQ.ORDERS');
+--   INSERT INTO FDWUNIQ."Items"   VALUES (1, 'FDWUNIQ.Items');
+--
+CREATE SCHEMA tc032;
+CREATE SCHEMA
+-- the imported foreign tables of a local schema: DB2 schema/table options and columns
+CREATE FUNCTION tc032.imported(nsp name)
+RETURNS TABLE (foreign_table name, options text, columns text) LANGUAGE sql AS $$
+  SELECT c.relname, array_to_string(ft.ftoptions, ', '),
+         (SELECT string_agg(a.attname, ', ' ORDER BY a.attnum) FROM pg_attribute a
+          WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped)
+  FROM pg_foreign_table ft
+  JOIN pg_class c ON c.oid = ft.ftrelid
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = nsp
+  ORDER BY c.relname COLLATE "C"
+$$;
+CREATE FUNCTION
+--
+-- exact schema matches: each of the three schemas gets its own T1
+CREATE SCHEMA tc032_upper;
+CREATE SCHEMA
+IMPORT FOREIGN SCHEMA "FDWCASE" LIMIT TO ("T1") FROM SERVER sample INTO tc032_upper;
+IMPORT FOREIGN SCHEMA
+SELECT * FROM tc032.imported('tc032_upper');
+ foreign_table |         options          | columns 
+---------------+--------------------------+---------
+ t1            | schema=FDWCASE, table=T1 | id, src
+(1 row)
+
+SELECT * FROM tc032_upper.t1;
+ id |    src     
+----+------------
+  1 | FDWCASE.T1
+(1 row)
+
+CREATE SCHEMA tc032_lower;
+CREATE SCHEMA
+IMPORT FOREIGN SCHEMA fdwcase FROM SERVER sample INTO tc032_lower;
+IMPORT FOREIGN SCHEMA
+SELECT * FROM tc032.imported('tc032_lower');
+ foreign_table |         options          |      columns       
+---------------+--------------------------+--------------------
+ t1            | schema=fdwcase, table=T1 | id, src, loweronly
+(1 row)
+
+SELECT * FROM tc032_lower.t1;
+ id |    src     | loweronly 
+----+------------+-----------
+  1 | fdwcase.T1 |         7
+(1 row)
+
+-- the generated DB2 SQL must quote the lowercase schema, or it would hit FDWCASE.T1
+INSERT INTO tc032_lower.t1 VALUES (2, 'inserted', 8);
+INSERT 0 1
+UPDATE tc032_lower.t1 SET loweronly = 9 WHERE id = 2;
+UPDATE 1
+SELECT * FROM tc032_lower.t1 ORDER BY id;
+ id |    src     | loweronly 
+----+------------+-----------
+  1 | fdwcase.T1 |         7
+  2 | inserted   |         9
+(2 rows)
+
+DELETE FROM tc032_lower.t1 WHERE id = 2;
+DELETE 1
+SELECT * FROM tc032_lower.t1 ORDER BY id;
+ id |    src     | loweronly 
+----+------------+-----------
+  1 | fdwcase.T1 |         7
+(1 row)
+
+CREATE SCHEMA tc032_mixed;
+CREATE SCHEMA
+IMPORT FOREIGN SCHEMA "FdwCase" FROM SERVER sample INTO tc032_mixed;
+IMPORT FOREIGN SCHEMA
+SELECT * FROM tc032.imported('tc032_mixed');
+ foreign_table |         options          |      columns       
+---------------+--------------------------+--------------------
+ t1            | schema=FdwCase, table=T1 | id, src, mixedonly
+(1 row)
+
+SELECT * FROM tc032_mixed.t1;
+ id |    src     | mixedonly 
+----+------------+-----------
+  1 | FdwCase.T1 | abc
+(1 row)
+
+--
+-- no exact match and more than one ignoring case: ambiguous
+CREATE SCHEMA tc032_err;
+CREATE SCHEMA
+IMPORT FOREIGN SCHEMA "FDWcase" FROM SERVER sample INTO tc032_err;
+psql:test/sql/tc032.sql:70: FEHLER:  remote schema "FDWcase" is ambiguous
+DETAIL:  DB2 schemas that differ only in case: "FDWCASE", "FdwCase", "fdwcase"
+HINT:  Write the schema name in double quotes, with the exact case of the DB2 schema.
+-- no match at all: nothing to import
+IMPORT FOREIGN SCHEMA "FDWNONE" FROM SERVER sample INTO tc032_err;
+IMPORT FOREIGN SCHEMA
+SELECT * FROM tc032.imported('tc032_err');
+ foreign_table | options | columns 
+---------------+---------+---------
+(0 rows)
+
+--
+-- no exact match, but a unique one ignoring case: fdwuniq finds FDWUNIQ,
+-- and the schema option is the DB2 catalog name
+CREATE SCHEMA tc032_uniq;
+CREATE SCHEMA
+IMPORT FOREIGN SCHEMA fdwuniq FROM SERVER sample INTO tc032_uniq;
+IMPORT FOREIGN SCHEMA
+SELECT * FROM tc032.imported('tc032_uniq');
+ foreign_table |           options            | columns 
+---------------+------------------------------+---------
+ Items         | schema=FDWUNIQ, table=Items  | id, src
+ orders        | schema=FDWUNIQ, table=ORDERS | id, src
+(2 rows)
+
+SELECT * FROM tc032_uniq.orders;
+ id |      src       
+----+----------------
+  1 | FDWUNIQ.ORDERS
+(1 row)
+
+SELECT * FROM tc032_uniq."Items";
+ id |      src      
+----+---------------
+  1 | FDWUNIQ.Items
+(1 row)
+
+-- LIMIT TO: items finds "Items", ORDERS is not imported
+DROP SCHEMA tc032_uniq CASCADE;
+psql:test/sql/tc032.sql:83: HINWEIS:  Löschvorgang löscht ebenfalls 2 weitere Objekte
+DETAIL:  Löschvorgang löscht ebenfalls Fremdtabelle tc032_uniq."Items"
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_uniq.orders
+DROP SCHEMA
+CREATE SCHEMA tc032_uniq;
+CREATE SCHEMA
+IMPORT FOREIGN SCHEMA fdwuniq LIMIT TO (items) FROM SERVER sample INTO tc032_uniq;
+IMPORT FOREIGN SCHEMA
+SELECT * FROM tc032.imported('tc032_uniq');
+ foreign_table |           options           | columns 
+---------------+-----------------------------+---------
+ Items         | schema=FDWUNIQ, table=Items | id, src
+(1 row)
+
+SELECT * FROM tc032_uniq."Items";
+ id |      src      
+----+---------------
+  1 | FDWUNIQ.Items
+(1 row)
+
+--
+-- tables MYTAB, "MyTab" and "mytab" in one schema
+-- case 'keep': all four tables, each with its own columns
+CREATE SCHEMA tc032_keep;
+CREATE SCHEMA
+IMPORT FOREIGN SCHEMA "FDWCASE" FROM SERVER sample INTO tc032_keep OPTIONS (case 'keep');
+IMPORT FOREIGN SCHEMA
+SELECT * FROM tc032.imported('tc032_keep');
+ foreign_table |           options           |    columns     
+---------------+-----------------------------+----------------
+ MYTAB         | schema=FDWCASE, table=MYTAB | ID, SRC
+ MyTab         | schema=FDWCASE, table=MyTab | ID, SRC, EXTRA
+ T1            | schema=FDWCASE, table=T1    | ID, SRC
+ mytab         | schema=FDWCASE, table=mytab | ID, SRC, D
+(4 rows)
+
+SELECT * FROM tc032_keep."MYTAB";
+ ID |      SRC      
+----+---------------
+  1 | FDWCASE.MYTAB
+(1 row)
+
+SELECT * FROM tc032_keep."MyTab";
+ ID |      SRC      | EXTRA 
+----+---------------+-------
+  1 | FDWCASE.MyTab |    42
+(1 row)
+
+SELECT * FROM tc032_keep.mytab;
+ ID |      SRC      |     D      
+----+---------------+------------
+  1 | FDWCASE.mytab | 2026-09-30
+(1 row)
+
+-- case 'smart' (the default) folds MYTAB to mytab, which collides with "mytab"
+IMPORT FOREIGN SCHEMA "FDWCASE" FROM SERVER sample INTO tc032_err;
+psql:test/sql/tc032.sql:98: FEHLER:  DB2 tables "FDWCASE"."MYTAB" and "FDWCASE"."mytab" would both be imported as "mytab"
+HINT:  Use the IMPORT option case 'keep' to keep the DB2 names, or LIMIT TO / EXCEPT to import only one of them.
+-- ... and so does case 'lower' with "MyTab"
+IMPORT FOREIGN SCHEMA "FDWCASE" LIMIT TO ("MYTAB", "MyTab") FROM SERVER sample INTO tc032_err OPTIONS (case 'lower');
+psql:test/sql/tc032.sql:100: FEHLER:  DB2 tables "FDWCASE"."MYTAB" and "FDWCASE"."MyTab" would both be imported as "mytab"
+HINT:  Use the IMPORT option case 'keep' to keep the DB2 names, or LIMIT TO / EXCEPT to import only one of them.
+SELECT * FROM tc032.imported('tc032_err');
+ foreign_table | options | columns 
+---------------+---------+---------
+(0 rows)
+
+-- LIMIT TO picks the exact table
+CREATE SCHEMA tc032_limit1;
+CREATE SCHEMA
+IMPORT FOREIGN SCHEMA "FDWCASE" LIMIT TO (mytab) FROM SERVER sample INTO tc032_limit1;
+IMPORT FOREIGN SCHEMA
+SELECT * FROM tc032.imported('tc032_limit1');
+ foreign_table |           options           |  columns   
+---------------+-----------------------------+------------
+ mytab         | schema=FDWCASE, table=mytab | id, src, d
+(1 row)
+
+SELECT * FROM tc032_limit1.mytab;
+ id |      src      |     d      
+----+---------------+------------
+  1 | FDWCASE.mytab | 2026-09-30
+(1 row)
+
+CREATE SCHEMA tc032_limit2;
+CREATE SCHEMA
+IMPORT FOREIGN SCHEMA "FDWCASE" LIMIT TO ("MYTAB", "MyTab", t1) FROM SERVER sample INTO tc032_limit2;
+IMPORT FOREIGN SCHEMA
+SELECT * FROM tc032.imported('tc032_limit2');
+ foreign_table |           options           |    columns     
+---------------+-----------------------------+----------------
+ MyTab         | schema=FDWCASE, table=MyTab | id, src, extra
+ mytab         | schema=FDWCASE, table=MYTAB | id, src
+ t1            | schema=FDWCASE, table=T1    | id, src
+(3 rows)
+
+SELECT * FROM tc032_limit2.mytab;
+ id |      src      
+----+---------------
+  1 | FDWCASE.MYTAB
+(1 row)
+
+SELECT * FROM tc032_limit2."MyTab";
+ id |      src      | extra 
+----+---------------+-------
+  1 | FDWCASE.MyTab |    42
+(1 row)
+
+SELECT * FROM tc032_limit2.t1;
+ id |    src     
+----+------------
+  1 | FDWCASE.T1
+(1 row)
+
+-- LIMIT TO with no exact match and more than one ignoring case: ambiguous
+IMPORT FOREIGN SCHEMA "FDWCASE" LIMIT TO ("myTAB") FROM SERVER sample INTO tc032_err;
+psql:test/sql/tc032.sql:114: FEHLER:  remote table "myTAB" in LIMIT TO / EXCEPT is ambiguous
+DETAIL:  DB2 tables in schema "FDWCASE" that differ only in case: "MYTAB", "MyTab", "mytab"
+HINT:  Write the table name in double quotes, with the exact case of the DB2 table.
+-- EXCEPT excludes exactly the named tables
+CREATE SCHEMA tc032_except;
+CREATE SCHEMA
+IMPORT FOREIGN SCHEMA "FDWCASE" EXCEPT ("MYTAB", mytab) FROM SERVER sample INTO tc032_except;
+IMPORT FOREIGN SCHEMA
+SELECT * FROM tc032.imported('tc032_except');
+ foreign_table |           options           |    columns     
+---------------+-----------------------------+----------------
+ MyTab         | schema=FDWCASE, table=MyTab | id, src, extra
+ t1            | schema=FDWCASE, table=T1    | id, src
+(2 rows)
+
+SELECT * FROM tc032_except."MyTab";
+ id |      src      | extra 
+----+---------------+-------
+  1 | FDWCASE.MyTab |    42
+(1 row)
+
+-- excluding "mytab" while importing MYTAB as mytab cannot work with case folding
+IMPORT FOREIGN SCHEMA "FDWCASE" EXCEPT (mytab, "MyTab") FROM SERVER sample INTO tc032_err;
+psql:test/sql/tc032.sql:121: FEHLER:  DB2 table "FDWCASE"."MYTAB" would be imported as "mytab", the same name as the excluded DB2 table "mytab"
+HINT:  Use the IMPORT option case 'keep' to keep the DB2 names.
+SELECT * FROM tc032.imported('tc032_err');
+ foreign_table | options | columns 
+---------------+---------+---------
+(0 rows)
+
+--
+DROP SCHEMA tc032_upper, tc032_lower, tc032_mixed, tc032_err, tc032_uniq, tc032_keep,
+            tc032_limit1, tc032_limit2, tc032_except, tc032 CASCADE;
+psql:test/sql/tc032.sql:125: HINWEIS:  Löschvorgang löscht ebenfalls 15 weitere Objekte
+DETAIL:  Löschvorgang löscht ebenfalls Funktion tc032.imported(name)
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_except."MyTab"
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_except.t1
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_limit2.mytab
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_limit2."MyTab"
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_limit2.t1
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_limit1.mytab
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_keep."MYTAB"
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_keep."MyTab"
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_keep."T1"
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_keep.mytab
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_uniq."Items"
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_mixed.t1
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_lower.t1
+Löschvorgang löscht ebenfalls Fremdtabelle tc032_upper.t1
+DROP SCHEMA
+--
+-- END of TC032
+--
+-- running tc033.sql
+\i ./test/sql/tc033.sql
+--
+-- TC033: validation of the IMPORT FOREIGN SCHEMA options readonly and importtype
+--
+-- Both options used to accept any value: readonly silently became false, and
+-- importtype was pasted into the DB2 catalog query, so a lower case 't' found
+-- nothing (SYSCAT.TABLES.TYPE is upper case) and other values changed the query.
+--
+-- Uses the DB2 schema FDWUNIQ from tc032.sql (tables ORDERS and "Items", no views).
+--
+CREATE SCHEMA tc033;
+CREATE SCHEMA
+-- invalid values are rejected
+IMPORT FOREIGN SCHEMA "FDWUNIQ" FROM SERVER sample INTO tc033 OPTIONS (readonly 'maybe');
+psql:test/sql/tc033.sql:12: FEHLER:  invalid value for option "readonly"
+HINT:  Valid values in this context are: on, yes, true, off, no, false
+IMPORT FOREIGN SCHEMA "FDWUNIQ" FROM SERVER sample INTO tc033 OPTIONS (importtype 'X');
+psql:test/sql/tc033.sql:13: FEHLER:  invalid value for option "importtype"
+HINT:  Valid values in this context are: T, V
+IMPORT FOREIGN SCHEMA "FDWUNIQ" FROM SERVER sample INTO tc033 OPTIONS (importtype 'T'') OR (''1''=''1');
+psql:test/sql/tc033.sql:14: FEHLER:  invalid value for option "importtype"
+HINT:  Valid values in this context are: T, V
+IMPORT FOREIGN SCHEMA "FDWUNIQ" FROM SERVER sample INTO tc033 OPTIONS (case 'KEEP');
+psql:test/sql/tc033.sql:15: FEHLER:  invalid value for option "case"
+HINT:  Valid values in this context are: keep, lower, smart
+SELECT count(*) AS imported FROM pg_foreign_table ft JOIN pg_class c ON c.oid = ft.ftrelid
+WHERE c.relnamespace = 'tc033'::regnamespace;
+ imported 
+----------
+        0
+(1 row)
+
+-- valid values are case insensitive: 'v' finds no views, 't' finds both tables
+IMPORT FOREIGN SCHEMA "FDWUNIQ" FROM SERVER sample INTO tc033 OPTIONS (importtype 'v');
+IMPORT FOREIGN SCHEMA
+SELECT count(*) AS imported FROM pg_foreign_table ft JOIN pg_class c ON c.oid = ft.ftrelid
+WHERE c.relnamespace = 'tc033'::regnamespace;
+ imported 
+----------
+        0
+(1 row)
+
+IMPORT FOREIGN SCHEMA "FDWUNIQ" FROM SERVER sample INTO tc033 OPTIONS (importtype 't', readonly 'YES');
+IMPORT FOREIGN SCHEMA
+SELECT c.relname, array_to_string(ft.ftoptions, ', ') AS options
+FROM pg_foreign_table ft JOIN pg_class c ON c.oid = ft.ftrelid
+WHERE c.relnamespace = 'tc033'::regnamespace ORDER BY c.relname COLLATE "C";
+ relname |                   options                   
+---------+---------------------------------------------
+ Items   | schema=FDWUNIQ, table=Items, readonly=true
+ orders  | schema=FDWUNIQ, table=ORDERS, readonly=true
+(2 rows)
+
+-- readonly is enforced
+INSERT INTO tc033.orders VALUES (2, 'not allowed');
+psql:test/sql/tc033.sql:27: FEHLER:  Fremdtabelle »orders« erlaubt kein Einfügen
+DROP SCHEMA tc033 CASCADE;
+psql:test/sql/tc033.sql:28: HINWEIS:  Löschvorgang löscht ebenfalls 2 weitere Objekte
+DETAIL:  Löschvorgang löscht ebenfalls Fremdtabelle tc033."Items"
+Löschvorgang löscht ebenfalls Fremdtabelle tc033.orders
+DROP SCHEMA
+--
+-- END of TC033
 --
 -- testcases ended
 -- starting cleanup

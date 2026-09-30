@@ -94,6 +94,7 @@ extern EquivalenceMember* find_em_for_rel_target    (PlannerInfo* root, Equivale
 extern void               reset_transmission_modes  (int nestlevel);
 extern int                set_transmission_modes    (void);
 extern bool               is_builtin                (Oid objectId);
+extern char*              db2CopyText               (const char* string, int size, int quote);
 
 
 /** local prototypes */
@@ -2143,10 +2144,18 @@ static void deparseRelation(StringInfo buf, Relation rel) {
   /* A "table" option value that is a parenthesized derived table (subquery) is used verbatim,
    * without schema-qualification or quoting, matching db2CopyText()'s handling of the same case.
    */
+  /* Otherwise both names are always quoted: DB2 folds unquoted names to upper case, so quote_identifier(), which leaves
+   * an all-lowercase name unquoted, would turn DB2 table "mytab" into MYTAB, a different table.
+   */
   if (relname[0] == '(' && relname[strlen(relname) - 1] == ')')
     appendStringInfoString(buf, relname);
-  else
-    appendStringInfo(buf, "%s.%s", quote_identifier(nspname), quote_identifier(relname));
+  else {
+    char* qschema = db2CopyText (nspname, strlen (nspname), 1);
+    char* qtable  = db2CopyText (relname, strlen (relname), 1);
+    appendStringInfo(buf, "%s.%s", qschema, qtable);
+    db2free (qschema, "qschema");
+    db2free (qtable, "qtable");
+  }
   db2Debug5("relation: %s",buf->data);
   db2Exit1();
 }
