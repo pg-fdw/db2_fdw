@@ -99,8 +99,10 @@ Then you can connect to PostgreSQL as `pguser` and define:
     pgdb=> IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO public;
 
 
-(Remember that table and schema name -- the latter is optional -- must
-normally be in uppercase.)
+(If you define foreign tables yourself, remember that the table and schema
+options -- the latter is optional -- must be written exactly as in DB2, so
+normally in uppercase. IMPORT FOREIGN SCHEMA takes the names from the DB2
+catalog; see [Support for IMPORT FOREIGN SCHEMA](#support-for-import-foreign-schema).)
 
 Now you can use the table like a regular PostgreSQL table.
 
@@ -257,11 +259,30 @@ Foreign table options
 IMPORT FOREIGN SCHEMA ... OPTIONS options 
 ---------------------------------------
 
-- **importtype** (optional)
+- **case** (optional, `keep`, `lower` or `smart`)
 
-  If set to 'T' only tables will be imported.
-  If set to 'V' only views will be imported.
-  Just do not specify this option if both tables and views need to be imported.
+  Controls how the names of the imported foreign tables and their columns are
+  folded in PostgreSQL. The DB2 names in the **schema** and **table** options
+  of the created foreign tables are never changed.
+  - `keep`: use the DB2 names as they are, usually in upper case.
+  - `lower`: translate all table and column names to lower case.
+  - `smart`: only translate names that are all upper case in DB2 to lower
+    case, keep all others (this is the default).
+
+  The value must be written in lower case.
+
+- **readonly** (optional, `on`, `yes`, `true`, `off`, `no` or `false`)
+
+  If set to `on`, `yes` or `true`, all imported tables are created with the
+  foreign table option **readonly** set to `true`. The default is `false`.
+  The value is case-insensitive.
+
+- **importtype** (optional, `T` or `V`)
+
+  If set to `T`, only tables are imported.
+  If set to `V`, only views are imported.
+  Leave the option out to import both tables and views.
+  The value is case-insensitive.
 
 Examples:
 
@@ -273,6 +294,12 @@ Examples:
 
     -- Import both tables and views of schema DB2INST1
     IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO sample2;
+
+    -- Keep the DB2 names and create read-only foreign tables
+    IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO sample2 OPTIONS (case 'keep', readonly 'true');
+
+See [Support for IMPORT FOREIGN SCHEMA](#support-for-import-foreign-schema)
+for how schema and table names are matched.
 
 
 
@@ -455,38 +482,65 @@ For the explain the db2expln CLI command is called. Therefore the bin path of DB
 Support for IMPORT FOREIGN SCHEMA
 ---------------------------------
 
-From PostgreSQL 10.1 on, IMPORT FOREIGN SCHEMA is supported to bulk import
-table definitions for all tables in an DB2 schema.
+IMPORT FOREIGN SCHEMA creates foreign tables for the tables and views of a
+DB2 schema in one step.
 In addition to the documentation of IMPORT FOREIGN SCHEMA, consider the
 following:
 
-- IMPORT FOREIGN SCHEMA will create foreign tables for all objects found in
-  ALL_TAB_COLUMNS.  That includes tables, views and materialized views,
-  but not synonyms.
+- The objects to import are read from the DB2 catalog view SYSCAT.TABLES:
+  tables (type `T`) and views (type `V`). Other object types (aliases,
+  nicknames, materialized query tables, ...) are not imported.
+  Use the option **importtype** to import only tables or only views.
 
-- There are two supported options for IMPORT FOREIGN SCHEMA:
-  - **case**: controls case folding for table and column names during import.
-    The possible values are:
-    - `keep`: leave the names as they are in DB2, usually in upper case.
-    - `lower`: translate all table and column names to lower case.
-    - `smart`: only translate names that are all upper case in DB2
-               (this is the default).
-  - **readonly** (boolean): controls if imported tables can be modified.
-    If set to `true`, all imported tables are created with the foreign
-    table option **readonly** set to `true` (see the [Options](#3-options)
-    section).
-    The default is `false`.
+- The columns are described from SYSCAT.COLUMNS, not by querying the table,
+  so tables can be imported even if the user has no SELECT privilege on
+  them (reading them later still needs it). Hidden columns are left out.
+  Every imported column gets the column options **db2type**, **db2size**,
+  **db2bytes**, **db2chars**, **db2scale**, **db2null** and **db2ccsid**,
+  columns of the primary key additionally get **key** `true`, and columns
+  that are NOT NULL in DB2 are NOT NULL in PostgreSQL too.
+  Distinct types are imported as their DB2 source type.
 
-- The DB2 schema name must be written exactly as it is in DB2, so
-  normally in upper case.  Since PostgreSQL translates names to lower case
-  before processing, you must protect the schema name with double quotes
-  (for example `"SCOTT"`).
+- The options **case**, **readonly** and **importtype** are described in
+  [IMPORT FOREIGN SCHEMA ... OPTIONS options](#import-foreign-schema--options-options).
 
-- Table names in the LIMIT TO or EXCEPT clause must be written as they
-  will appear in PostgreSQL after the case folding described above.
+- DB2 names are case sensitive. Ordinary DB2 names are stored in upper case,
+  but names created in double quotes keep their case, so `BETA`, `"beta"` and
+  `"Beta"` can be three different schemas, and a schema can hold the tables
+  `MYTAB`, `"MyTab"` and `"mytab"` side by side.
+  The remote schema name is therefore matched like this:
+  1. If a DB2 schema has exactly the given name, it is used.
+  2. Otherwise, a DB2 schema whose name differs only in case is used, but
+     only if there is exactly one. So `IMPORT FOREIGN SCHEMA db2inst1` (which
+     PostgreSQL folds to lower case) imports `DB2INST1`, as long as there is
+     no other schema of that name in different case.
+  3. If several DB2 schemas differ only in case from the given name, the
+     import fails as ambiguous; write the name in double quotes with its
+     exact case (for example `"DB2INST1"`).
+  4. If no DB2 schema matches, nothing is imported.
 
-Note that IMPORT FOREIGN SCHEMA does not work with DB2 server 8i;
-see the [Problems](#8-problems) section for details.
+  The **schema** option of the created foreign tables is set to the name as
+  it is in DB2, not as written in the IMPORT command.
+
+- Table names in the LIMIT TO or EXCEPT clause are matched against the DB2
+  table names the same way: an exact match first, otherwise a match that
+  differs only in case, if there is exactly one. For example, with the
+  tables `MYTAB` and `"MyTab"`, `LIMIT TO (mytab)` is ambiguous, while
+  `LIMIT TO ("MYTAB")` and `LIMIT TO ("MyTab")` are not. A name that matches
+  no DB2 table is ignored.
+
+- The option **case** can map different DB2 tables to the same PostgreSQL
+  name, for example `MYTAB` and `"mytab"` both to `mytab` with `smart`.
+  The import then fails and names the tables. Use `case 'keep'`, or LIMIT TO
+  or EXCEPT to import only one of them.
+
+- At query time, db2_fdw derives the DB2 column name from the PostgreSQL
+  column name by translating it to upper case. So DB2 columns whose names are
+  not all upper case (created in double quotes, such as `"myCol"`) are
+  imported, but cannot be read or written through the foreign table.
+
+- [IMPORT.md](IMPORT.md) walks through these rules with worked examples
+  (schemas and tables that differ only in case, and each **case** value).
 
 5 Installation Requirements
 ===========================
