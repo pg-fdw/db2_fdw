@@ -171,6 +171,7 @@ User mapping options
 - **jwt_token** (optional - mutual exclusive to user&password, one use is required)
 
   The password for the DB2 user.
+
 Foreign table options
 ---------------------
 
