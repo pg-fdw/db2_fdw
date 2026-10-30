@@ -1,43 +1,53 @@
 /*-------------------------------------------------------------------------
  * db2_fdw_sync.sql – SKIZZE
  *
- * Inkrementelle Synchronisation einer DB2-Tabelle in eine lokale
- * PostgreSQL-Spiegeltabelle über ein trigger-basiertes Journal in DB2.
+ * Inkrementelle Übernahme von Änderungen einer DB2-Tabelle in eine lokale
+ * PostgreSQL-Zieltabelle. Grundlage sind nur zwei Foreign Tables:
+ *
+ *   fdw.employee    -> DB2INST1.EMPLOYEE   (Daten)
+ *   fdw.j_employee  -> DB2FDW.J_EMPLOYEE   (Journal: SEQ, OP, CHG_TS, PK)
+ *
+ * Zwei Modi für die Zieltabelle:
+ *   'mirror'   Zustand: Zieltabelle = aktueller Stand der DB2-Tabelle
+ *              (Upsert/Delete per PK)
+ *   'history'  Data Lake: jede Änderung wird als neue Zeile angehängt
+ *              (Spalten der Quelle + _db2_op, _db2_seq, _db2_chg_ts, _synced_at)
  *
  * Gedacht als Ergänzung zu sql/db2_fdw--18.3.0.sql (bzw. als Upgrade-Skript
  * db2_fdw--18.3.0--18.4.0.sql). Reines SQL/PL/pgSQL, kein neuer C-Code nötig:
  * Alle Zugriffe auf DB2 laufen über die vorhandenen Foreign-Table-Pfade
  * (Join-, ORDER BY/LIMIT- und Direct-Modify-Pushdown).
  *
- * Ablauf eines Batches (at-least-once + idempotentes Anwenden):
- *   1. Journal-Batch lesen          (DB2: nur kommittierte Zeilen sichtbar)
- *   2. aktuellen Zustand holen      (DB2: Join Quelle x Journal, gepusht)
- *   3. Upsert in die Spiegeltabelle (lokal)
- *   4. Deletes in der Spiegeltabelle(lokal)
- *   5. verarbeitete SEQs merken + COMMIT
- *   6. SEQs im DB2-Journal löschen  (eigene Transaktion, wiederholbar)
+ * Ablauf eines Batches (at-least-once, Anwenden idempotent):
+ *   1. Journal-Batch lesen            (DB2: nur kommittierte Zeilen sichtbar)
+ *   2. aktuellen Zustand holen        (DB2: Join Quelle x Journal, gepusht)
+ *   3. in die Zieltabelle schreiben   (lokal, je nach Modus)
+ *   4. verarbeitete SEQs merken + COMMIT
+ *   5. SEQs im DB2-Journal löschen    (eigene Transaktion, wiederholbar)
  *-------------------------------------------------------------------------
  */
 
 /* ---------- Katalog ---------------------------------------------------- */
 
 CREATE TABLE db2_fdw_sync_config (
-  mirror         regclass    PRIMARY KEY,           -- lokale Spiegeltabelle
+  target         regclass    PRIMARY KEY,           -- lokale Zieltabelle
   source         regclass    NOT NULL,              -- Foreign Table (Daten)
   journal        regclass    NOT NULL,              -- Foreign Table (DB2-Journal)
+  mode           text        NOT NULL DEFAULT 'mirror'
+                             CHECK (mode IN ('mirror', 'history')),
   pk_cols        name[]      NOT NULL,              -- Spalten mit Option key 'true'
   batch_size     integer     NOT NULL DEFAULT 10000 CHECK (batch_size > 0),
   last_sync      timestamptz,
   last_seq       bigint,
-  rows_upserted  bigint      NOT NULL DEFAULT 0,
-  rows_deleted   bigint      NOT NULL DEFAULT 0
+  rows_written   bigint      NOT NULL DEFAULT 0,    -- Insert/Update bzw. angehängte Zeilen
+  rows_deleted   bigint      NOT NULL DEFAULT 0     -- gelöscht bzw. 'D'-Zeilen
 );
 
 -- lokal angewandte, in DB2 noch nicht quittierte Journal-Einträge
 CREATE TABLE db2_fdw_sync_pending (
-  mirror  regclass NOT NULL REFERENCES db2_fdw_sync_config ON DELETE CASCADE,
+  target  regclass NOT NULL REFERENCES db2_fdw_sync_config ON DELETE CASCADE,
   seq     bigint   NOT NULL,
-  PRIMARY KEY (mirror, seq)
+  PRIMARY KEY (target, seq)
 );
 
 SELECT pg_catalog.pg_extension_config_dump('db2_fdw_sync_config' , '');
@@ -147,46 +157,80 @@ $$;
 /* ---------- Einrichtung ------------------------------------------------ */
 
 -- journal: per IMPORT FOREIGN SCHEMA angelegte Foreign Table auf DB2FDW.J_<TAB>
+-- target:  Name der lokalen Zieltabelle. Existiert sie nicht, wird sie angelegt
+--          (Default: <source>_mirror bzw. <source>_history im selben Schema).
+--          Eine vorhandene Tabelle muss die Spalten der Quelle enthalten,
+--          im Modus 'history' zusätzlich _db2_op, _db2_seq, _db2_chg_ts.
 CREATE FUNCTION db2_fdw_sync_setup(
     source      regclass,
     journal     regclass,
-    mirror      text    DEFAULT NULL,       -- Default: <source>_mirror im selben Schema
+    mode        text    DEFAULT 'mirror',
+    target      text    DEFAULT NULL,
     batch_size  integer DEFAULT 10000)
 RETURNS regclass
 LANGUAGE plpgsql AS
 $$
 DECLARE
   pk       name[] := db2_fdw_key_columns(source);
+  pk_list  text;
   nsp      name;
   rel      name;
-  m        regclass;
+  t        regclass;
+  col      name;
 BEGIN
   IF pk IS NULL THEN
     RAISE EXCEPTION 'foreign table % has no column with option key ''true''', source;
   END IF;
+  IF mode NOT IN ('mirror', 'history') THEN
+    RAISE EXCEPTION 'mode must be ''mirror'' or ''history''';
+  END IF;
+  SELECT string_agg(quote_ident(k), ', ') INTO pk_list FROM unnest(pk) k;
 
   SELECT n.nspname, c.relname INTO nsp, rel
   FROM   pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE  c.oid = source;
 
-  mirror := coalesce(mirror, format('%I.%I', nsp, rel || '_mirror'));
+  target := coalesce(target, format('%I.%I', nsp, rel || '_' || mode));
+  t      := to_regclass(target);
 
-  EXECUTE format('CREATE TABLE %s (LIKE %s INCLUDING DEFAULTS)', mirror, source);
-  m := mirror::regclass;
-  EXECUTE format('ALTER TABLE %s ADD PRIMARY KEY (%s)', m,
-                 (SELECT string_agg(quote_ident(k), ', ') FROM unnest(pk) k));
+  IF t IS NULL THEN
+    EXECUTE format('CREATE TABLE %s (LIKE %s INCLUDING DEFAULTS)', target, source);
+    t := target::regclass;
 
-  INSERT INTO db2_fdw_sync_config (mirror, source, journal, pk_cols, batch_size)
-  VALUES (m, source, journal, pk, batch_size);
+    IF mode = 'mirror' THEN
+      EXECUTE format('ALTER TABLE %s ADD PRIMARY KEY (%s)', t, pk_list);
+    ELSE
+      -- 'D'-Zeilen enthalten nur den PK -> übrige NOT NULL entfernen
+      FOR col IN SELECT attname FROM pg_attribute
+                 WHERE attrelid = t AND attnum > 0 AND NOT attisdropped
+                   AND attnotnull AND attname <> ALL (pk)
+      LOOP
+        EXECUTE format('ALTER TABLE %s ALTER COLUMN %I DROP NOT NULL', t, col);
+      END LOOP;
+      EXECUTE format(
+        'ALTER TABLE %s
+           ADD COLUMN _db2_op     char(1)     NOT NULL,   -- I/U/D, L = Initial Load
+           ADD COLUMN _db2_seq    bigint      UNIQUE,     -- SEQ des Journals (Idempotenz)
+           ADD COLUMN _db2_chg_ts timestamp,              -- Änderungszeit in DB2
+           ADD COLUMN _synced_at  timestamptz NOT NULL DEFAULT now()', t);
+      EXECUTE format('CREATE INDEX ON %s (%s, _synced_at)', t, pk_list);
+    END IF;
+  END IF;
 
-  RETURN m;
+  INSERT INTO db2_fdw_sync_config (target, source, journal, mode, pk_cols, batch_size)
+  VALUES (t, source, journal, mode, pk, batch_size);
+
+  RETURN t;
 END
 $$;
 
 -- Vollabgleich (Erstbefüllung, nach TRUNCATE/LOAD in DB2, nach Störungen).
--- Die Trigger in DB2 müssen VORHER aktiv sein; ältere Journal-Einträge
--- werden beim nächsten Sync einfach noch einmal (idempotent) angewandt.
-CREATE PROCEDURE db2_fdw_sync_initial_load(p_mirror regclass)
+--   mirror : Zieltabelle wird geleert und neu befüllt
+--   history: aktueller Stand wird als Snapshot (_db2_op = 'L') angehängt
+-- Die Trigger in DB2 müssen VORHER aktiv sein. Alle VOR dem Snapshot sichtbaren
+-- (= kommittierten) Journal-Einträge sind im Snapshot enthalten und werden
+-- danach quittiert; später kommittierte bleiben im Journal und laufen normal.
+CREATE PROCEDURE db2_fdw_sync_initial_load(p_target regclass)
 LANGUAGE plpgsql AS
 $$
 DECLARE
@@ -194,40 +238,52 @@ DECLARE
   cols  text;
   n     bigint;
 BEGIN
-  SELECT * INTO STRICT c FROM db2_fdw_sync_config WHERE mirror = p_mirror;
+  SELECT * INTO STRICT c FROM db2_fdw_sync_config WHERE target = p_target;
+
+  -- erst Journal lesen, dann Quelle: was hier sichtbar ist, steckt im Snapshot
+  EXECUTE format('INSERT INTO db2_fdw_sync_pending (target, seq)
+                  SELECT $1, seq FROM %s ON CONFLICT DO NOTHING', c.journal) USING p_target;
 
   SELECT string_agg(quote_ident(attname), ', ' ORDER BY attnum) INTO cols
-  FROM   pg_attribute WHERE attrelid = c.mirror AND attnum > 0 AND NOT attisdropped;
+  FROM   pg_attribute WHERE attrelid = c.source AND attnum > 0 AND NOT attisdropped;
 
-  EXECUTE format('TRUNCATE %s', c.mirror);
-  EXECUTE format('INSERT INTO %s (%s) SELECT %s FROM %s', c.mirror, cols, cols, c.source);
+  IF c.mode = 'mirror' THEN
+    EXECUTE format('TRUNCATE %s', c.target);
+    EXECUTE format('INSERT INTO %s (%s) SELECT %s FROM %s', c.target, cols, cols, c.source);
+  ELSE
+    EXECUTE format('INSERT INTO %s (%s, _db2_op) SELECT %s, ''L'' FROM %s',
+                   c.target, cols, cols, c.source);
+  END IF;
   GET DIAGNOSTICS n = ROW_COUNT;
 
   UPDATE db2_fdw_sync_config
-     SET last_sync = now(), rows_upserted = rows_upserted + n
-   WHERE mirror = p_mirror;
+     SET last_sync = now(), rows_written = rows_written + n
+   WHERE target = p_target;
+  COMMIT;
+
+  CALL db2_fdw_sync_ack(p_target);
 END
 $$;
 
 /* ---------- Quittieren (Journal in DB2 aufräumen) ----------------------- */
 
-CREATE PROCEDURE db2_fdw_sync_ack(p_mirror regclass, p_chunk integer DEFAULT 1000)
+CREATE PROCEDURE db2_fdw_sync_ack(p_target regclass, p_chunk integer DEFAULT 1000)
 LANGUAGE plpgsql AS
 $$
 DECLARE
   c     db2_fdw_sync_config;
   seqs  bigint[];
 BEGIN
-  SELECT * INTO STRICT c FROM db2_fdw_sync_config WHERE mirror = p_mirror;
+  SELECT * INTO STRICT c FROM db2_fdw_sync_config WHERE target = p_target;
   LOOP
     SELECT array_agg(seq) INTO seqs
     FROM  (SELECT seq FROM db2_fdw_sync_pending
-           WHERE mirror = p_mirror ORDER BY seq LIMIT p_chunk) s;
+           WHERE target = p_target ORDER BY seq LIMIT p_chunk) s;
     EXIT WHEN seqs IS NULL;
 
     -- Direct Modify: DELETE FROM DB2FDW.J_x WHERE SEQ IN (...) läuft in DB2
     EXECUTE format('DELETE FROM %s WHERE seq = ANY ($1)', c.journal) USING seqs;
-    DELETE FROM db2_fdw_sync_pending WHERE mirror = p_mirror AND seq = ANY (seqs);
+    DELETE FROM db2_fdw_sync_pending WHERE target = p_target AND seq = ANY (seqs);
     -- db2_fdw committet DB2 in PRE_COMMIT, danach PostgreSQL. Scheitert der
     -- lokale Commit, bleiben die SEQs pending -> erneutes DELETE ist ein No-op.
     COMMIT;
@@ -239,7 +295,7 @@ $$;
 
 -- Aufruf nur auf oberster Ebene (CALL, nicht in BEGIN ... COMMIT), z. B. via pg_cron.
 -- Achtung: kein "SET search_path" an der Prozedur – das verbietet COMMIT.
-CREATE PROCEDURE db2_fdw_sync(p_mirror regclass, p_max_batches integer DEFAULT 100)
+CREATE PROCEDURE db2_fdw_sync(p_target regclass, p_max_batches integer DEFAULT 100)
 LANGUAGE plpgsql AS
 $$
 DECLARE
@@ -250,35 +306,44 @@ DECLARE
   on_sj     text;   -- s."a" = j."a" AND ...
   on_mb     text;   -- m."a" = b."a" AND ...
   on_xb     text;   -- x."a" = b."a" AND ...
-  cols      text;
-  upd       text;
+  on_hb     text;   -- h."a" = b."a" AND ...
+  h_cols    text;   -- h."a", h."c", ...
+  pk_first  text;   -- x."a"   (NULL -> Zeile existiert in DB2 nicht mehr)
+  cols      text;   -- Spalten der Quelle
+  upd       text;   -- "c" = EXCLUDED."c", ...
+  sel_hist  text;   -- b."a", x."c", ...   (PK aus dem Journal, Rest aus der Quelle)
   n_batch   bigint;
-  n_up      bigint;
+  n_w       bigint;
   n_del     bigint;
   lo        bigint;
   hi        bigint;
   i         integer := 0;
 BEGIN
-  SELECT * INTO STRICT c FROM db2_fdw_sync_config WHERE mirror = p_mirror;
+  SELECT * INTO STRICT c FROM db2_fdw_sync_config WHERE target = p_target;
 
   SELECT string_agg(quote_ident(k), ', '),
          string_agg('j.' || quote_ident(k), ', '),
          string_agg('s.' || quote_ident(k), ', '),
          string_agg(format('s.%1$I = j.%1$I', k), ' AND '),
          string_agg(format('m.%1$I = b.%1$I', k), ' AND '),
-         string_agg(format('x.%1$I = b.%1$I', k), ' AND ')
-    INTO pk, pk_j, pk_s, on_sj, on_mb, on_xb
+         string_agg(format('x.%1$I = b.%1$I', k), ' AND '),
+         string_agg(format('h.%1$I = b.%1$I', k), ' AND '),
+         'x.' || quote_ident(c.pk_cols[1])
+    INTO pk, pk_j, pk_s, on_sj, on_mb, on_xb, on_hb, pk_first
   FROM unnest(c.pk_cols) k;
 
   SELECT string_agg(quote_ident(attname), ', ' ORDER BY attnum),
          string_agg(format('%1$I = EXCLUDED.%1$I', attname), ', ' ORDER BY attnum)
-           FILTER (WHERE attname <> ALL (c.pk_cols))
-    INTO cols, upd
+           FILTER (WHERE attname <> ALL (c.pk_cols)),
+         string_agg(CASE WHEN attname = ANY (c.pk_cols) THEN 'b.' ELSE 'x.' END
+                    || quote_ident(attname), ', ' ORDER BY attnum),
+         string_agg('h.' || quote_ident(attname), ', ' ORDER BY attnum)
+    INTO cols, upd, sel_hist, h_cols
   FROM pg_attribute
-  WHERE attrelid = c.mirror AND attnum > 0 AND NOT attisdropped;
+  WHERE attrelid = c.source AND attnum > 0 AND NOT attisdropped;
 
   -- 0. Quittungen eines abgebrochenen Laufs nachholen
-  CALL db2_fdw_sync_ack(p_mirror);
+  CALL db2_fdw_sync_ack(p_target);
 
   LOOP
     EXIT WHEN i >= p_max_batches;
@@ -287,7 +352,7 @@ BEGIN
     -- 1. Batch aus dem Journal (ORDER BY/LIMIT wird nach DB2 gepusht)
     EXECUTE format(
       'CREATE TEMP TABLE _db2sync_batch ON COMMIT DROP AS
-         SELECT j.seq, %s FROM %s j ORDER BY j.seq LIMIT %s',
+         SELECT j.seq, j.op, j.chg_ts, %s FROM %s j ORDER BY j.seq LIMIT %s',
       pk_j, c.journal, c.batch_size);
     GET DIAGNOSTICS n_batch = ROW_COUNT;
     EXIT WHEN n_batch = 0;
@@ -306,39 +371,72 @@ BEGIN
          ORDER  BY %1$s',
       pk_s, c.source, c.journal, on_sj, lo, hi);
 
-    -- 3. Upsert; unveränderte Zeilen werden nicht angefasst
-    --    (wichtig für pg_ivm: keine leeren Deltas)
-    EXECUTE format(
-      'INSERT INTO %1$s AS m (%2$s) SELECT %2$s FROM _db2sync_src
-       ON CONFLICT (%3$s) DO %4$s',
-      c.mirror, cols, pk,
-      CASE WHEN upd IS NULL THEN 'NOTHING'
-           ELSE 'UPDATE SET ' || upd || ' WHERE ROW(m.*) IS DISTINCT FROM ROW(EXCLUDED.*)'
-      END);
-    GET DIAGNOSTICS n_up = ROW_COUNT;
+    IF c.mode = 'mirror' THEN
+      -- 3a. Upsert; unveränderte Zeilen werden nicht angefasst (keine Leer-Updates)
+      EXECUTE format(
+        'INSERT INTO %1$s AS m (%2$s) SELECT %2$s FROM _db2sync_src
+         ON CONFLICT (%3$s) DO %4$s',
+        c.target, cols, pk,
+        CASE WHEN upd IS NULL THEN 'NOTHING'
+             ELSE 'UPDATE SET ' || upd || ' WHERE ROW(m.*) IS DISTINCT FROM ROW(EXCLUDED.*)'
+        END);
+      GET DIAGNOSTICS n_w = ROW_COUNT;
 
-    -- 4. Deletes: PK steht im Journal, existiert in DB2 aber nicht (mehr)
-    EXECUTE format(
-      'DELETE FROM %1$s m
-       USING (SELECT DISTINCT %2$s FROM _db2sync_batch) b
-       WHERE %3$s
-         AND NOT EXISTS (SELECT 1 FROM _db2sync_src x WHERE %4$s)',
-      c.mirror, pk, on_mb, on_xb);
-    GET DIAGNOSTICS n_del = ROW_COUNT;
+      -- 3b. Deletes: PK steht im Journal, existiert in DB2 aber nicht (mehr)
+      EXECUTE format(
+        'DELETE FROM %1$s m
+         USING (SELECT DISTINCT %2$s FROM _db2sync_batch) b
+         WHERE %3$s
+           AND NOT EXISTS (SELECT 1 FROM _db2sync_src x WHERE %4$s)',
+        c.target, pk, on_mb, on_xb);
+      GET DIAGNOSTICS n_del = ROW_COUNT;
 
-    -- 5. verarbeitete SEQs merken, lokal committen
-    INSERT INTO db2_fdw_sync_pending (mirror, seq)
-      SELECT p_mirror, seq FROM _db2sync_batch;
+    ELSE
+      -- 3c. History / Data Lake: pro PK und Batch höchstens eine Zeile anhängen.
+      --     Zeileninhalt = Stand in DB2 zum Zeitpunkt des Syncs.
+      --     Die Operation wird gegen die letzte Zeile des PK im Ziel bestimmt:
+      --       Zeile fehlt in DB2                 -> D
+      --       PK neu oder zuletzt gelöscht       -> I
+      --       sonst                              -> U
+      --     Unverändert gegenüber der letzten Zeile -> nichts anhängen.
+      --     _db2_seq = letzte SEQ des PK im Batch (UNIQUE -> kein Doppel-Append).
+      EXECUTE format(
+        'INSERT INTO %1$s (%2$s, _db2_op, _db2_seq, _db2_chg_ts)
+         SELECT %3$s,
+                CASE WHEN %4$s IS NULL                         THEN ''D''
+                     WHEN h._db2_op IS NULL OR h._db2_op = ''D'' THEN ''I''
+                     ELSE ''U'' END,
+                b.seq, b.chg_ts
+         FROM  (SELECT DISTINCT ON (%5$s) * FROM _db2sync_batch
+                ORDER BY %5$s, seq DESC) b
+         LEFT  JOIN _db2sync_src x ON %6$s
+         LEFT  JOIN LATERAL (SELECT * FROM %1$s h
+                             WHERE  %7$s
+                             ORDER  BY h._synced_at DESC, h._db2_seq DESC NULLS LAST
+                             LIMIT  1) h ON true
+         WHERE h._db2_op IS NULL
+            OR (h._db2_op = ''D'') <> (%4$s IS NULL)
+            OR ROW(%8$s) IS DISTINCT FROM ROW(%3$s)
+         ON CONFLICT (_db2_seq) DO NOTHING',
+        c.target, cols, sel_hist, pk_first, pk, on_xb, on_hb, h_cols);
+      GET DIAGNOSTICS n_w = ROW_COUNT;
+      EXECUTE format('SELECT count(*) FROM %s WHERE _db2_seq BETWEEN $1 AND $2 AND _db2_op = ''D''',
+                     c.target) INTO n_del USING lo, hi;
+    END IF;
+
+    -- 4. verarbeitete SEQs merken, lokal committen
+    INSERT INTO db2_fdw_sync_pending (target, seq)
+      SELECT p_target, seq FROM _db2sync_batch;
     UPDATE db2_fdw_sync_config
-       SET last_sync     = now(),
-           last_seq      = hi,
-           rows_upserted = rows_upserted + n_up,
-           rows_deleted  = rows_deleted  + n_del
-     WHERE mirror = p_mirror;
+       SET last_sync    = now(),
+           last_seq     = hi,
+           rows_written = rows_written + n_w,
+           rows_deleted = rows_deleted + n_del
+     WHERE target = p_target;
     COMMIT;
 
-    -- 6. in DB2 quittieren
-    CALL db2_fdw_sync_ack(p_mirror);
+    -- 5. in DB2 quittieren
+    CALL db2_fdw_sync_ack(p_target);
 
     EXIT WHEN n_batch < c.batch_size;
   END LOOP;
@@ -348,20 +446,20 @@ $$;
 /* ---------- Monitoring ------------------------------------------------- */
 
 CREATE VIEW db2_fdw_sync_status AS
-SELECT c.mirror, c.source, c.journal, c.last_sync, c.last_seq,
-       c.rows_upserted, c.rows_deleted,
-       (SELECT count(*) FROM db2_fdw_sync_pending p WHERE p.mirror = c.mirror) AS pending_acks
+SELECT c.target, c.mode, c.source, c.journal, c.last_sync, c.last_seq,
+       c.rows_written, c.rows_deleted,
+       (SELECT count(*) FROM db2_fdw_sync_pending p WHERE p.target = c.target) AS pending_acks
 FROM   db2_fdw_sync_config c;
 
 -- Rückstand = noch nicht verarbeitete Journal-Einträge in DB2 (Remote-Abfrage)
-CREATE FUNCTION db2_fdw_sync_lag(p_mirror regclass) RETURNS bigint
+CREATE FUNCTION db2_fdw_sync_lag(p_target regclass) RETURNS bigint
 LANGUAGE plpgsql STABLE AS
 $$
 DECLARE
   r bigint;
 BEGIN
   EXECUTE format('SELECT count(*) FROM %s',
-                 (SELECT journal FROM db2_fdw_sync_config WHERE mirror = p_mirror))
+                 (SELECT journal FROM db2_fdw_sync_config WHERE target = p_target))
      INTO r;
   RETURN r;
 END
